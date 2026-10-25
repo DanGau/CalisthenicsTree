@@ -1,14 +1,4 @@
-*.iml
-.gradle/
-/local.properties
-.idea/
+node_modules/
+dist/
+screenshots/
 .DS_Store
-/build/
-**/build/
-/captures/
-.externalNativeBuild/
-.cxx/
-*.apk
-*.aab
-*.keystore
-*.jks

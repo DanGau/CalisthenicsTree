@@ -1,0 +1,95 @@
+import type { Question } from '../core/types'
+
+/** Check-in questions. Options run weakest to strongest; picking one masters its `grants`. */
+export const QUESTIONS: Question[] = [
+  { id: 'goals', ask: 'What do you want to chase right now?', multi: true, options: [
+    { label: 'Handstand', focus: ['handstand', 'armbal'] },
+    { label: 'Planche and pushing', focus: ['planche', 'push', 'dip'] },
+    { label: 'Levers and pulling', focus: ['frontlever', 'backlever', 'pull'] },
+    { label: 'Legs', focus: ['legs', 'hinge'] },
+    { label: 'Flexibility', focus: ['flex', 'backbend'] },
+    { label: 'Mobility and joint health', focus: ['mobility'] },
+    { label: 'Flow and ground movement', focus: ['flow', 'floor'] },
+    { label: 'Acrobatics and parkour', focus: ['tumble', 'parkour'] },
+    { label: 'Core and flag', focus: ['core', 'flag'] },
+  ] },
+  { id: 'pain', ask: 'Anything nagging you?', multi: true, options: [
+    { label: 'Wrists', focus: ['mobility'] },
+    { label: 'Shoulders', focus: ['mobility', 'backbend'] },
+    { label: 'Lower back', focus: ['hinge', 'core'] },
+    { label: 'Knees', focus: ['legs', 'mobility'] },
+    { label: 'Nothing' },
+  ] },
+  { id: 'pushups', ask: 'How many strict push-ups can you do?', options: [
+    { label: 'None yet' },
+    { label: '1–5', grants: ['incline_pu'] },
+    { label: '6–15', grants: ['pushup'] },
+    { label: '16–30', grants: ['pushup', 'diamond_pu', 'decline_pu'] },
+    { label: 'One-arm', grants: ['one_arm_pu'] },
+  ] },
+  { id: 'pullups', ask: 'How many strict pull-ups?', options: [
+    { label: 'Can’t hang 30s', },
+    { label: 'Hang, no pull-up', grants: ['scap_pull'] },
+    { label: '1–4', grants: ['neg_pullup'] },
+    { label: '5–11', grants: ['pullup', 'chinup'] },
+    { label: '12 or more', grants: ['pullup_12', 'chinup'] },
+  ] },
+  { id: 'dips', ask: 'Parallel bar dips?', options: [
+    { label: 'None' },
+    { label: 'Can hold the top', grants: ['support_hold'] },
+    { label: '1–14', grants: ['dip_neg'] },
+    { label: '15+', grants: ['bar_dip'] },
+    { label: 'Ring dips', grants: ['ring_dip'] },
+  ] },
+  { id: 'handstand', ask: 'Where is your handstand?', options: [
+    { label: 'Never tried' },
+    { label: 'Against a wall', grants: ['ctw_hs'] },
+    { label: 'Kick up and bail safely', grants: ['kickup', 'wall_taps'] },
+    { label: 'Free 10s+', grants: ['heel_pulls'] },
+    { label: 'Free 30s+', grants: ['free_hs'] },
+  ] },
+  { id: 'squat', ask: 'Leg strength?', options: [
+    { label: 'Squats are hard' },
+    { label: '30 squats', grants: ['squat'] },
+    { label: 'Bulgarian split squats', grants: ['bulgarian', 'step_up'] },
+    { label: 'Pistol with support', grants: ['box_pistol', 'bulgarian'] },
+    { label: 'Full pistol', grants: ['pistol', 'bulgarian'] },
+  ] },
+  { id: 'core', ask: 'Core?', options: [
+    { label: 'Planks are hard' },
+    { label: 'Hollow hold 40s', grants: ['hollow_hold'] },
+    { label: 'Tuck L-sit', grants: ['tuck_lsit'] },
+    { label: 'L-sit 10s+', grants: ['lsit'] },
+    { label: 'V-sit', grants: ['vsit'] },
+  ] },
+  { id: 'fold', ask: 'Standing forward fold, legs straight?', options: [
+    { label: 'Hands to knees' },
+    { label: 'Hands to shins', },
+    { label: 'Fingers to floor', grants: ['fwd_fold'] },
+    { label: 'Palms flat', grants: ['pike_seated'] },
+    { label: 'Chest to thighs', grants: ['pike_full'] },
+  ] },
+  { id: 'squat_rest', ask: 'Can you rest in a deep squat, heels down?', options: [
+    { label: 'No' },
+    { label: 'Briefly, heels up' },
+    { label: 'Yes, a few minutes', grants: ['deep_squat'] },
+  ] },
+  { id: 'bridge', ask: 'Backbend?', options: [
+    { label: 'Not yet' },
+    { label: 'Bridge on a box', grants: ['bridge_box'] },
+    { label: 'Full bridge', grants: ['full_bridge'] },
+    { label: 'Stand to bridge', grants: ['stand_to_bridge'] },
+  ] },
+  { id: 'splits', ask: 'Front split?', options: [
+    { label: 'Far off' },
+    { label: 'Half split comfy', grants: ['half_split'] },
+    { label: 'Within 15 cm', grants: ['front_split_half'] },
+    { label: 'Full', grants: ['front_split'] },
+  ] },
+  { id: 'rolls', ask: 'Rolling and acrobatics?', options: [
+    { label: 'Nothing yet' },
+    { label: 'Forward roll', grants: ['fwd_roll'] },
+    { label: 'Cartwheel', grants: ['cartwheel', 'back_roll'] },
+    { label: 'Round-off', grants: ['roundoff', 'back_roll'] },
+  ] },
+]

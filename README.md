@@ -1,14 +1,5 @@
 # CalisthenicsTree
 
-Personal Android app offering a less cumbersome way to follow the bodyweight fitness progression tree described here:
-https://thegravgear.com/blogs/calisthenics/bodyweight-fitness-progression
+Phone-first skill tree for bodyweight training: 20 branches and ~290 skills across strength, movement and mobility, each with challenges that build to mastery.
 
-Built for one user (Dan); not intended for distribution.
-
-## Planned scope
-- Browse the progression tree by movement pattern
-- Track current level per progression and when to advance
-- Quick workout logging
-
-## Status
-Repo scaffold only — no app code yet.
+Live: https://dangau.github.io/CalisthenicsTree/ (add to home screen to install). Built for one user (Dan). See [CLAUDE.md](CLAUDE.md).
