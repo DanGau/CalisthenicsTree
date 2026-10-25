@@ -59,6 +59,13 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: 0.03em; text-wrap: bal
 .node.mastered .tier { fill: #fff; }
 .node.mastered .label { fill: var(--gold); }
 .node.mastered .halo { fill: var(--gold); opacity: 0.12; }
+.focused .edge:not(.path):not(.next) { opacity: 0.35; }
+.focused .node:not(.sel):not(.need):not(.opens) { opacity: 0.3; }
+.edge.path { stroke: var(--ink); stroke-width: 6; stroke-dasharray: none; filter: drop-shadow(0 0 6px #efe6d6aa); }
+.edge.cross.path { stroke-width: 4; stroke-dasharray: 10 6; }
+.edge.next { stroke: var(--gold); stroke-opacity: 0.8; stroke-dasharray: 3 6; }
+.node.need .ring { stroke: var(--ink); }
+.node.need .label, .node.opens .label { fill: var(--ink); }
 .node.sel .halo { fill: none; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 4 4; opacity: 1; }
 
 .hud { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px;
@@ -143,3 +150,4 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: 0.03em; text-wrap: bal
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 @media (prefers-reduced-motion: no-preference) { .sheet { animation: rise 0.18s ease-out; } }
 @keyframes rise { from { transform: translateY(24px); opacity: 0.6; } }
+.path-branch { font-size: 13px; color: var(--muted); }

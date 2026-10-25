@@ -1,5 +1,5 @@
 import { branchAngle, position, radius } from '../core/layout'
-import { fraction, status, type Progress } from '../core/progress'
+import { ancestry, fraction, status, type Progress } from '../core/progress'
 import type { Skill } from '../core/types'
 import { BRANCHES, BY_ID, SKILLS } from '../content/tree'
 import { esc } from './html'
@@ -18,12 +18,16 @@ const nodeR = (s: Skill) => (isKeystone(s) ? 22 : s.tier === 1 ? 14 : 16)
 /** Pan and zoom survive re-renders. */
 const view = { x: 0, y: 0, k: 0.42 }
 
-function edge(a: Skill, b: Skill, p: Progress) {
+/** Highlight for a selected skill: everything it needs, and what it opens next. */
+type Focus = { needs: Set<string>; next: Set<string>; id?: string }
+
+function edge(a: Skill, b: Skill, p: Progress, f: Focus) {
   const pa = POS.get(a.id)!
   const pb = POS.get(b.id)!
   const sa = status(p, a, BY_ID)
   const sb = status(p, b, BY_ID)
-  const cls = sa === 'mastered' && sb === 'mastered' ? 'lit' : sa === 'mastered' ? 'ready' : 'dim'
+  const base = sa === 'mastered' && sb === 'mastered' ? 'lit' : sa === 'mastered' ? 'ready' : 'dim'
+  const cls = f.needs.has(a.id) && f.needs.has(b.id) ? `${base} path` : a.id === f.id && f.next.has(b.id) ? `${base} next` : base
   if (a.branch === b.branch) return `<line class="edge ${cls}" x1="${pa.x}" y1="${pa.y}" x2="${pb.x}" y2="${pb.y}"/>`
   // Cross-branch links bow toward the centre so they read as bridges, not branch paths.
   const mx = (pa.x + pb.x) * 0.38
@@ -31,13 +35,13 @@ function edge(a: Skill, b: Skill, p: Progress) {
   return `<path class="edge cross ${cls}" d="M${pa.x} ${pa.y}Q${mx} ${my} ${pb.x} ${pb.y}"/>`
 }
 
-function node(s: Skill, p: Progress, selected: string | undefined) {
+function node(s: Skill, p: Progress, selected: string | undefined, hl: Focus) {
   const { x, y } = POS.get(s.id)!
   const st = status(p, s, BY_ID)
   const r = nodeR(s)
   const c = 2 * Math.PI * (r + 4)
   const f = fraction(p, s)
-  return `<g class="node ${st} ${KIND.get(s.branch)} ${isKeystone(s) ? 'key' : ''} ${s.id === selected ? 'sel' : ''}" data-id="${s.id}" transform="translate(${x} ${y})">
+  return `<g class="node ${st} ${KIND.get(s.branch)} ${isKeystone(s) ? 'key' : ''} ${s.id === selected ? 'sel' : hl.needs.has(s.id) ? 'need' : hl.next.has(s.id) ? 'opens' : ''}" data-id="${s.id}" transform="translate(${x} ${y})">
     <circle class="halo" r="${r + 9}"/>
     <circle class="ring" r="${r + 4}"/>
     ${f > 0 && f < 1 ? `<circle class="arc" r="${r + 4}" stroke-dasharray="${c * f} ${c}" transform="rotate(-90)"/>` : ''}
@@ -74,7 +78,13 @@ function rings() {
 }
 
 export function treeSvg(p: Progress, selected?: string) {
-  const edges = SKILLS.flatMap((s) => s.requires.map((r) => edge(BY_ID.get(r)!, s, p)))
+  const f: Focus = selected
+    ? { id: selected, needs: new Set(ancestry(selected, BY_ID)), next: new Set(SKILLS.filter((s) => s.requires.includes(selected)).map((s) => s.id)) }
+    : { needs: new Set(), next: new Set() }
+  const all = SKILLS.flatMap((s) => s.requires.map((r) => ({ a: BY_ID.get(r)!, b: s })))
+  // Highlighted edges draw last so they sit on top.
+  const lifted = (e: { a: Skill; b: Skill }) => (f.needs.has(e.a.id) && f.needs.has(e.b.id)) || e.a.id === f.id
+  const edges = [...all.filter((e) => !lifted(e)), ...all.filter(lifted)].map((e) => edge(e.a, e.b, p, f))
   const roots = SKILLS.filter((s) => s.tier === 1).map((s) => {
     const { x, y } = POS.get(s.id)!
     return `<line class="edge ${status(p, s, BY_ID) === 'mastered' ? 'lit' : 'ready'}" x1="0" y1="0" x2="${x}" y2="${y}"/>`
@@ -84,7 +94,7 @@ export function treeSvg(p: Progress, selected?: string) {
     <defs>
       <radialGradient id="glow"><stop offset="0" stop-color="var(--gold)" stop-opacity="0.35"/><stop offset="1" stop-color="var(--gold)" stop-opacity="0"/></radialGradient>
     </defs>
-    <g class="world">
+    <g class="world ${selected ? 'focused' : ''}">
       <circle class="outer" r="${OUTER}"/>
       ${rings()}
       ${labels()}
@@ -93,7 +103,7 @@ export function treeSvg(p: Progress, selected?: string) {
       <circle r="150" fill="url(#glow)"/>
       <g class="hub"><circle r="64"/><circle class="hub-in" r="52"/>
         <text class="hub-n" dy="0.1em">${mastered}</text><text class="hub-l" y="22">of ${SKILLS.length}</text></g>
-      ${SKILLS.map((s) => node(s, p, selected)).join('')}
+      ${SKILLS.map((s) => node(s, p, selected, f)).join('')}
     </g>
   </svg>`
 }
@@ -163,12 +173,18 @@ export function mountTree(svg: SVGSVGElement, onTap: (id: string) => void) {
   addEventListener('resize', apply)
   apply()
   return {
-    /** Centres a skill, leaving room for the sheet below it. */
+    /** Frames a skill and everything it needs in the space above the sheet. */
     focus(id: string) {
-      const pos = POS.get(id)!
-      view.k = Math.max(view.k, 0.75)
-      view.x = -pos.x * view.k
-      view.y = -pos.y * view.k - svg.clientHeight * 0.25
+      const pts = ancestry(id, BY_ID).map((x) => POS.get(x)!)
+      const xs = pts.map((q) => q.x)
+      const ys = pts.map((q) => q.y)
+      const w = svg.clientWidth
+      const h = svg.clientHeight * 0.38
+      const bw = Math.max(...xs) - Math.min(...xs) + 140
+      const bh = Math.max(...ys) - Math.min(...ys) + 140
+      view.k = Math.min(1, w / bw, h / bh)
+      view.x = -((Math.max(...xs) + Math.min(...xs)) / 2) * view.k
+      view.y = -((Math.max(...ys) + Math.min(...ys)) / 2) * view.k - svg.clientHeight * 0.27
       apply()
     },
     branch(id: string) {

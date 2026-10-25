@@ -1,4 +1,4 @@
-import { fraction, grant, isMastered, plan, status, streak, toggle, unmaster, type Progress } from '../core/progress'
+import { ancestry, fraction, grant, isMastered, plan, status, streak, toggle, unmaster, type Progress } from '../core/progress'
 import type { Kind, Skill, Status } from '../core/types'
 import { QUESTIONS } from '../content/questions'
 import { BRANCH_BY_ID, BRANCHES, BY_ID, SKILLS } from '../content/tree'
@@ -74,10 +74,21 @@ function sheet(s: Skill) {
     <ol class="challenges">${s.challenges.map((c, i) => `<li><button class="challenge ${done.has(i) ? 'done' : ''}" data-i="${i}">
       <span class="box">${done.has(i) ? '✓' : i + 1}</span><span>${esc(c)}${i === s.challenges.length - 1 ? '<em>Mastery test</em>' : ''}</span></button></li>`).join('')}</ol>
     <a class="video" href="${video(s)}" target="_blank" rel="noopener">▶ Watch tutorials</a>
+    ${chain(s)}
     ${s.requires.length ? `<h3>Builds on</h3><div class="chips">${chips(s.requires.map((r) => BY_ID.get(r)!))}</div>` : ''}
     ${UNLOCKS.has(s.id) ? `<h3>Leads to</h3><div class="chips">${chips(UNLOCKS.get(s.id)!)}</div>` : ''}
     <button class="secondary" data-act="${st === 'mastered' ? 'reset' : 'master'}">${st === 'mastered' ? 'Reset this skill' : 'I already have this: mark mastered'}</button>
   </section>`
+}
+
+/** Every unmastered skill on the way to `s`, nearest the centre first, across all branches. */
+function chain(s: Skill) {
+  const todo = ancestry(s.id, BY_ID).filter((id) => id !== s.id && !s.requires.includes(id)).map((id) => BY_ID.get(id)!)
+    .filter((x) => !isMastered(p, x)).sort((a, b) => a.tier - b.tier)
+  if (!todo.length) return ''
+  const branches = [...new Set(todo.map((x) => x.branch))]
+  return `<h3>Full path · ${todo.length} to go</h3>${branches.map((b) => `<p class="path-branch">${esc(BRANCH_BY_ID.get(b)!.name)}</p>
+    <div class="chips">${chips(todo.filter((x) => x.branch === b))}</div>`).join('')}`
 }
 
 function wireSheet(scope: HTMLElement, s: Skill, rerender: () => void) {
