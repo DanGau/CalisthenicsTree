@@ -1,6 +1,6 @@
 # CalisthenicsTree
 
-A phone-first web app: a Path of Exile style skill tree of bodyweight strength, movement and mobility skills, each with challenges that build to mastery. Design notes: [docs/training-design.md](docs/training-design.md).
+A phone-first web app: a Path of Exile style skill tree of bodyweight strength, movement and mobility skills, each with challenges that build to mastery. Design notes: [docs/training-design.md](docs/training-design.md). Animated figure: [docs/figure.md](docs/figure.md).
 
 Architecture rules: [docs/architecture/CLAUDE.md](docs/architecture/CLAUDE.md). Read before designing or writing code.
 

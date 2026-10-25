@@ -5,6 +5,9 @@ import { BRANCH_BY_ID, BRANCHES, BY_ID, SKILLS } from '../content/tree'
 import { el, esc } from './html'
 import { load, parseSaved, save, today } from './store'
 import { mountTree, treeSvg } from './tree'
+import { animate, live } from './figure'
+import { moves } from './moves'
+import { MOVES } from '../content/moves'
 
 let p = load()
 const commit = (next: Progress) => {
@@ -18,14 +21,13 @@ const STATUS_NAME: Record<Status, string> = { locked: 'Locked', open: 'Ready', a
 const UNLOCKS = new Map<string, Skill[]>()
 for (const s of SKILLS) for (const r of s.requires) UNLOCKS.set(r, [...(UNLOCKS.get(r) ?? []), s])
 
-const video = (s: Skill) => `https://www.youtube.com/results?search_query=${encodeURIComponent(`${s.name} calisthenics tutorial`)}`
-
 export function start(root: HTMLElement) {
   const route = () => {
     const [, page, id] = location.hash.split('/')
     if (page === 'today') today_(root)
     else if (page === 'check') check(root)
     else if (page === 'stats') stats(root)
+    else if (page === 'moves') moves(root, id)
     else tree(root, page === 'skill' && BY_ID.has(id) ? id : undefined, page === 'branch' ? id : undefined)
   }
   addEventListener('hashchange', route)
@@ -51,7 +53,10 @@ function tree(root: HTMLElement, selected?: string, branch?: string) {
   if (branch && BRANCH_BY_ID.has(branch)) t.branch(branch)
   screen.querySelectorAll<HTMLButtonElement>('[data-z]').forEach((b) =>
     b.addEventListener('click', () => (b.dataset.z === 'in' ? t.zoom(1.3) : b.dataset.z === 'out' ? t.zoom(1 / 1.3) : t.home())))
-  if (selected) wireSheet(screen, BY_ID.get(selected)!, () => tree(root, selected))
+  if (selected) {
+    wireSheet(screen, BY_ID.get(selected)!, () => tree(root, selected))
+    animate(screen, MOVES)
+  }
 }
 
 const chips = (skills: Skill[]) => skills.map((s) => `<a class="chip ${status(p, s, BY_ID)}" href="#/skill/${s.id}">${esc(s.name)}</a>`).join('')
@@ -65,6 +70,7 @@ function sheet(s: Skill) {
     <a class="close" href="#/" aria-label="Close">×</a>
     <p class="eyebrow">${esc(b.name)} · tier ${s.tier} · ${KIND_NAME[b.kind]}</p>
     <h2>${esc(s.name)}</h2>
+    ${MOVES[s.id] ? `<div class="demo">${live(s.id, MOVES[s.id])}</div>` : ''}
     <div class="meter"><span class="pill ${st}">${STATUS_NAME[st]}</span><div class="bar"><i style="width:${fraction(p, s) * 100}%"></i></div><b>${done.size}/${s.challenges.length}</b></div>
     ${missing.length ? `<p class="warn">Builds on ${missing.map((m) => esc(m.name)).join(', ')}. You can still start it.</p>` : ''}
     <p class="what">${esc(s.what)}</p>
@@ -73,7 +79,6 @@ function sheet(s: Skill) {
     <h3>Challenges</h3>
     <ol class="challenges">${s.challenges.map((c, i) => `<li><button class="challenge ${done.has(i) ? 'done' : ''}" data-i="${i}">
       <span class="box">${done.has(i) ? '✓' : i + 1}</span><span>${esc(c)}${i === s.challenges.length - 1 ? '<em>Mastery test</em>' : ''}</span></button></li>`).join('')}</ol>
-    <a class="video" href="${video(s)}" target="_blank" rel="noopener">▶ Watch tutorials</a>
     ${chain(s)}
     ${s.requires.length ? `<h3>Builds on</h3><div class="chips">${chips(s.requires.map((r) => BY_ID.get(r)!))}</div>` : ''}
     ${UNLOCKS.has(s.id) ? `<h3>Leads to</h3><div class="chips">${chips(UNLOCKS.get(s.id)!)}</div>` : ''}
