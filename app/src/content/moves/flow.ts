@@ -1,5 +1,10 @@
-import type { Move, Pose } from '../../core/figure'
-import { plant } from './legs'
+import type { Beat, Joint, Move, Pose } from '../../core/figure'
+import { plant, pos, reach } from './legs'
+
+type Limb = 'hand' | 'farHand' | 'foot' | 'farFoot'
+/** Lifts the given limb ends h off the floor mid-step (k: elbow and knee bend sides). */
+const raise = (p: Pose, limbs: Limb[], k: Partial<Record<Limb, number>> = {}, h = 12): Pose =>
+  reach(p, Object.fromEntries(limbs.map((l) => { const [x, y] = pos(p, l as Joint); return [l, [x, y - h]] })), { k })
 
 /** Beast/bear: back flat, hands under the shoulders, knees hovering just off the floor. s staggers opposite hand and foot. */
 const bear = (s: number): Pose =>
@@ -11,21 +16,25 @@ const crab = (s: number, nearHand = true): Pose =>
 
 const duck = (s: number): Pose => plant([138, 90, 90, 90, 90, 0, 0, 0, 0, 150, 170], { foot: 16 + s, farFoot: 16 - s }, 30)
 
-// Ape: deep squat, hands land ahead first, then the feet hop up to them with the hips low.
+// Gaits as a tracking camera sees them: planted limbs slide back, the swinging diagonal lifts and reaches forward.
+const bearWalk = [bear(10), raise(bear(0), ['farHand', 'foot']), bear(-10), raise(bear(0), ['hand', 'farFoot'])]
+const crabWalk = [crab(10), raise(crab(0), ['farHand', 'foot'], { farHand: 1 }), crab(-10), raise(crab(0), ['hand', 'farFoot'], { hand: 1 })]
+const duckWalk = [duck(14), raise(duck(0), ['farFoot']), duck(-14), raise(duck(0), ['foot'])]
+
+// Ape: hands reach far ahead, the feet hop up between them with the hips low, the hands reach again.
+const apeReach: Pose = plant([112, 0, 0, 0, 0, 0, 0, 0, 0, 122, 150], { hand: 74, farHand: 68, foot: 10, farFoot: 10 }, 32)
+const apeHop: Pose = plant([75, 0, 0, 0, 0, 115, 10, 105, 0, 80, 110], { hand: 40, farHand: 34 }, 58)
+const apeLand: Pose = plant([125, 0, 0, 0, 0, 0, 0, 0, 0, 135, 160], { hand: 26, farHand: 20, foot: 14, farFoot: 14 }, 32)
 const apeSquat: Pose = plant([125, 0, 0, 0, 0, 0, 0, 0, 0, 135, 160], { hand: 46, farHand: 38, foot: 14, farFoot: 14 }, 32)
-const apeHop: Pose = plant([75, 0, 0, 0, 0, 115, 10, 105, 0, 80, 110], { hand: 38, farHand: 30 }, 58)
 
 // Kickthrough: near hand and foot stay down, hips turn, the far leg threads under and kicks long, far hand lifts.
 const kick: Pose = plant([140, 0, 0, 170, 175, 0, 0, 88, 86, 140, 150], { hand: 26, foot: -12 }, 40, { k: { hand: 1 } })
 
 // Lizard: chest low, elbows bent back, one knee drives up to its elbow, the other leg long.
-const lizard = (side: 1 | -1): Pose => {
-  const near = side === 1
-  return plant([92, 0, 0, 0, 0, 0, 0, 0, 0, 92, 100], {
-    hand: near ? 66 : 36, farHand: near ? 36 : 66,
-    foot: near ? 6 : -66, farFoot: near ? -66 : 6,
-  }, 20, { k: { hand: -1, farHand: -1, foot: 1, farFoot: 1 } })
-}
+const lizardAt = (hand: number, farHand: number, foot: number, farFoot: number): Pose =>
+  plant([92, 0, 0, 0, 0, 0, 0, 0, 0, 92, 100], { hand, farHand, foot, farFoot }, 20, { k: { hand: -1, farHand: -1, foot: 1, farFoot: 1 } })
+const lizard = (side: 1 | -1): Pose => (side === 1 ? lizardAt(66, 36, 6, -66) : lizardAt(36, 66, -66, 6))
+const lizardWalk = [lizard(1), raise(lizardAt(51, 51, -30, -30), ['farHand', 'farFoot']), lizard(-1), raise(lizardAt(51, 51, -30, -30), ['hand', 'foot'])]
 
 // Frogger: hips sink deep between the knees, chest proud; then hands plant and the hips pop up.
 const frogLow: Pose = plant([125, 0, 0, 0, 0, 0, 0, 0, 0, 140, 165], { hand: 50, farHand: 50, foot: 22, farFoot: 22 }, 24)
@@ -41,18 +50,27 @@ const scorpion: Pose = (() => { const p = bear(0); p[7] = -150; p[8] = 110; p[10
 // Crab reach: hips drive up, chest opens, the far arm sweeps overhead.
 const crabReach: Pose = plant([-62, 0, 0, -165, -175, 0, 0, 0, 0, -45, -20], { hand: -56, foot: 36, farFoot: 36 }, 66, { k: { hand: 1 } })
 
+const gait: Beat[] = [{ dur: 1, ease: 'lin' }, { dur: 1, ease: 'lin' }, { dur: 1, ease: 'lin' }, { dur: 1, ease: 'lin' }]
+const reachHold: Beat[] = [{ hold: 0.3, dur: 1.3 }, { hold: 0.9, dur: 1.3 }]
+
 export const MOVES: Record<string, Move> = {
-  bear_crawl: { keys: [bear(10), bear(-10)], ms: 600 },
-  crab_walk: { keys: [crab(10), crab(-10)], ms: 650 },
-  duck_walk: { keys: [duck(14), duck(-14)], ms: 600 },
-  ape_walk: { keys: [apeSquat, apeHop, apeSquat], mode: 'cycle', ms: 550 },
-  kickthrough: { keys: [bear(0), kick], ms: 800 },
-  lizard: { keys: [lizard(1), lizard(-1)], ms: 750 },
-  frogger: { keys: [frogLow, frogHigh], ms: 650 },
-  underswitch: { keys: [bear(0), kick, crab(0, false), crab(0)], ms: 700 },
-  side_monkey: { keys: [monkeySquat, monkeyOver, monkeySquat], mode: 'cycle', front: true, ms: 650 },
-  flow_linked: { keys: [bear(10), bear(-10), kick, crab(0), frogLow, lizard(1)], mode: 'cycle', ms: 700 },
-  scorpion_reach: { keys: [bear(0), scorpion], ms: 1000 },
-  crab_reach: { keys: [crab(0), crabReach], ms: 1000 },
-  ground_improv: { keys: [bear(10), apeSquat, kick, crab(0), duck(14), lizard(-1)], mode: 'cycle', ms: 800 },
+  bear_crawl: { keys: bearWalk, mode: 'cycle', ms: 330, beats: gait },
+  crab_walk: { keys: crabWalk, mode: 'cycle', ms: 360, beats: gait },
+  duck_walk: { keys: duckWalk, mode: 'cycle', ms: 330, beats: gait },
+  ape_walk: { keys: [apeReach, apeHop, apeLand], mode: 'cycle', ms: 500, flow: 0.1, beats: [{ hold: 0.1, dur: 0.6, ease: 'snap' }, { dur: 0.6, ease: 'in' }, { hold: 0.25, dur: 0.8 }] },
+  kickthrough: { keys: [bear(0), kick], mode: 'cycle', ms: 700, flow: 0.1, beats: [{ hold: 0.3, dur: 0.6, ease: 'snap' }, { hold: 0.4, dur: 1 }] },
+  lizard: { keys: lizardWalk, mode: 'cycle', ms: 420, beats: [{ hold: 0.15, dur: 1 }, { dur: 1, ease: 'out' }, { hold: 0.15, dur: 1 }, { dur: 1, ease: 'out' }] },
+  frogger: { keys: [frogLow, frogHigh], mode: 'cycle', ms: 650, beats: [{ hold: 0.35, dur: 0.6, ease: 'snap' }, { hold: 0.2, dur: 1.1 }] },
+  underswitch: { keys: [bear(0), kick, crab(0, false), crab(0)], ms: 650, flow: 0.1, beats: [{ dur: 0.8 }, { dur: 0.7 }, { dur: 0.6, ease: 'out' }, { hold: 0.4 }] },
+  side_monkey: { keys: [monkeySquat, monkeyOver, monkeySquat], mode: 'cycle', front: true, ms: 650, flow: 0.12, beats: [{ hold: 0.3, dur: 0.55, ease: 'snap' }, { dur: 0.7, ease: 'in' }, { hold: 0.2, dur: 0.01 }] },
+  flow_linked: {
+    keys: [bear(10), bear(-10), kick, crab(0), frogLow, lizard(1)], mode: 'cycle', ms: 650, flow: 0.1,
+    beats: [{ dur: 0.8 }, { dur: 0.6, ease: 'snap' }, { dur: 0.9 }, { dur: 1.1 }, { dur: 1 }, { hold: 0.2, dur: 1 }],
+  },
+  scorpion_reach: { keys: [bear(0), scorpion], ms: 900, beats: reachHold },
+  crab_reach: { keys: [crab(0), crabReach], ms: 900, beats: reachHold },
+  ground_improv: {
+    keys: [bear(10), apeSquat, kick, crab(0), duck(14), lizard(-1)], mode: 'cycle', ms: 750, flow: 0.1,
+    beats: [{ dur: 0.9 }, { dur: 0.6, ease: 'snap' }, { hold: 0.2, dur: 1 }, { dur: 1 }, { dur: 0.9 }, { hold: 0.2, dur: 1 }],
+  },
 }

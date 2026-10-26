@@ -1,10 +1,10 @@
 import { joints, LEN, place, type Body, type Move, type Pose } from '../../core/figure'
 import { reach } from './legs'
-import { armsTo, balance, fit, handOf, headDown, line, pikeTo, set, solve, straight, toeBox } from './push'
+import { armsTo, balance, fit, handOf, headDown, holdBeats, line, pikeTo, set, solve, straight, tempo, toeBox } from './push'
 
 // Inverted, the belly faces -x and the back +x.
-/** Handstand: hollow bows the spine toward the back (ribs in), lean tips the legs toward the belly. */
-const hs = (hollow = 3, lean = 0, u = 0): Pose => [hollow, u, u, u, u, 180 + lean, 180 + lean, 180 + lean, 180 + lean, -hollow, -hollow]
+/** Handstand: hollow bows the spine toward the back (ribs in), lean tips the legs toward the belly, shoulders elevated (pushed tall). */
+const hs = (hollow = 3, lean = 0, u = 0, scap = 5): Pose => [hollow, u, u, u, u, 180 + lean, 180 + lean, 180 + lean, 180 + lean, -hollow, -hollow, scap]
 const HS = hs()
 /** Same pose with the legs wound back a turn, so a blend from legs behind the body swings them up over the back. */
 const back = (p: Pose): Pose => p.map((v, i) => (i >= 5 && i <= 8 ? v! - 360 : v)) as Pose
@@ -35,7 +35,7 @@ const epH = handOf(epTop)
 const epBottom = headDown(epH.x, -epH.y)
 
 // Back to the wall (+x): heels rest on it with a slight arch.
-const bwTop = hs(-5, -9)
+const bwTop = hs(-6, -13)
 const wallX = (m: Move) => Math.round(footEdge(m, m.keys[0], 1) + 1)
 const withWall = (m: Move): Move => ({ ...m, props: [...(m.props ?? []), { t: 'wall', x: wallX(m) }] })
 /** HSPU bottom: head on the floor 24 toward the belly, elbows back over the hands, heels sliding down the wall at wx. */
@@ -77,13 +77,12 @@ const kick = (() => {
 })()
 
 // Front view: near limbs on the viewer's left.
-const front = (t: number, nu: number, fu: number, nl: number, fl: number, ns = nl, fs = fl): Pose => [t, nu, nu, fu, fu, nl, ns, fl, fs]
+const front = (t: number, nu: number, fu: number, nl: number, fl: number, ns = nl, fs = fl): Pose => [t, nu, nu, fu, fu, nl, ns, fl, fs, t, t, 5]
 const fHS = front(0, 0, 0, -180, 180)
-/** Shift the hips over the far hand, the near hand taps its shoulder. */
+/** Chest to wall: the near hand leaves the floor to tap its shoulder, the body staying stacked over the far hand. */
 const tap = (() => {
-  const p = front(-3, 0, -9, -183, 177)
-  const b = joints(p, true)
-  return reach(p, { hand: [b.nearShoulder.x - 4, b.nearShoulder.y - 6] }, { front: true, k: { hand: 1 } })
+  const b = joints(ctwHold)
+  return armsTo(ctwHold, { x: b.shoulder.x - 9, y: b.shoulder.y + 4 }, -1, 'near')
 })()
 const straddleF = front(0, 0, 0, -135, 135)
 const diamond = (() => {
@@ -96,32 +95,37 @@ const oneArm = balance((t) => front(t, -100, 0, -140 + t, 140 + t), -30, 30, (b)
 const walk = (near: number, far: number, lift: 'near' | 'far' | null): Pose => {
   const p = hs(1, 8, 8)
   const b = joints(p)
-  const at = (dx: number, up: boolean) => ({ x: b.hand.x + dx, y: b.hand.y - (up ? 7 : 0) })
+  const at = (dx: number, up: boolean) => ({ x: b.hand.x + dx, y: b.hand.y - (up ? 12 : 0) })
   return armsTo(armsTo(p, at(near, lift === 'near'), 1, 'near'), at(far, lift === 'far'), 1, 'far')
 }
+
+// Balance: legs drift over the back (palms push) then toward the belly (fingers grip), hips and shoulders correcting.
+const swayBack = hs(4, -5, 3, 4)
+const swayBelly = hs(1, 4, -3, 6)
 
 // 90° push-up: lower from handstand to a level body on bent arms, centre of mass over the hands.
 const ninety = balance((f) => [90, -88, f, -88, f, 269, 269, 269, 269, 86, 105], -60, 60)
 
-export const MOVES: Record<string, Move> = {
-  pike_hold: { keys: [pikeEntry, pike], x: 'hand', ms: 1300 },
-  wall_walk: { ...walkM, props: [{ t: 'wall', x: Math.round(Math.min(...walkUp.map((p) => footEdge(walkM, p, -1))) - 13) }], ms: 1100 },
-  ctw_hs: { keys: [ctwArch, ctwHold], x: 'hand', props: [{ t: 'wall', x: CTW - 12 }], ms: 1300 },
-  pike_pu: { keys: [pike, pikeLow], x: 'hand' },
-  wall_taps: { keys: [fHS, tap], front: true, x: 'farHand', ms: 800 },
-  kickup: { keys: [lunge, kick, back(HS)], x: 'hand', ms: 800 },
-  elev_pike_pu: (() => { const m: Move = { keys: [epTop, epBottom], x: 'hand' }; return { ...m, props: [toeBox(m)] } })(),
-  heel_pulls: withWall({ keys: [bwTop, HS], x: 'hand', ms: 1200 }),
-  wall_hspu_neg: withWall({ keys: [bwTop, bwBottom], x: 'hand', ms: 1900 }),
-  free_hs: { keys: [hs(-2, -6, 4), HS], x: 'hand', ms: 1400 },
-  wall_hspu: withWall({ keys: [bwTop, bwBottom], x: 'hand' }),
-  hs_walk: { keys: [walk(-10, 10, null), walk(0, -10, 'far'), walk(10, -10, null), walk(-10, 0, 'near')], mode: 'cycle', x: 'hip', ms: 450 },
-  straddle_press: { keys: [fold, pressLean(6), pressMid(6), back(HS)], x: 'hand', ms: 1200 },
-  deficit_hspu: withWall({ keys: [bwTop, dfBottom], x: 'hand', y: 'hand', at: [0, -24], props: [{ t: 'bars', x: 0, y: -24 }] }),
-  hs_shapes: { keys: [fHS, straddleF, diamond], front: true, mode: 'cycle', x: 'hip', ms: 1000 },
-  free_hspu: { keys: [HS, hspuBottom(null)], x: 'hand', ms: 1100 },
-  pike_press: { keys: [fold, pressLean(0), pressMid(0), back(HS)], x: 'hand', ms: 1200 },
-  oahs: { keys: [straddleF, oneArm], front: true, x: 'farHand', ms: 1300 },
-  ninety_pu: { keys: [HS, ninety], x: 'hand', ms: 1200 },
-}
+const press = (keys: Pose[]): Move => ({ keys, x: 'hand', ms: 900, beats: [{ hold: 0.5, dur: 1.3 }, { dur: 1.5 }, { dur: 1.3, ease: 'out' }, { hold: 0.8 }] })
 
+export const MOVES: Record<string, Move> = {
+  pike_hold: { keys: [pikeEntry, pike, pikeTo(PD, -5, -28)], x: 'hand', beats: holdBeats(1.4, 1.6) },
+  wall_walk: { ...walkM, props: [{ t: 'wall', x: Math.round(Math.min(...walkUp.map((p) => footEdge(walkM, p, -1))) - 13) }], ms: 1100, beats: [{ hold: 0.5, dur: 1.4 }, { dur: 1.2, ease: 'out' }, { hold: 0.8 }] },
+  ctw_hs: { keys: [ctwArch, ctwHold, ctw(7)], x: 'hand', props: [{ t: 'wall', x: CTW - 12 }], beats: holdBeats(1.4, 1.8) },
+  pike_pu: { keys: [pike, pikeLow], x: 'hand', ...tempo(), ms: 800 },
+  wall_taps: { keys: [ctwHold, tap], x: 'farHand', props: [{ t: 'wall', x: CTW - 12 }], ms: 700, beats: [{ hold: 0.5, dur: 1 }, { hold: 0.15 }] },
+  kickup: { keys: [lunge, kick, back(HS)], x: 'hand', ms: 800, flow: 0.15, beats: [{ hold: 0.5, dur: 1.1, ease: 'in' }, { dur: 0.8, ease: 'out' }, { hold: 0.8 }] },
+  elev_pike_pu: (() => { const m: Move = { keys: [epTop, epBottom], x: 'hand', ...tempo(), ms: 800 }; return { ...m, props: [toeBox(m)] } })(),
+  heel_pulls: withWall({ keys: [bwTop, HS, swayBelly], x: 'hand', ms: 900, beats: [{ hold: 0.6, dur: 1.2, ease: 'out' }, { dur: 1 }, { hold: 0.3 }] }),
+  wall_hspu_neg: withWall({ keys: [bwTop, bwBottom], x: 'hand', ...tempo(3.2, 1.2, 0.5, 0.4), ms: 900 }),
+  free_hs: { keys: [swayBack, HS, swayBelly], x: 'hand', ms: 900, beats: [{ hold: 0.15, dur: 1.4 }, { dur: 1.1 }, { hold: 0.2 }] },
+  wall_hspu: withWall({ keys: [bwTop, bwBottom], x: 'hand', ...tempo(), ms: 800 }),
+  hs_walk: { keys: [walk(-14, 14, null), walk(0, -14, 'far'), walk(14, -14, null), walk(-14, 0, 'near')], mode: 'cycle', x: 'hip', ms: 450, beats: [{ ease: 'lin' }, { ease: 'lin' }, { ease: 'lin' }, { ease: 'lin' }] },
+  straddle_press: press([fold, pressLean(6), pressMid(6), back(HS)]),
+  deficit_hspu: withWall({ keys: [bwTop, dfBottom], x: 'hand', y: 'hand', at: [0, -24], props: [{ t: 'bars', x: 0, y: -24 }], ...tempo(2, 1.2), ms: 800 }),
+  hs_shapes: { keys: [fHS, straddleF, diamond], front: true, mode: 'cycle', x: 'hip', ms: 1000, beats: [{ hold: 0.5 }, { hold: 0.5 }, { hold: 0.5 }] },
+  free_hspu: { keys: [HS, hspuBottom(null)], x: 'hand', ...tempo(2, 1.2), ms: 800 },
+  pike_press: press([fold, pressLean(0), pressMid(0), back(HS)]),
+  oahs: { keys: [straddleF, oneArm], front: true, x: 'farHand', ms: 1300 },
+  ninety_pu: { keys: [HS, ninety], x: 'hand', ...tempo(2, 1.3), ms: 800 },
+}

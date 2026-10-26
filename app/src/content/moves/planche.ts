@@ -1,14 +1,15 @@
-import type { Move, Pose } from '../../core/figure'
-import { balance, bent, fit, handOf, line, reachTo, set, straight } from './push'
+import { joints, place, type Move, type Pose, type Prop } from '../../core/figure'
+import { reach } from './legs'
+import { balance, bent, fit, handOf, holdBeats, line, reachTo, set, straight, tempo } from './push'
 
 const ARM = 54
 
 // Plank family: hands fixed, toes on the floor. Hollow = upper back rounded (chest below the torso line).
 const hollow = straight((t) => line(t, -8), 0)
-const D = handOf(hollow).x
-const sag = reachTo((t) => line(t, 9, -4, 10), ARM - 0.5, D, 0, -1, 100, 150)
-const protract = reachTo((t) => line(t, -12), ARM - 0.5, D, 0, -1, 100, 150)
-const retract = reachTo((t) => line(t, 5, 0, 5), ARM - 0.5, D, 0, -1, 100, 150)
+const D_HANDS = handOf(hollow).x
+const sag = reachTo((t) => line(t, 9, -4, 10), ARM - 0.5, D_HANDS, 0, -1, 100, 150)
+const protract = reachTo((t) => line(t, -12), ARM - 0.5, D_HANDS, 0, -1, 100, 150)
+const retract = reachTo((t) => line(t, 5, 0, 5), ARM - 0.5, D_HANDS, 0, -1, 100, 150)
 
 // Lean: shoulders travel past the hands, the feet roll onto the toes.
 const lean = straight((t) => line(t, -10), -24)
@@ -19,34 +20,60 @@ const float = (body: Pose) => balance((u) => set(set(body, [1, 3], u), [2, 4], u
 /** Bent arms (upper arm at u) with the forearm solved to balance. */
 const press = (body: Pose, u: number) => balance((f) => set(set(body, [1, 3], u), [2, 4], f), -60, 60)
 
+// Shoulders depressed (-3) and protracted (upper back rounded: chest below the torso line) in every planche.
+const D = -3
 // Tuck: back rounded, knees to the chest, gaze forward.
-const tuckBody: Pose = [104, 0, 0, 0, 0, 62, -112, 62, -112, 62, 95]
+const tuckBody: Pose = [104, 0, 0, 0, 0, 62, -112, 62, -112, 62, 95, D]
 const tuck = float(tuckBody)
 // Entry: same tuck with the toes still on the floor and less lean.
 const tuckIn = fit((s) => set(set(tuckBody, [1, 2, 3, 4], -12), [6, 8], s), (b) => b.hand.y - b.toe.y, -10, -120)
 const tuckLow = press(tuckBody, -80)
-const advTuck = float([92, 0, 0, 0, 0, 32, -112, 32, -112, 90, 115])
-const straddle = float([93, 0, 0, 0, 0, -84, -84, -96, -96, 88, 110])
-const oneLeg = float([92, 0, 0, 0, 0, 32, -112, -92, -92, 89, 112])
-const fullBody: Pose = [92, 0, 0, 0, 0, -91, -91, -91, -91, 86, 108]
-const planche = float(fullBody)
-const plancheLow = press(fullBody, -82)
-// Maltese: arms out wide, so side-on the hands sit by the hips and the chest skims the floor.
-const maltese = set(set([90, 0, 0, 0, 0, -90, -90, -90, -90, 87, 108], [1, 3], -66), [2, 4], -66)
+const advBody = (hip: number): Pose => [92, 0, 0, 0, 0, hip, -112, hip, -112, 90, 115, D]
+const advTuck = float(advBody(32))
+const oneLeg = float([92, 0, 0, 0, 0, 32, -112, -92, -92, 89, 112, D])
+const fullBody = (dip = 0): Pose => [92 - dip, 0, 0, 0, 0, -91 + dip, -91 + dip, -91 + dip, -91 + dip, 86, 108, D]
+const planche = float(fullBody())
+const plancheLow = press(fullBody(), -82)
+
+/**
+ * Front view from slightly above: the back rises behind the head (hips level with the shoulders) and straight legs fan out `a`
+ * from down. Hands `span` apart, both arms straight; `shift` moves the body toward the near hand.
+ */
+function facing(a: number, span: number, shift = 0): Pose {
+  const p: Pose = [180, 0, 0, 0, 0, a, a, -a, -a, 0, 180, D]
+  const b = joints(p, true)
+  const s = Math.sign(b.nearShoulder.x - b.farShoulder.x)
+  const w = span / 2 - 17
+  const y = b.shoulder.y + Math.sqrt((ARM - 0.4) ** 2 - (w + Math.abs(shift)) ** 2)
+  return reach(p, { hand: [b.nearShoulder.x + s * (w - shift), y], farHand: [b.farShoulder.x - s * (w + shift), y] }, { front: true, k: { hand: s, farHand: -s } })
+}
+// Straddle, front view: toes leave the floor, the legs fan up level.
+const STR = 40
+// Maltese, front view on parallettes: arms spread wide, chest low.
+const MAL = { span: 128, y: -26 }
+const maltese = (a: number, head = 180): Pose => set(facing(a, MAL.span), [10], head)
+const parallettes = (m: Move): Prop[] => {
+  const b = place(m, m.keys[0])
+  return [b.hand, b.farHand].map((h) => ({ t: 'bars', x: Math.round(h.x), y: Math.round(h.y) }))
+}
+const front = (keys: Pose[], beats = holdBeats(1.4, 1.6)): Move => ({ keys, front: true, x: 'hand', beats })
 
 const m = (keys: Pose[], ms?: number): Move => ({ keys, x: 'hand', ms })
 
 export const MOVES: Record<string, Move> = {
-  plank: m([sag, hollow], 1300),
-  scap_pu: m([retract, protract], 800),
-  planche_lean: m([hollow, lean], 1200),
-  pp_pu: m([lean, ppLow]),
-  tuck_planche: m([tuckIn, tuck], 1100),
-  tuck_planche_pu: m([tuck, tuckLow]),
-  adv_tuck_planche: m([tuck, advTuck], 1100),
-  straddle_planche: m([advTuck, straddle], 1200),
-  one_leg_planche: m([advTuck, oneLeg], 1200),
-  full_planche: m([advTuck, planche], 1200),
-  planche_pu: m([planche, plancheLow]),
-  maltese: m([planche, maltese], 1300),
+  plank: { ...m([sag, hollow, reachTo((t) => line(t, -5), ARM - 0.5, D_HANDS, 0, -1, 100, 150)]), beats: holdBeats(1.6, 1.8) },
+  scap_pu: { ...m([retract, protract], 800), beats: [{ hold: 0.3, dur: 1.2 }, { hold: 0.4, dur: 0.9 }], mode: 'cycle' },
+  planche_lean: { ...m([hollow, lean], 900), beats: [{ hold: 0.4, dur: 2 }, { hold: 1 }] },
+  pp_pu: { ...m([lean, ppLow], 800), ...tempo(2, 1.2) },
+  tuck_planche: { ...m([tuckIn, tuck, float(set(tuckBody, [10], 100))]), beats: holdBeats(1.3, 1.6) },
+  tuck_planche_pu: { ...m([tuck, tuckLow], 800), ...tempo(2, 1.2) },
+  adv_tuck_planche: { ...m([tuck, advTuck, float(advBody(26))]), beats: holdBeats(1.5, 1.6) },
+  straddle_planche: front([facing(STR + 8, 40), facing(84, 40), facing(80, 40, 2)]),
+  one_leg_planche: { ...m([advTuck, oneLeg, float(set(oneLeg, [7, 8], -86))]), beats: holdBeats(1.6, 1.6) },
+  full_planche: { ...m([advTuck, planche, float(fullBody(4))]), beats: holdBeats(1.8, 1.6) },
+  planche_pu: { ...m([planche, plancheLow], 800), ...tempo(2.2, 1.4) },
+  maltese: (() => {
+    const mv: Move = { ...front([maltese(96, 176), maltese(101)], [{ hold: 0.4, dur: 1.8 }, { hold: 0.6 }]), y: 'hand', at: [0, MAL.y] }
+    return { ...mv, props: parallettes(mv) }
+  })(),
 }

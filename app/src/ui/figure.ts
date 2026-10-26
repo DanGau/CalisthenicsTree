@@ -88,7 +88,7 @@ function body(b: Body, front: boolean) {
 
 function prop(p: Prop, front: boolean) {
   switch (p.t) {
-    case 'bar': return front ? `<line class="prop" x1="${p.x - 70}" y1="${p.y}" x2="${p.x + 70}" y2="${p.y}"/>` : `<circle class="prop" r="5" cx="${p.x}" cy="${p.y}"/>`
+    case 'bar': return front ? `<line class="prop" x1="${p.x - 70}" y1="${p.y}" x2="${p.x + 70}" y2="${p.y}"/>` : `<line class="prop thin" x1="${p.x - 26}" y1="-400" x2="${p.x}" y2="${p.y}"/><line class="prop thin" x1="${p.x + 26}" y1="-400" x2="${p.x}" y2="${p.y}"/><circle class="prop bar" r="5" cx="${p.x}" cy="${p.y}"/>`
     case 'rings': return `<line class="prop thin" x1="${p.x}" y1="-400" x2="${p.x}" y2="${p.y - 6}"/><circle class="prop ring" r="6" cx="${p.x}" cy="${p.y}"/>`
     case 'wall': return `<rect class="prop fill" x="${p.x}" y="-400" width="12" height="400"/>`
     case 'pole': return `<line class="prop" x1="${p.x}" y1="-400" x2="${p.x}" y2="0"/>`

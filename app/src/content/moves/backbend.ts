@@ -1,5 +1,5 @@
-import { joints, type Move, type Pose } from '../../core/figure'
-import { H, KNEEL, put, where } from './mobility'
+import { blend, joints, type Move, type Pose } from '../../core/figure'
+import { breathe, H, KNEEL, put, rep, where } from './mobility'
 
 type Legs = [number, number, number, number]
 const LEGS0: Legs = [0, 0, 0, 0]
@@ -69,32 +69,48 @@ const archFree = (t: number, c: number, head: number, arms: number, hip: [number
 /** Far arm straight up off the floor. */
 const farUp = (p: Pose): Pose => [p[0], p[1], p[2], -180, -180, ...p.slice(5)] as Pose
 
+// Press to the top of the head first, elbows up, then drive through to straight arms.
+const headTop = put([-110, 0, 0, 0, 0, 0, 0, 0, 0, -40, -5], [46, 39.8], { hand: [0, H.hand], farHand: [0, H.hand], foot: [78, H.ankle], farFoot: [78, H.ankle] }, { hand: -1, farHand: -1 })
+const top = bridge(-100, -55, -10, 0, 78)
+/** Between two hands-and-feet keys: hands stay at x 0, feet re-reach `feet`, so the contacts hold mid-move. */
+const between = (a: Pose, b: Pose, t: number, feet: number): Pose => {
+  const p = blend(a, b, t)
+  const h = joints(p).hand
+  return put(p, [-h.x, H.hand + h.y], { foot: [feet, H.ankle], farFoot: [feet, H.ankle] })
+}
+
 export const MOVES: Record<string, Move> = {
   // Lumbar then thoracic extension; hips stay down, neck long.
   cobra: {
-    keys: [
+    ...breathe([
       put([96, 0, 0, 0, 0, -92, -92, -92, -92, 112, 112], [0, H.lie], { hand: [38, H.hand], farHand: [38, H.hand] }),
       put([118, 0, 0, 0, 0, -92, -92, -92, -92, 160, 165], [0, H.lie], { hand: [38, H.hand], farHand: [38, H.hand] }),
-    ],
-    x: 'hip', ms: 1400,
+    ]),
+    x: 'hip', point: true,
   },
-  table: { keys: [tableSit, tableTop], x: 'hand', ms: 1200 },
+  table: { ...rep(tableSit, tableTop, 0.9, 1.5, 0.3, 0.7), x: 'hand', ms: 1000 },
   bridge_box: {
-    keys: [boxBridge(-135, -95, -60, [24, 50]), boxBridge(-150, -95, -40, [20, 62])],
-    x: 'hand', at: [-6, 0], props: [{ t: 'box', x: -40, w: 40, h: BOX }], ms: 1200,
+    ...rep(boxBridge(-135, -95, -60, [24, 50]), boxBridge(-150, -95, -40, [20, 62]), 1, 1.6, 0.3, 0.9),
+    x: 'hand', at: [-6, 0], props: [{ t: 'box', x: -40, w: 40, h: BOX }], ms: 1000,
   },
-  camel: {
-    keys: [camel(0, 180, 180, 180, [-10, 62]), camel(-22, 200, 265, 300, HEEL)],
-    x: 'knee', ms: 1500,
+  camel: { ...breathe([camel(0, 180, 180, 180, [-10, 62]), camel(-22, 200, 265, 300, HEEL)]), x: 'knee' },
+  wall_angels: { front: true, ms: 1000, ...rep([180, 90, 180, -90, -180, 0, 0, 0, 0, 180, 180, -3], [180, 155, 170, -155, -170, 0, 0, 0, 0, 180, 180, 4], 1.6, 1.6, 0.4, 0.4) },
+  // Press to the head, then drive up with momentum; lower slowly back through the head.
+  full_bridge: {
+    keys: [lying, between(lying, headTop, 0.5, 78), headTop, between(headTop, top, 0.5, 78), top, between(headTop, top, 0.5, 78), headTop, between(lying, headTop, 0.5, 78)],
+    mode: 'cycle', x: 'hand', ms: 900,
+    beats: [
+      { hold: 0.5, dur: 0.4, ease: 'in' }, { dur: 0.4, ease: 'out' }, { hold: 0.15, dur: 0.35, ease: 'in' }, { dur: 0.5, ease: 'out' },
+      { hold: 1, dur: 0.8, ease: 'in' }, { dur: 0.8, ease: 'out' }, { hold: 0.2, dur: 0.6, ease: 'in' }, { dur: 0.6, ease: 'out' },
+    ],
   },
-  wall_angels: { keys: [[180, 90, 180, -90, -180, 0, 0, 0, 0], [180, 155, 170, -155, -170, 0, 0, 0, 0]], front: true, ms: 1300 },
-  full_bridge: { keys: [lying, bridge(-100, -55, -10, 0, 78)], x: 'hand', ms: 1200 },
-  bench_opener: {
-    keys: [opener(10, 98, 100, 90), opener(18, 96, 68, 55)],
-    x: 'knee', props: [{ t: 'box', x: BENCH.x, w: 40, h: BENCH.h }], ms: 1500,
-  },
+  bench_opener: { ...breathe([opener(10, 98, 100, 90), opener(18, 96, 68, 55)]), x: 'knee', props: [{ t: 'box', x: BENCH.x, w: 40, h: BENCH.h }] },
   // Shift over the hands first, then the free leg points up.
-  one_leg_bridge: { keys: [full, bridge(-100, -50, -10, -8, 66, [0, 0, 165, 165])], x: 'hand', ms: 1200 },
+  one_leg_bridge: {
+    keys: [full, bridge(-100, -50, -10, -8, 66, [0, 0, 165, 165])], x: 'hand', ms: 1000,
+    beats: [{ hold: 0.5, dur: 1.3, ease: 'io' }, { hold: 0.9 }],
+  },
+  // Walk the hands down the wall slowly; walk back up.
   bridge_walk: {
     keys: [
       wallKey(184, 196, 205, [76, 80], null),
@@ -102,38 +118,47 @@ export const MOVES: Record<string, Move> = {
       wallKey(225, 285, 310, [80, 68], 60),
       bridge(260, 305, 350, 8, 72),
     ],
-    x: 'foot', at: [72, 0], props: [{ t: 'wall', x: -12 }], ms: 1100,
+    x: 'foot', at: [72, 0], props: [{ t: 'wall', x: -12 }], ms: 1000,
+    beats: [{ hold: 0.5, dur: 1.5 }, { hold: 0.2, dur: 1.5 }, { hold: 0.2, dur: 1.3, ease: 'in' }, { hold: 0.8 }],
   },
   // Chest pushes through until the arms are vertical; legs straighten.
-  straight_bridge: { keys: [full, bridge(-115, -25, 0, 0)], x: 'hand', ms: 1400 },
+  straight_bridge: { ...breathe([full, bridge(-115, -25, 0, 0)]), x: 'hand' },
+  // Lower slowly, then the last part is a fast drop onto the hands; drive back up.
   kneel_drop: {
-    keys: [kneelKey(0, -180, -180, -180, -180), kneelKey(-22, -165, -120, -95, -120), kneelKey(-35, -150, -65, -20, [-36, H.hand])],
-    x: 'knee', ms: 1000,
+    keys: [kneelKey(0, -180, -180, -180, -180), kneelKey(-22, -165, -120, -95, -120), kneelKey(-35, -150, -65, -20, [-36, H.hand]), kneelKey(-22, -165, -120, -95, -120)],
+    mode: 'cycle', x: 'knee', ms: 900,
+    beats: [{ hold: 0.5, dur: 1.8 }, { dur: 0.45, ease: 'in' }, { hold: 0.5, dur: 0.6, ease: 'snap' }, { dur: 1.1, ease: 'out' }],
   },
+  // Lean back slowly, then fall the last part onto the hands.
   stand_to_bridge: {
     keys: [armsUp, archFree(-168, -140, -120, -140, [74, 79]), full],
-    x: 'foot', at: [66, 0], ms: 1000,
+    x: 'foot', at: [66, 0], ms: 900,
+    beats: [{ hold: 0.6, dur: 2 }, { dur: 0.6, ease: 'in' }, { hold: 0.8 }],
   },
+  // Rock the shoulders over the hands, then drive the hips and stand with momentum.
   bridge_stand: {
     keys: [full, bridge(-112, -75, -40, 12), archFree(-160, -140, -140, -120, [72, 77]), armsUp],
-    x: 'foot', at: [66, 0], ms: 1000,
+    x: 'foot', at: [66, 0], ms: 900,
+    beats: [{ hold: 0.6, dur: 1.1, ease: 'io' }, { dur: 0.6, ease: 'snap' }, { dur: 1, ease: 'out' }, { hold: 0.6 }],
   },
   // The far hand swings up and over as the hips turn toward the floor.
   bridge_rotation: {
     keys: [
       full,
       farUp(bridge(-112, -120, -130, -2)),
-      put([-120, 0, 0, -290, -300, 0, 0, 0, 0, -165, -175], [34, 22], { hand: [0, H.hand], farHand: [40, H.hand], foot: [66, H.ankle], farFoot: [66, H.ankle] }, { hand: 1, farHand: 1 }),
+      put([-100, 0, 0, -200, -200, 0, 0, 0, 0, -115, -140], [42, 30], { hand: [0, H.hand], farHand: [-30, H.hand], foot: [66, H.ankle], farFoot: [66, H.ankle] }, { hand: 1, farHand: -1 }),
     ],
-    x: 'hand', ms: 1200,
+    x: 'hand', ms: 1000, flow: 0,
+    beats: [{ hold: 0.5, dur: 1 }, { dur: 1.1 }, { hold: 0.6 }],
   },
-  // Kick from the bridge through handstand and back down.
+  // Rock over the hands, kick through handstand and back down.
   tick_tock: {
     keys: [
       full,
       put([-50, 0, 0, 0, 0, 30, 10, 170, 170, -20, -5], [25, 95], { hand: [0, H.hand], farHand: [0, H.hand], foot: [66, H.ankle] }, { hand: 1, farHand: 1 }),
       [0, 0, 0, 0, 0, 180, 180, 180, 180, 0, 10],
     ],
-    x: 'hand', ms: 1000,
+    x: 'hand', y: 'hand', at: [0, -H.hand], ms: 900,
+    beats: [{ hold: 0.4, dur: 1.1 }, { dur: 0.6, ease: 'snap' }, { hold: 0.5 }],
   },
 }

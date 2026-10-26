@@ -1,4 +1,4 @@
-import { joints, LEN, type Joint, type Move, type Pose, type Pt } from '../../core/figure'
+import { joints, LEN, type Beat, type Joint, type Move, type Pose, type Pt } from '../../core/figure'
 
 const D = 180 / Math.PI
 const wrap = (v: number) => ((((v + 180) % 360) + 360) % 360) - 180
@@ -79,7 +79,7 @@ const boxTop = fwd(180, 180, 180)
 const boxSit = plant(fwd(145, 152), { foot: 30, farFoot: 30 }, 44)
 const deep = plant(fwd(132, 145, 168), { foot: 22, farFoot: 22 }, 30)
 
-// Cossack (front view): bent thigh at 105 puts the foot 28 below the hip; the straight leg reaches it at 68°.
+// Cossack (front view): bent thigh at 105 puts the foot 28 below the hip; the straight leg reaches it at 68 degrees.
 const cossL: Pose = [175, 30, 150, -30, -150, 105, 0, -68, -68, 172, 180]
 const cossR: Pose = [185, 30, 150, -30, -150, 68, 68, -105, 0, 188, 180]
 
@@ -127,21 +127,28 @@ const bulg = (f: number, fx: number): Pose =>
 // Reverse Nordic: kneel on the shins, lean the straight hip line back from the knee.
 const kneel = (lean: number): Pose => [180 + lean, 90 + lean, 90 + lean, 90 + lean, 90 + lean, lean, -90, lean, -90, 180 + lean, 180 + lean * 0.6]
 
+/** One strength rep as a loop: pause on top, lower over `down`, pause, drive up over `up` (eccentric slower). */
+export const rep = (top: Pose, bottom: Pose, down = 1.8, up = 1, pause = 0.15): Pick<Move, 'keys' | 'mode' | 'beats'> => ({
+  keys: [top, bottom], mode: 'cycle', beats: [{ hold: 0.35, dur: down }, { hold: pause, dur: up }],
+})
+/** Beats for a two-key hold: ease into the second key, breathe there. */
+export const holdBeats = (enter = 1.2, hold = 1.4): Beat[] => [{ hold: 0.3, dur: enter, ease: 'out' }, { hold, dur: enter }]
+
 export const MOVES: Record<string, Move> = {
-  box_squat: { keys: [boxTop, boxSit], x: 'foot', props: [{ t: 'box', x: -64, w: 36, h: 38 }] },
-  squat: { keys: [boxTop, deep], x: 'foot' },
-  cossack: { keys: [cossL, cossR], front: true, ms: 1300 },
-  split_squat: { keys: [splitTop, splitLow] },
-  step_up: { keys: [stepLow, stepTop], x: 'foot', y: 'foot', at: [0, -45], props: [{ t: 'box', x: -26, w: 52, h: 40 }] },
-  assisted_shrimp: { keys: [shrimpTop(false, true), shrimpLow(false, true)], x: 'foot', props: [{ t: 'pole', x: 60 }] },
-  bulgarian: { keys: [bulg(78, 24), bulg(46, 30)], x: 'foot', props: [{ t: 'box', x: -88, w: 36, h: 40 }] },
-  box_pistol: { keys: [pistolTop, plant([145, 90, 90, 90, 90, 0, 0, 86, 86, 152, 170], { foot: 30 }, 44)], x: 'foot', props: [{ t: 'box', x: -64, w: 36, h: 38 }] },
-  shrimp: { keys: [shrimpTop(), shrimpLow()], x: 'foot' },
-  sissy: { keys: [sissyTop(true), sissyLow(true)], x: 'foot', props: [{ t: 'pole', x: 50 }] },
-  pistol: { keys: [pistolTop, pistolLow(87)], x: 'foot' },
-  adv_shrimp: { keys: [shrimpTop(true), shrimpLow(true, false, 50)], x: 'foot' },
-  reverse_nordic: { keys: [kneel(0), kneel(55)], x: 'knee', ms: 1400 },
-  deficit_pistol: { keys: [pistolTop, pistolLow(55)], x: 'foot', y: 'foot', at: [0, -45], props: [{ t: 'box', x: -26, w: 44, h: 40 }] },
-  full_sissy: { keys: [sissyTop(false), sissyLow(false)], x: 'foot' },
-  dragon_pistol: { keys: [[180, 90, 90, 90, 90, 0, 0, -15, 40, 180, 180], plant([125, 90, 90, 90, 90, 0, 0, 55, 95, 138, 165], { foot: 26 }, 24)], x: 'foot' },
+  box_squat: { ...rep(boxTop, boxSit, 1.8, 1, 0.3), x: 'foot', props: [{ t: 'box', x: -64, w: 36, h: 38 }] },
+  squat: { ...rep(boxTop, deep), x: 'foot' },
+  cossack: { keys: [cossL, cossR], front: true, ms: 1300, beats: [{ hold: 0.4 }, { hold: 0.4 }] },
+  split_squat: rep(splitTop, splitLow),
+  step_up: { keys: [stepLow, stepTop], mode: 'cycle', beats: [{ hold: 0.2, dur: 1 }, { hold: 0.35, dur: 1.6 }], x: 'foot', y: 'foot', at: [0, -45], props: [{ t: 'box', x: -26, w: 52, h: 40 }] },
+  assisted_shrimp: { ...rep(shrimpTop(false, true), shrimpLow(false, true), 1.8, 1.1), x: 'foot', props: [{ t: 'pole', x: 60 }] },
+  bulgarian: { ...rep(bulg(78, 24), bulg(46, 30)), x: 'foot', props: [{ t: 'box', x: -88, w: 36, h: 40 }] },
+  box_pistol: { ...rep(pistolTop, plant([145, 90, 90, 90, 90, 0, 0, 86, 86, 152, 170], { foot: 30 }, 44), 2, 1.1, 0.3), x: 'foot', props: [{ t: 'box', x: -64, w: 36, h: 38 }] },
+  shrimp: { ...rep(shrimpTop(), shrimpLow(), 1.9, 1.1), x: 'foot' },
+  sissy: { ...rep(sissyTop(true), sissyLow(true), 2, 1.2), x: 'foot', props: [{ t: 'pole', x: 50 }] },
+  pistol: { ...rep(pistolTop, pistolLow(87), 2, 1.1), x: 'foot' },
+  adv_shrimp: { ...rep(shrimpTop(true), shrimpLow(true, false, 50), 2, 1.2), x: 'foot' },
+  reverse_nordic: { ...rep(kneel(0), kneel(55), 2.2, 1.3), x: 'knee', ms: 1100 },
+  deficit_pistol: { ...rep(pistolTop, pistolLow(55), 2, 1.2), x: 'foot', y: 'foot', at: [0, -45], props: [{ t: 'box', x: -26, w: 44, h: 40 }] },
+  full_sissy: { ...rep(sissyTop(false), sissyLow(false), 2.1, 1.2), x: 'foot' },
+  dragon_pistol: { ...rep([180, 90, 90, 90, 90, 0, 0, -15, 40, 180, 180], plant([125, 90, 90, 90, 90, 0, 0, 55, 95, 138, 165], { foot: 26 }, 24), 2.2, 1.3), x: 'foot' },
 }

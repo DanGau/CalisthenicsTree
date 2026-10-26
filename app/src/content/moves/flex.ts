@@ -1,5 +1,5 @@
 import type { Move, Pose } from '../../core/figure'
-import { H, KNEEL, ang, put } from './mobility'
+import { breathe, H, KNEEL, ang, put, rep } from './mobility'
 
 const stand: Pose = [180, 2, 4, -2, -4, 0, 0, 0, 0]
 // Standing fold, ankles at x 0: flat-back hinge, then the spine lets go and the palms reach the floor.
@@ -42,26 +42,36 @@ const curl = (t: number, c: number, head: number, legs = 0): Pose => [t, 0, 0, 0
 const needle = (rear: number): Pose =>
   put([40, 0, 0, 0, 0, 0, 0, rear, rear, 20, -5], [0, 81], { foot: [0, H.ankle], hand: [30, H.hand], farHand: [30, H.hand] }, { hand: 1, farHand: 1 })
 
+// Straddle sit on a cushion (front view): legs slope down to the heels.
+const CUSHION = { t: 'box', x: -22, w: 44, h: 10 } as const
+const cushion = (arms: [number, number, number, number], t = 180): Pose => straddle(78, t, arms)
+
 export const MOVES: Record<string, Move> = {
-  fwd_fold: { keys: [stand, flatBack, fold], x: 'foot', ms: 1300 },
+  // Flat-back hinge, then the spine lets go; roll up a vertebra at a time.
+  fwd_fold: { ...breathe([stand, flatBack, fold], 1000), x: 'foot' },
   // Chest leads toward the toes; the hinge is at the hip.
-  pike_seated: { keys: [sit(180, 180, 180, [6, H.hand]), sit(128, 112, 105, [80, 12])], x: 'hip', ms: 1400 },
-  straddle_sit: { keys: [straddle(85, 180, [20, 20, -20, -20]), straddle(85, 180, [165, 175, -165, -175])], front: true, ms: 1400 },
-  // Hands by the knees push down; the straight legs lift.
-  pike_comp: { keys: [sit(165, 140, 150, [32, 2]), sit(165, 140, 150, [32, 2], 100)], x: 'hip', ms: 800 },
-  half_split: { keys: [halfSplit(174, 174, 178, [26, 40]), halfSplit(112, 98, 92, [44, H.hand])], x: 'hip', ms: 1400 },
+  pike_seated: { ...breathe([sit(180, 180, 180, [6, H.hand]), sit(128, 112, 105, [80, 12])]), x: 'hip' },
+  // Hands on the thighs, then sit up tall and reach long.
+  straddle_sit: { ...breathe([cushion([30, 10, -30, -10], 182), cushion([168, 178, -168, -178])]), front: true, props: [CUSHION] },
+  // Hands by the knees push down; the straight legs lift and hold.
+  pike_comp: { ...rep(sit(165, 140, 150, [32, 2]), sit(165, 140, 150, [32, 2], 100), 0.7, 1.4, 0.3, 0.8), x: 'hip', ms: 900 },
+  half_split: { ...breathe([halfSplit(174, 174, 178, [26, 40]), halfSplit(112, 98, 92, [44, H.hand])]), x: 'hip' },
   // Flat back: the pelvis tilts forward, the spine stays long.
-  pancake_45: { keys: [sit(178, 178, 180, [6, H.hand]), sit(135, 135, 140, [62, H.hand])], x: 'hip', ms: 1400 },
+  pancake_45: { ...breathe([sit(178, 178, 180, [6, H.hand]), sit(135, 135, 140, [62, H.hand])]), x: 'hip' },
+  // Chin, upper back, lower back, then the hips fold; arms hang. Rolls up in reverse.
   jefferson: {
     keys: [curl(180, 180, 180), curl(180, 180, 120), curl(178, 120, 60), curl(130, 50, 10), curl(58, 4, -12, 3)],
-    x: 'foot', y: 'foot', at: [0, -65], props: [{ t: 'box', x: -42, w: 52, h: 60 }], ms: 1300,
+    x: 'foot', y: 'foot', at: [0, -65], props: [{ t: 'box', x: -42, w: 52, h: 60 }], ms: 1100,
+    beats: [{ hold: 0.6, dur: 1.4, ease: 'in' }, { dur: 1.4, ease: 'lin' }, { dur: 1.4, ease: 'lin' }, { dur: 1.6, ease: 'out' }, { hold: 1.2 }],
   },
-  front_split_half: { keys: [blockSplit(32), blockSplit(27)], x: 'hip', props: [{ t: 'box', x: -10, w: 20, h: 19 }], ms: 1400 },
-  pancake: { keys: [sit(135, 135, 140, [62, H.hand]), sit(100, 95, 92, [104, H.hand])], x: 'hip', ms: 1400 },
-  pike_full: { keys: [sit(128, 112, 105, [80, 12]), sit(110, 100, 95, [88, 8])], x: 'hip', ms: 1400 },
-  front_split: { keys: [split(18, [3, H.hand]), split(9.5, [3, H.hand])], x: 'hip', ms: 1400 },
-  middle_split: { keys: [straddle(68, 180, [15, 15, -15, -15]), midHands(85)], front: true, ms: 1400 },
+  front_split_half: { ...breathe([blockSplit(34), blockSplit(27)]), x: 'hip', props: [{ t: 'box', x: -10, w: 20, h: 19 }] },
+  // Arms reach long past the feet; the chest slides out along the floor.
+  pancake: { ...breathe([sit(135, 135, 140, [62, H.hand]), sit(104, 96, 92, [104, H.hand])]), x: 'hip' },
+  pike_full: { ...breathe([sit(128, 112, 105, [80, 12]), sit(110, 100, 95, [88, 8])]), x: 'hip' },
+  front_split: { ...breathe([split(22, [3, H.hand]), split(9.5, [3, H.hand])]), x: 'hip' },
+  // Hips slide down as the feet slide out, hands taking the weight.
+  middle_split: { ...breathe([midHands(64), midHands(86)]), front: true },
   // Fold first, then lift the heels with the hands beside the hips.
-  compression_max: { keys: [sit(150, 128, 120, [8, 2], 105), sit(150, 128, 120, [8, 2], 115)], x: 'hip', ms: 1200 },
-  needle: { keys: [needle(-120), needle(-172)], x: 'foot', ms: 1400 },
+  compression_max: { ...rep(sit(150, 128, 120, [8, 2], 105), sit(150, 128, 120, [8, 2], 115), 0.6, 1.2, 0.3, 0.8), x: 'hip' },
+  needle: { ...breathe([needle(-120), needle(-172)]), x: 'foot' },
 }

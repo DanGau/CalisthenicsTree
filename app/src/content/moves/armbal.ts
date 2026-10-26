@@ -1,5 +1,5 @@
 import { joints, LEN, type Move, type Pose, type Pt } from '../../core/figure'
-import { balance, solve } from './push'
+import { balance, holdBeats, set, solve } from './push'
 
 const D2R = Math.PI / 180
 const dir = (deg: number, len: number): Pt => ({ x: Math.sin(deg * D2R) * len, y: Math.cos(deg * D2R) * len })
@@ -46,11 +46,33 @@ const frog = perched(() => 18, -100, -20, { along: 4, bend: -18, head: 55, shin:
 const crowIn = perch(6, -20, { along: 20, bend: -24, head: 70, shin: 0, legs: toesDown })
 const crow = perched((u) => u + 12, -50, 10, { along: 20, bend: -24, head: 70, shin: -120 })
 const crane = perched((u) => u, -45, 15, { along: 24, bend: -30, head: 75, shin: -130 })
-// Side crow: knees stacked on one arm, shins pointing forward out of the twist.
-const sideCrow = perched(() => 12, -90, -10, { along: 6, bend: -15, head: 60, shin: 100 })
-// Pigeon: shin across the arms, back leg reaching back. Grasshopper: near leg straight across the arms.
-const pigeon = perched((u) => u + 10, -70, 5, { along: 14, bend: -20, head: 65, shin: 100, legs: (p) => [p[0], p[1], p[2], p[3], p[4], p[5], 100, -95, -95, p[9], p[10]] })
-const grasshopper = perched((u) => u + 10, -70, 5, { along: 14, bend: -18, head: 65, shin: 0, legs: (p) => [p[0], p[1], p[2], p[3], p[4], p[5], p[5] + 8, 30, -100, p[9], p[10]] })
+// Pigeon: shin across the arms, back leg reaching back; it enters with the back toes on the floor.
+const pigeonLegs = (back: number) => (p: Pose): Pose => [p[0], p[1], p[2], p[3], p[4], p[5], 100, back, back, p[9], p[10]]
+const pigeon = perched((u) => u + 10, -70, 5, { along: 14, bend: -20, head: 65, shin: 100, legs: pigeonLegs(-95) })
+const pigeonIn = (() => {
+  const lift = (L: number) => set(pigeon, [7, 8], L)
+  return lift(solve((L) => { const b = joints(lift(L)); return b.farToe.y - b.hand.y }, -95, -10))
+})()
+
+/**
+ * Front view twist (side crow, grasshopper): shoulders square to the viewer, arms nearly vertical with the
+ * elbows a touch out; the trunk leans toward the viewer so the hips sit just outside the near elbow.
+ */
+const twist = (legs: [number, number, number, number], head = 195): Pose => [-88, 10, -4, -10, 4, ...legs, 188, head]
+/** Shins of a twist solved so the feet rest on the floor. */
+const feetDown = (p: Pose): Pose => {
+  const at = (s: number) => set(set(p, [6], s), [8], s - 6)
+  return at(solve((s) => { const b = joints(at(s), true); return Math.max(b.foot.y, b.farFoot.y) + LEN.sole - b.hand.y }, 150, 20))
+}
+// Side crow: both knees stacked on the near upper arm, shins folded back under.
+const sideCrow = twist([80, 130, 74, 124])
+const sideCrowIn = feetDown(twist([112, 60, 106, 54]))
+// Grasshopper: the near leg straight across both upper arms, the far leg bent with its foot by the near knee.
+const grasshopper = twist([-88, -88, 150, 70], 190)
+const grasshopperIn = (() => {
+  const at = (L: number) => twist([L, L, 150, 70], 190)
+  return at(solve((L) => { const b = joints(at(L), true); return b.foot.y + LEN.sole - b.hand.y }, -88, -20))
+})()
 
 // Tripod: hands on the belly side, head down ahead of them, forearms vertical, knees on the elbows, then legs up.
 const TRI = { u: -82 }
@@ -89,24 +111,28 @@ const faIn = (() => {
   return [p[0], p[1], p[2], p[3], p[4], L, L, p[7], p[8], p[9], p[10]] as Pose
 })()
 // Scorpion: belly bowed out toward the face, the knees bend so the feet drop toward the head.
-const scorpion = balance((t) => fa(t, [t + 160, t + 30, t + 160, t + 30], 70, -80), -50, 0, overForearms)
+// The chest pushes through toward the face, the hips swing over the back and the bent knees drop the feet toward the head.
+const scorpion = balance((t): Pose => [t, 22, -90, 22, -90, t - 95, t + 5, t - 85, t + 15, t + 60, -40], -130, -30, overForearms)
 
 // Crow to handstand: hips rise over the hands, arms straighten, knees leave the arms, then the legs extend.
 const crowTuck = balance((t) => [t, -12, -12, -12, -12, t - 60, t - 200, t - 60, t - 200, t - 10, t - 30], -30, 40)
 
-const m = (keys: Pose[], ms?: number): Move => ({ keys, x: 'hand', ms })
+/** Balance hold: [entry, hold, small correction], bounced. */
+const bal = (entry: Pose, hold: Pose, sway: Pose, o: Partial<Move> = {}): Move => ({ keys: [entry, hold, sway], x: 'hand', beats: holdBeats(1.4, 1.5), ...o })
+/** Small correction: fingers press and the hips settle a touch. */
+const nod = (p: Pose, d = 3): Pose => set(set(p, [0], p[0] + d), [9], (p[9] ?? p[0]) + d)
 
 export const MOVES: Record<string, Move> = {
-  frog_stand: m([frogIn, frog], 1200),
-  crow: m([crowIn, crow], 1200),
-  side_crow: m([crowIn, sideCrow], 1200),
-  crane: m([crow, crane], 1200),
-  tripod_hs: m([tripodTuck, tripod], 1300),
-  flying_pigeon: m([crowIn, pigeon], 1300),
-  elbow_lever: m([leverTuck, elbowLever], 1200),
-  forearm_stand: { keys: [faIn, forearm], x: 'elbow', ms: 1200 },
-  grasshopper: m([crowIn, grasshopper], 1300),
-  oa_elbow_lever: m([elbowLever, oaLever], 1300),
-  crow_to_hs: m([crow, crowTuck, HS], 1100),
-  scorpion: { keys: [forearm, scorpion], x: 'elbow', ms: 1400 },
+  frog_stand: bal(frogIn, frog, nod(frog)),
+  crow: bal(crowIn, crow, nod(crow)),
+  side_crow: bal(sideCrowIn, sideCrow, nod(sideCrow, -3), { front: true }),
+  crane: bal(crow, crane, nod(crane)),
+  tripod_hs: { keys: [tripodTuck, tripod], x: 'hand', ms: 900, beats: [{ hold: 0.5, dur: 1.8 }, { hold: 0.9 }] },
+  flying_pigeon: bal(pigeonIn, pigeon, nod(pigeon)),
+  elbow_lever: bal(leverTuck, elbowLever, nod(elbowLever, 2)),
+  forearm_stand: { keys: [faIn, forearm], x: 'elbow', flow: 0.12, ms: 800, beats: [{ hold: 0.5, dur: 1.1, ease: 'out' }, { hold: 1 }] },
+  grasshopper: bal(grasshopperIn, grasshopper, nod(grasshopper, -3), { front: true }),
+  oa_elbow_lever: bal(elbowLever, oaLever, nod(oaLever, 2)),
+  crow_to_hs: { keys: [crow, crowTuck, HS], x: 'hand', ms: 900, beats: [{ hold: 0.5, dur: 1.3 }, { dur: 1.5, ease: 'out' }, { hold: 0.8 }] },
+  scorpion: { keys: [forearm, scorpion], x: 'elbow', ms: 900, beats: [{ hold: 0.5, dur: 2 }, { hold: 1 }] },
 }

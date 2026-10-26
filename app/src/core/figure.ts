@@ -40,6 +40,8 @@ export type Move = {
   at?: [number, number]
   props?: Prop[]
   front?: boolean
+  /** Toes pointed all loop (kneeling, prone, tops of the feet on the floor). */
+  point?: boolean
   floor?: boolean
   /** Milliseconds per transition. */
   ms?: number
@@ -95,7 +97,7 @@ export function footAngle(shin: number) {
 }
 
 /** Joint positions with the hip at the origin. */
-export function joints(p: Pose, front = false): Body {
+export function joints(p: Pose, front = false, point = false): Body {
   const [t, nu, nf, fu, ff, nt, ns, ft, fs, c, h] = full(p)
   const hip = { x: 0, y: 0 }
   const waist = dir(t, LEN.waist)
@@ -114,7 +116,7 @@ export function joints(p: Pose, front = false): Body {
   const foot = add(knee, dir(ns, LEN.shin))
   const farFoot = add(farKnee, dir(fs, LEN.shin))
   // The sole sits below the ankle; side view: heel just behind, toes ahead.
-  const sole = (f: Pt, s: number, len: number) => add(add(f, dir(s, LEN.sole)), dir(footAngle(s), front ? 0 : len))
+  const sole = (f: Pt, s: number, len: number) => add(add(f, dir(s, LEN.sole)), dir(point ? s + 15 : footAngle(s), front ? 0 : len))
   return {
     hip, waist, shoulder: sh, head: add(shoulder, dir(h, LEN.neck)),
     elbow, hand: add(elbow, dir(nf, LEN.fore)), farElbow, farHand: add(farElbow, dir(ff, LEN.fore)),
@@ -129,7 +131,7 @@ const POINTS = ['hip', 'waist', 'shoulder', 'elbow', 'hand', 'farElbow', 'farHan
 
 /** Joints placed in the scene per the move's pins. */
 export function place(m: Move, p: Pose, lift = 0): Body {
-  const b = joints(p, m.front)
+  const b = joints(p, m.front, m.point)
   const [ax, ay] = m.at ?? [0, 0]
   const xj = b[m.x ?? 'hip']
   const lowest = Math.max(...POINTS.map((k) => b[k].y), b.head.y + LEN.head)

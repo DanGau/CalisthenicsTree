@@ -40,3 +40,4 @@ Motion must read as a person moving mass, not a puppet between poses. `beats` (o
 - Use geometry, not guesses: contacts (hands on floor or bar, feet on box) must touch. Helpers `leg`/`arm` (IK) in `moves/legs.ts`.
 - Show the biomechanics that the cues name: scapula and spine position, hip hinge vs squat, knee tracking, lockout, lean.
 - Check with `MSYS_NO_PATHCONV=1 npm run -s eye -- '#/moves/<branch>' <name>` and look at the screenshot. The review page shows the live loop then each key.
+- `point: true` points the toes all loop (prone, kneeling with the tops of the feet down).

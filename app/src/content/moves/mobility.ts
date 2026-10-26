@@ -1,6 +1,28 @@
-import { joints, LEN, type Move, type Pose } from '../../core/figure'
+import { blend, joints, LEN, type Beat, type Move, type Pose } from '../../core/figure'
 
 const D = 180 / Math.PI
+
+/**
+ * A stretch on the breath: ease in through `path` to its last key, sink there on the exhale,
+ * hold, release a little on the inhale, sink again, then come out.
+ */
+export function breathe(path: Pose[], ms = 900): Pick<Move, 'keys' | 'mode' | 'beats' | 'ms'> {
+  const deep = path[path.length - 1]
+  const before = path[path.length - 2] ?? deep
+  const into: Beat[] = path.slice(0, -1).map((_, i) => ({ hold: i ? 0 : 0.5, dur: 1.8 }))
+  return {
+    keys: [...path, blend(deep, before, 0.3), deep],
+    mode: 'cycle', ms,
+    beats: [...into, { hold: 1, dur: 1.1 }, { hold: 0.2, dur: 1.8 }, { hold: 1.2, dur: 2 }],
+  }
+}
+
+/** Strength rep: `a` to `b` in `go`, back in `back` (slow eccentric), pausing at each end. */
+export const rep = (a: Pose, b: Pose, go = 1, back = 1.8, holdA = 0.3, holdB = 0.4): Pick<Move, 'keys' | 'mode' | 'beats'> => ({
+  keys: [a, b], mode: 'cycle', beats: [{ hold: holdA, dur: go, ease: 'io' }, { hold: holdB, dur: back, ease: 'io' }],
+})
+/** Controlled circle: accelerate from rest, constant speed, settle back to rest. */
+const circle = (n: number): Beat[] => Array.from({ length: n }, (_, i) => (i === 0 ? { hold: 0.4, dur: 2, ease: 'in' } : i === n - 1 ? { dur: 2, ease: 'out' } : { ease: 'lin' }))
 const wrap = (v: number) => ((((v + 180) % 360) + 360) % 360) - 180
 /** Pose angle of the direction (dx, dy), y down. */
 export const ang = (dx: number, dy: number) => Math.atan2(dx, dy) * D
@@ -105,10 +127,16 @@ const ohsBottom = (() => {
   return put(p, [-14, 22], { hand: [4, sy + Math.sqrt(53.5 ** 2 - (4 - sx) ** 2)], farHand: [4, sy + Math.sqrt(53.5 ** 2 - (4 - sx) ** 2)] }, { hand: 1, farHand: 1 })
 })()
 
+// Cat-cow as a wave, one segment at a time: pelvis, mid back, head.
+const wave: Pose[] = [
+  quad(0, 112, 100, 140), quad(0, 128, 96, 95), quad(0, 135, 85, 30),
+  quad(0, 104, 88, 35), quad(0, 95, 112, 85), quad(0, 92, 125, 165),
+]
+
 export const MOVES: Record<string, Move> = {
   // Rock the shoulders forward past the wrists and back, hands planted.
-  wrist_prep: { keys: [quad(21, 110, 110, 95), quad(0, 109, 109, 100), quad(-17, 110, 110, 105)], ...kneePin, ms: 1100 },
-  deep_squat: { keys: [squat([-9, 19], 145, 155, [35, 90, 35, 90]), squat([-10, 16], 148, 160, [38, 95, 38, 95])], x: 'foot', ms: 1600 },
+  wrist_prep: { keys: [quad(21, 110, 110, 95), quad(0, 109, 109, 100), quad(-17, 110, 110, 105)], ...kneePin, ms: 1100, beats: [{ hold: 0.5 }, {}, { hold: 0.6 }] },
+  deep_squat: { keys: [squat([-9, 19], 145, 155, [35, 90, 35, 90]), squat([-10, 16], 148, 160, [38, 95, 38, 95])], x: 'foot', ms: 1000, beats: [{ hold: 0.4, dur: 2.4 }, { hold: 0.8, dur: 1.8 }], mode: 'cycle' },
   // Only the hip moves: knee up, out, back, down; the torso never leans.
   hip_cars: {
     keys: [
@@ -118,33 +146,40 @@ export const MOVES: Record<string, Move> = {
       hipsHands([180, 0, 0, 0, 0, 0, 0, -35, -115]),
       hipsHands([180, 0, 0, 0, 0, 0, 0, -10, -30]),
     ],
-    mode: 'cycle', x: 'foot', ms: 1100,
+    mode: 'cycle', x: 'foot', ms: 1100, beats: circle(5),
   },
   // Heel stays down while the knee drives over the toes to touch the wall.
-  ankle_df: { keys: [kneeToWall(-24), kneeToWall(-12)], x: 'foot', props: [{ t: 'wall', x: WALL }], ms: 1100 },
+  ankle_df: { x: 'foot', props: [{ t: 'wall', x: WALL }], ms: 1000, ...rep(kneeToWall(-24), kneeToWall(-12), 1.2, 1.2, 0.3, 0.6) },
   shoulder_cars: {
-    keys: [stand, [180, 90, 90, -2, -4, 0, 0, 0, 0], [180, 180, 180, -2, -4, 0, 0, 0, 0], [180, 270, 270, -2, -4, 0, 0, 0, 0], [180, 360, 362, -2, -4, 0, 0, 0, 0]],
-    mode: 'cycle', ms: 1000,
+    keys: [stand, [180, 90, 90, -2, -4, 0, 0, 0, 0, 180, 180, -1], [180, 180, 180, -2, -4, 0, 0, 0, 0, 180, 180, 5], [180, 270, 270, -2, -4, 0, 0, 0, 0, 180, 180, 2], [180, 360, 362, -2, -4, 0, 0, 0, 0, 180, 180, -3]],
+    mode: 'cycle', ms: 1000, beats: circle(5),
   },
   // From leaning forward to tall: pelvis tucks, hip pushes forward over the rear knee.
-  couch: { keys: [couch(2, 160, 162), couch(-20, 188, 178)], x: 'knee', at: [5, 0], props: [{ t: 'wall', x: -12 }], ms: 1500 },
-  pigeon_9090: { keys: knees9090, front: true, ms: 1200 },
+  couch: { ...breathe([couch(2, 160, 162), couch(-20, 188, 178)]), x: 'knee', at: [5, 0], props: [{ t: 'wall', x: -12 }] },
+  // Knees sweep over the top and drop to the other side; rest there.
+  pigeon_9090: { keys: knees9090, front: true, ms: 1000, beats: [{ hold: 0.8, dur: 1.3, ease: 'in' }, { dur: 1.3, ease: 'out' }, { hold: 0.8 }] },
   // Thread the needle: far hand slides under the chest, then opens to the ceiling; eyes follow it.
-  thoracic: { keys: [thread, quad(0, 107, 112, 170, [180, 180])], ...kneePin, ms: 1400 },
-  // Cat-cow, head leading each wave.
+  thoracic: { keys: [thread, quad(0, 107, 112, 170, [180, 180])], ...kneePin, ms: 1000, beats: [{ hold: 0.8, dur: 1.8 }, { hold: 1, dur: 1.8 }] },
   spinal_waves: {
-    keys: [quad(0, 107, 107, 100), quad(0, 107, 107, 40), quad(0, 135, 85, 30), quad(0, 120, 100, 150), quad(0, 92, 125, 165)],
-    mode: 'cycle', ...kneePin, ms: 1000,
+    keys: wave, mode: 'cycle', ...kneePin, ms: 700,
+    beats: [{ ease: 'lin' }, { ease: 'out' }, { hold: 0.4, dur: 1.4, ease: 'in' }, { ease: 'lin' }, { ease: 'out' }, { hold: 0.4, dur: 1.4, ease: 'in' }],
   },
+  // Hips drive up off the floor to a tall kneel, then lower with control.
   shinbox: {
-    keys: [box(-84, [84, KNEEL], 182), box(-45, [40, KNEEL], 178), box(0, [0, KNEEL], 180)],
-    x: 'farFoot', at: [-40, 0], ms: 1200,
+    keys: [box(-84, [84, KNEEL], 182), box(-45, [40, KNEEL], 172), box(0, [0, KNEEL], 180), box(-45, [40, KNEEL], 176)],
+    mode: 'cycle', x: 'farFoot', at: [-40, 0], ms: 900,
+    beats: [{ hold: 0.6, dur: 0.6, ease: 'in' }, { dur: 0.8, ease: 'out' }, { hold: 0.6, dur: 1.2 }, { dur: 1.4, ease: 'out' }],
   },
   dislocates: {
-    keys: [[180, 25, 25, 25, 25, 0, 0, 0, 0], [180, 180, 180, 180, 180, 0, 0, 0, 0], [180, 330, 330, 330, 330, 0, 0, 0, 0]],
-    ms: 1200,
+    keys: [[180, 25, 25, 25, 25, 0, 0, 0, 0, 180, 180, -2], [180, 180, 180, 180, 180, 0, 0, 0, 0, 180, 180, 5], [180, 330, 330, 330, 330, 0, 0, 0, 0, 180, 180, -2]],
+    ms: 1100, beats: [{ hold: 0.4, dur: 1.2, ease: 'in' }, { dur: 1.2, ease: 'out' }, { hold: 0.4 }],
   },
-  toes: { keys: [toeKneel, toeSit], x: 'knee', ms: 1400 },
-  sit_rise: { keys: [seated, rocked, [180, 30, 60, 30, 60, 0, 0, 0, 0]], x: 'foot', ms: 1100 },
-  overhead_squat: { keys: [ohsTop, ohsBottom], x: 'foot', ms: 1300 },
+  toes: { ...breathe([toeKneel, toeSit]), x: 'knee' },
+  // Rock back, then forward onto the feet with momentum and drive up; sit back down slowly.
+  sit_rise: {
+    keys: [squat([-30, 10], 165, 160, [70, 90, 70, 90]), rocked, [180, 30, 60, 30, 60, 0, 0, 0, 0], squat([-14, 30], 140, 150, [75, 90, 75, 90]), seated],
+    mode: 'cycle', x: 'foot', ms: 900,
+    beats: [{ hold: 0.2, dur: 0.6, ease: 'snap' }, { dur: 1, ease: 'out' }, { hold: 0.6, dur: 1.4, ease: 'io' }, { dur: 1.3, ease: 'io' }, { hold: 0.5, dur: 0.8, ease: 'io' }],
+  },
+  overhead_squat: { ...rep(ohsTop, ohsBottom, 2, 1.2, 0.4, 0.3), x: 'foot', ms: 1000 },
 }

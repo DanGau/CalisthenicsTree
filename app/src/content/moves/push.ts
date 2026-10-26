@@ -1,5 +1,5 @@
-import { full, joints, LEN, place, type Body, type Move, type Pose, type Prop, type Pt } from '../../core/figure'
-import { ik } from './legs'
+import { blend, full, joints, LEN, place, type Beat, type Body, type Move, type Pose, type Prop, type Pt } from '../../core/figure'
+import { ik, reach } from './legs'
 
 // Geometry helpers shared by the pushing branches. Coordinates are relative to the hip, y down.
 const ARM = LEN.upper + LEN.fore
@@ -33,6 +33,21 @@ export const fit = (shape: (v: number) => Pose, err: (b: Body) => number, lo: nu
 export const set = (p: Pose, idx: number[], v: number): Pose => {
   const o = [...full(p)] as Pose
   for (const i of idx) o[i] = v
+  return o
+}
+
+/** Strength rep from the top key: slow lowering, a brief pause, a strong rise, a breath at the top. */
+export const tempo = (down = 1.8, up = 1, top = 0.4, low = 0.15): Pick<Move, 'mode' | 'beats'> => ({
+  mode: 'cycle', beats: [{ hold: top, dur: down }, { hold: low, dur: up }],
+})
+
+/** Hold: [entry, hold, sway] bounced. Settle into the hold, then small balance corrections. */
+export const holdBeats = (enter = 1.3, sway = 1.4): Beat[] => [{ hold: 0.5, dur: enter, ease: 'io' }, { dur: sway, ease: 'io' }, { hold: 0.2 }]
+
+/** Copy of p with deltas added at the given indices (chest and head made explicit first). */
+export const nudge = (p: Pose, d: Record<number, number>): Pose => {
+  const o = [...full(p)] as Pose
+  for (const [i, v] of Object.entries(d)) o[+i] = o[+i]! + v
   return o
 }
 
@@ -175,22 +190,37 @@ const hDive = (() => {
 })()
 const hCobra = reachTo((t) => [t, 0, 0, 0, 0, -82, -82, -82, -82, t + 28, t + 50], ARM - 1, HD, 0, -1, 100, 175)
 
-// Archer: the near arm bends while the far arm slides out straight along the floor (or swings its ring out).
-/** Arm (near or far) aimed straight at `to` from the toes. */
-const aim = (p: Pose, to: Pt, which: 'near' | 'far'): Pose => {
-  const b = joints(p)
-  const a = Math.atan2(b.toe.x + to.x - b.shoulder.x, b.toe.y + to.y - b.shoulder.y) / D2R
-  return set(p, which === 'near' ? [1, 2] : [3, 4], a)
+// Front view from slightly above: the back rises behind the head, hips level with the shoulders.
+const facing = (scap = 0): Pose => [180, 0, 0, 0, 0, 0, 0, 0, 0, 0, 180, scap]
+/** Straight legs fanned out so the feet rest `floor` below the hands. */
+const feetDown = (p: Pose, floor: number): Pose => {
+  const b = joints(p, true)
+  const a = Math.acos(Math.min(1, (b.hand.y + floor - b.hip.y) / (LEN.thigh + LEN.shin + LEN.sole))) / D2R
+  const s = Math.sign(b.nearHip.x - b.farHip.x)
+  return set(set(p, [5, 6], s * a), [7, 8], -s * a)
 }
-function archerPair(h = 0, back = 16, depth = 15): [Pose, Pose] {
-  const [top, low] = pushup(h, back, depth)
-  const b = joints(low)
+
+/**
+ * Archer, front view, feet wide: hands fixed `span` apart, `floor` below them. Top: both arms straight;
+ * bottom: the chest drops over the near hand, which bends with the elbow out, while the far arm stays straight.
+ */
+function archerFront(span: number, floor = 0): [Pose, Pose] {
   const r = ARM - 0.3
-  const dy = b.toe.y - h - b.shoulder.y
-  const F = { x: b.shoulder.x - b.toe.x + Math.sqrt(r * r - dy * dy), y: -h }
-  return [h ? aim(top, F, 'far') : top, aim(low, F, 'far')]
+  const at = (p: Pose, near: number, depth: number): Pose => {
+    const b = joints(p, true)
+    const s = Math.sign(b.nearShoulder.x - b.farShoulder.x)
+    const nx = b.nearShoulder.x + s * near
+    const y = b.nearShoulder.y + depth
+    const to = { hand: [nx, y] as [number, number], farHand: [nx - s * span, y] as [number, number] }
+    const [k1, k2] = [reach(p, to, { front: true, k: { hand: 1, farHand: -1 } }), reach(p, to, { front: true, k: { hand: -1, farHand: 1 } })]
+    // Bent elbow points out, away from the body.
+    return feetDown(s * joints(k1, true).elbow.x > s * joints(k2, true).elbow.x ? k1 : k2, floor)
+  }
+  const w = (span - 34) / 2
+  const dx = span - 35
+  return [at(facing(), w, Math.sqrt(r * r - w * w)), at(facing(-2), -1, Math.sqrt(r * r - dx * dx))]
 }
-const [arcTop, arcBottom] = archerPair()
+const [arcTop, arcBottom] = archerFront(84)
 
 // Clap: toes stay down, the chest pops up, hands meet under the chest.
 const clapAir = (() => {
@@ -223,33 +253,40 @@ const aztecAir = (() => {
   const b = joints(p)
   return armsTo(p, { x: b.toe.x - 4, y: b.toe.y - 6 }, 1)
 })()
-const headAt = (p: Pose): [number, number] => {
-  const b = place({ keys: [p], x: 'hand' }, p)
-  return [b.head.x, b.head.y]
+
+// Ring archer, front view: the far ring swings out, the chest sinks below the near ring.
+const [raTop, raBottom] = archerFront(80, RING_H)
+const ringArcher: Move = { keys: [raTop, raBottom], front: true, x: 'hand', y: 'hand', at: [0, -RING_H] }
+const bothRings = (m: Move): Prop[] => {
+  const b = place(m, m.keys[0])
+  return [b.hand, b.farHand].map((h) => ({ t: 'rings', x: Math.round(h.x), y: Math.round(h.y) }))
 }
 
-// Ring archer: the far ring is where the far hand lands.
-const [raTop, raBottom] = archerPair(RING_H, 14, 3)
-const farRing = (): Prop => {
-  const b = place(rto([raBottom]), raBottom)
-  return { t: 'rings', x: Math.round(b.farHand.x), y: Math.round(b.farHand.y) }
-}
+const half = (a: Pose, b: Pose, t: number) => blend(a, b, t, 'lin')
+/** Explosive push-up, feet fixed: lower, drive off the floor into `air`, catch on straight arms, absorb. */
+const plyo = (air: Pose): Move => ({
+  keys: [top, bottom, air, top, half(top, bottom, 0.45)], mode: 'cycle', x: 'foot', at: [footX(top), 0], ms: 700,
+  beats: [{ hold: 0.4, dur: 1.4 }, { hold: 0.05, dur: 0.5, ease: 'snap' }, { dur: 0.4, ease: 'in' }, { dur: 0.35, ease: 'out' }, { dur: 0.8 }],
+})
 
 export const MOVES: Record<string, Move> = {
-  wall_pu: { keys: [wallTop, wallBottom], x: 'hand', props: [{ t: 'wall', x: 4 }] },
-  incline_pu: withProps({ keys: [incTop, incBottom], x: 'hand' }, handBox),
-  pushup: { keys: [top, bottom], x: 'hand' },
-  diamond_pu: { keys: [diaTop, diaBottom], x: 'hand' },
-  hindu_pu: { keys: [hPike, hDive, hCobra], x: 'hand', ms: 1000 },
-  decline_pu: withProps({ keys: [decTop, decBottom], x: 'hand' }, toeBox),
-  archer_pu: { keys: [arcTop, arcBottom], x: 'hand' },
-  clap_pu: { keys: [bottom, top, clapAir], x: 'foot', at: [footX(top), 0], ms: 600 },
-  ring_pu: rto([ringTop, ringBottom]),
-  oap_incline: withProps({ keys: [oneArm(incTop), oneArm(incBottom)], x: 'hand' }, handBox),
-  bb_clap: { keys: [bottom, top, bbAir], x: 'foot', at: [footX(top), 0], ms: 600 },
-  rto_pu: rto([rtoTop, rtoBottom], 1200),
-  one_arm_pu: { keys: [oneArm(top, false), oneArm(bottom, false)], x: 'hand' },
-  aztec_pu: { keys: [top, aztecAir], x: 'hand', y: 'head', at: headAt(top), ms: 650 },
-  ring_archer: { ...rto([raTop, raBottom]), props: [RING, farRing()] },
-  oapu_tight: { keys: [oneArm(top), oneArm(bottom)], x: 'hand', ms: 1200 },
+  wall_pu: { keys: [wallTop, wallBottom], x: 'hand', props: [{ t: 'wall', x: 4 }], ...tempo(1.6), ms: 800 },
+  incline_pu: withProps({ keys: [incTop, incBottom], x: 'hand', ...tempo(), ms: 800 }, handBox),
+  pushup: { keys: [top, bottom], x: 'hand', ...tempo(), ms: 800 },
+  diamond_pu: { keys: [diaTop, diaBottom], x: 'hand', ...tempo(), ms: 800 },
+  hindu_pu: { keys: [hPike, hDive, hCobra], x: 'hand', mode: 'cycle', ms: 900, beats: [{ hold: 0.3, dur: 1.4 }, { dur: 0.9, ease: 'out' }, { hold: 0.5, dur: 1.4 }] },
+  decline_pu: withProps({ keys: [decTop, decBottom], x: 'hand', ...tempo(), ms: 800 }, toeBox),
+  archer_pu: { keys: [arcTop, arcBottom], front: true, x: 'hand', ...tempo(2, 1.2), ms: 800 },
+  clap_pu: plyo(clapAir),
+  ring_pu: { ...rto([ringTop, ringBottom], 800), ...tempo() },
+  oap_incline: withProps({ keys: [oneArm(incTop), oneArm(incBottom)], x: 'hand', ...tempo(2, 1.3), ms: 800 }, handBox),
+  bb_clap: plyo(bbAir),
+  rto_pu: { ...rto([rtoTop, rtoBottom], 800), ...tempo(2.2, 1.3) },
+  one_arm_pu: { keys: [oneArm(top, false), oneArm(bottom, false)], x: 'hand', ...tempo(2, 1.4), ms: 800 },
+  aztec_pu: {
+    keys: [top, half(top, bottom, 0.55), aztecAir, top, half(top, bottom, 0.4)], mode: 'cycle', ms: 700,
+    beats: [{ hold: 0.4, dur: 1.1 }, { hold: 0.05, dur: 0.55, ease: 'out' }, { lift: 55, dur: 0.5, ease: 'in' }, { dur: 0.35, ease: 'out' }, { dur: 0.8 }],
+  },
+  ring_archer: { ...ringArcher, props: bothRings(ringArcher), ...tempo(2.2, 1.3), ms: 800 },
+  oapu_tight: { keys: [oneArm(top), oneArm(bottom)], x: 'hand', ...tempo(2.4, 1.5), ms: 800 },
 }
