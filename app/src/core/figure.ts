@@ -4,15 +4,16 @@
  * Angles never wrap, so 0 → 360 animates a full rotation (rolls, flips).
  */
 export type Pose = [torso: number, nearUpperArm: number, nearForearm: number, farUpperArm: number, farForearm: number,
-  nearThigh: number, nearShin: number, farThigh: number, farShin: number, chest?: number, head?: number]
+  nearThigh: number, nearShin: number, farThigh: number, farShin: number, chest?: number, head?: number, scap?: number]
 
 /**
  * `torso` is the pelvis-to-waist segment; optional `chest` (waist to shoulders, default = torso)
- * bends the spine (hollow, arch, rounding); optional `head` (default = chest) tilts the head.
+ * bends the spine (hollow, arch, rounding); optional `head` (default = chest) tilts the head;
+ * optional `scap` moves the shoulders along the chest: + shrug/elevate, - depress (units, about -5..6).
  */
 export const full = (p: Pose): Required<Pose> => {
   const chest = p[9] ?? p[0]
-  return [...p.slice(0, 9), chest, p[10] ?? chest] as Required<Pose>
+  return [...p.slice(0, 9), chest, p[10] ?? chest, p[11] ?? 0] as Required<Pose>
 }
 
 export type Joint = 'hip' | 'shoulder' | 'head' | 'elbow' | 'hand' | 'knee' | 'foot' | 'farHand' | 'farFoot'
@@ -42,7 +43,33 @@ export type Move = {
   floor?: boolean
   /** Milliseconds per transition. */
   ms?: number
+  /** Per key, parallel to `keys`: lift, holds and the timing of the transition to the next key. */
+  beats?: Beat[]
+  /** Overlap: forearms, shins and head trail the body by this fraction of a transition (0.1-0.25 for swings, throws, flight). */
+  flow?: number
 }
+
+/**
+ * - `in`: accelerates (falling, dropping into a catch); `out`: decelerates (rising to an apex, settling).
+ * - `snap`: explosive start, long settle (kips, jumps, throws); `io`: smooth both ends (default); `lin`: constant (cyclic gaits).
+ */
+export type Ease = 'io' | 'in' | 'out' | 'snap' | 'lin'
+
+/**
+ * `lift`: height above the move's pinned placement (flight phases). `hold`: pause on this key in
+ * transitions (default: 0.3 at the turnaround keys of a bounce, else 0). `dur`: length of the
+ * transition to the next key in transitions (default 1). `ease`: how that transition moves.
+ */
+export type Beat = { lift?: number; hold?: number; dur?: number; ease?: Ease }
+
+const EASE: Record<Ease, (t: number) => number> = {
+  io: (t) => t * t * (3 - 2 * t),
+  in: (t) => t * t,
+  out: (t) => 1 - (1 - t) * (1 - t),
+  snap: (t) => 1 - (1 - t) ** 3,
+  lin: (t) => t,
+}
+const REVERSE: Record<Ease, Ease> = { io: 'io', in: 'out', out: 'in', snap: 'in', lin: 'lin' }
 
 /** Median US man (~175 cm, about 7 heads tall); 1 unit is about 1.1 cm. */
 export const LEN = { waist: 22, chest: 24, neck: 18, head: 11, upper: 29, fore: 25, thigh: 38, shin: 38, foot: 13, sole: 5 }
@@ -75,8 +102,9 @@ export function joints(p: Pose, front = false): Body {
   const shoulder = add(waist, dir(c, LEN.chest))
   // Front view: limbs hang from shoulders and hips set apart; side view: they share a joint.
   const side = (deg: number, w: number): Pt => (front ? dir(deg + 90, w) : { x: 0, y: 0 })
-  const nS = add(shoulder, side(c, -GIRDLE.shoulder))
-  const fS = add(shoulder, side(c, GIRDLE.shoulder))
+  const sh = add(shoulder, dir(c, p[11] ?? 0))
+  const nS = add(sh, side(c, -GIRDLE.shoulder))
+  const fS = add(sh, side(c, GIRDLE.shoulder))
   const nH = add(hip, side(t, -GIRDLE.hip))
   const fH = add(hip, side(t, GIRDLE.hip))
   const elbow = add(nS, dir(nu, LEN.upper))
@@ -88,7 +116,7 @@ export function joints(p: Pose, front = false): Body {
   // The sole sits below the ankle; side view: heel just behind, toes ahead.
   const sole = (f: Pt, s: number, len: number) => add(add(f, dir(s, LEN.sole)), dir(footAngle(s), front ? 0 : len))
   return {
-    hip, waist, shoulder, head: add(shoulder, dir(h, LEN.neck)),
+    hip, waist, shoulder: sh, head: add(shoulder, dir(h, LEN.neck)),
     elbow, hand: add(elbow, dir(nf, LEN.fore)), farElbow, farHand: add(farElbow, dir(ff, LEN.fore)),
     knee, farKnee, foot, farFoot,
     toe: sole(foot, ns, LEN.foot), farToe: sole(farFoot, fs, LEN.foot),
@@ -100,48 +128,75 @@ export function joints(p: Pose, front = false): Body {
 const POINTS = ['hip', 'waist', 'shoulder', 'elbow', 'hand', 'farElbow', 'farHand', 'knee', 'farKnee', 'foot', 'farFoot', 'toe', 'farToe', 'heel', 'farHeel'] as const
 
 /** Joints placed in the scene per the move's pins. */
-export function place(m: Move, p: Pose): Body {
+export function place(m: Move, p: Pose, lift = 0): Body {
   const b = joints(p, m.front)
   const [ax, ay] = m.at ?? [0, 0]
   const xj = b[m.x ?? 'hip']
   const lowest = Math.max(...POINTS.map((k) => b[k].y), b.head.y + LEN.head)
-  const dy = (m.y ?? 'floor') === 'floor' ? ay - lowest : ay - b[m.y as Joint].y
+  const dy = ((m.y ?? 'floor') === 'floor' ? ay - lowest : ay - b[m.y as Joint].y) - lift
   const dx = ax - xj.x
   const out = {} as Body
   for (const [k, v] of Object.entries(b)) out[k as keyof Body] = { x: v.x + dx, y: v.y + dy }
   return out
 }
 
-/** Pose at `t` in [0, 1] between two keys, eased. */
-export function blend(a: Pose, b: Pose, t: number): Pose {
-  const e = t * t * (3 - 2 * t)
+/** Distal segments (forearms, shins, head) trail the rest by `flow`; limbs trail the trunk by half that. */
+const LAG = [0, 0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1, 0, 1, 0]
+
+/** Pose at `t` in [0, 1] between two keys. */
+export function blend(a: Pose, b: Pose, t: number, ease: Ease = 'io', flow = 0): Pose {
   const fb = full(b)
-  return full(a).map((v, i) => v + (fb[i] - v) * e) as Pose
+  return full(a).map((v, i) => {
+    const lag = LAG[i] * flow
+    const local = Math.min(1, Math.max(0, (t - lag) / (1 - lag)))
+    return v + (fb[i] - v) * EASE[ease](local)
+  }) as Pose
 }
 
-/** The key sequence one loop plays. */
-export const sequence = (m: Move): Pose[] =>
-  (m.mode ?? 'bounce') === 'bounce' && m.keys.length > 1 ? [...m.keys, ...m.keys.slice(1, -1).reverse()] : m.keys
+export type Frame = { pose: Pose; lift: number; hold: number; dur: number; ease: Ease }
 
-/** Pose at `ms` into the loop; each key holds for a third of the transition time. */
-export function at(m: Move, ms: number): Pose {
+/** The frames one loop plays: bounce runs the keys back in reverse with mirrored timing. */
+export function sequence(m: Move): Frame[] {
+  const n = m.keys.length
+  const bounce = (m.mode ?? 'bounce') === 'bounce' && n > 1
+  const beat = (i: number): Beat => m.beats?.[i] ?? {}
+  const turn = (i: number) => bounce && (i === 0 || i === n - 1)
+  const out = m.keys.map((pose, i): Frame => ({
+    pose, lift: beat(i).lift ?? 0, hold: beat(i).hold ?? (turn(i) ? 0.3 : 0), dur: beat(i).dur ?? 1, ease: beat(i).ease ?? 'io',
+  }))
+  if (!bounce) return out
+  // Going back from key i to i - 1 replays the forward transition i - 1 → i in reverse.
+  const back = m.keys.slice(1, -1).map((_, j) => {
+    const i = n - 2 - j
+    const prev = out[i - 1]
+    return { ...out[i], dur: prev.dur, ease: REVERSE[prev.ease] }
+  })
+  const last = { ...out[n - 1], dur: out[n - 2].dur, ease: REVERSE[out[n - 2].ease] }
+  return [...out.slice(0, -1), last, ...back]
+}
+
+/** Pose and lift at `ms` into the loop. */
+export function at(m: Move, ms: number): { pose: Pose; lift: number } {
   const seq = sequence(m)
-  if (seq.length === 1) return seq[0]
+  if (seq.length === 1) return { pose: seq[0].pose, lift: seq[0].lift }
   const step = m.ms ?? 900
-  const hold = step / 3
-  const span = step + hold
-  const t = Math.max(0, ms) % (span * seq.length)
-  const i = Math.floor(t / span)
-  const local = Math.max(0, (t - i * span - hold) / step)
-  const from = full(seq[i])
-  const next = full(seq[(i + 1) % seq.length])
+  const total = seq.reduce((s, f) => s + (f.hold + f.dur) * step, 0)
+  let t = Math.max(0, ms) % total
+  const span = (i: number) => (seq[i].hold + seq[i].dur) * step
+  let i = 0
+  for (; t >= span(i); i++) t -= span(i)
+  const f = seq[i]
+  const local = Math.max(0, (t - f.hold * step) / (f.dur * step))
+  const from = full(f.pose)
+  const nf = seq[(i + 1) % seq.length]
+  const next = full(nf.pose)
   // Wrapping to the first key: drop whole turns so a roll keeps rolling instead of unwinding.
   const to = i === seq.length - 1 ? (next.map((v, j) => v + Math.round((from[j] - v) / 360) * 360) as Pose) : next
-  return blend(from, to, local)
+  return { pose: blend(from, to, local, f.ease, m.flow ?? 0), lift: f.lift + (nf.lift - f.lift) * EASE[f.ease](local) }
 }
 
 /** Lowest joint of a pose as placed; a value above 0 means it sinks into the floor. */
-export const sink = (m: Move, p: Pose) => {
-  const b = place(m, p)
+export const sink = (m: Move, p: Pose, lift = 0) => {
+  const b = place(m, p, lift)
   return Math.max(...POINTS.map((k) => b[k].y), b.head.y + LEN.head)
 }

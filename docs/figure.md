@@ -4,9 +4,9 @@ Each skill has a looping cartoon in `app/src/content/moves/<branch>.ts`, keyed b
 
 ## Pose
 
-`Pose` = 9 to 11 absolute angles in degrees: `[torso, nearUpper, nearFore, farUpper, farFore, nearThigh, nearShin, farThigh, farShin, chest?, head?]`.
+`Pose` = 9 to 11 absolute angles in degrees: `[torso, nearUpper, nearFore, farUpper, farFore, nearThigh, nearShin, farThigh, farShin, chest?, head?, scap?]`.
 
-- `torso` is pelvis→waist; `chest` is waist→shoulders (default = torso), so the spine can hollow, arch or round. `head` (default = chest) nods or looks up. Use them: a hollow body, a cat-cow, a bridge or a dragon flag reads only with a bent spine.
+- `torso` is pelvis→waist; `chest` is waist→shoulders (default = torso), so the spine can hollow, arch or round. `head` (default = chest) nods or looks up. Use them: a hollow body, a cat-cow, a bridge or a dragon flag reads only with a bent spine. `scap` slides the shoulders along the chest: + shrug or elevate (hanging passive, overhead reach), - depress (active hang, support, dip top), about -5..6.
 
 - 0 = straight down, 90 = forward (+x, the way the figure faces, to the right), 180 = up, -90 = back.
 - Each angle is the direction of that segment from its parent joint: torso hip→shoulder (180 = upright), upper arm shoulder→elbow, forearm elbow→hand, thigh hip→knee, shin knee→ankle.
@@ -21,7 +21,18 @@ Each skill has a looping cartoon in `app/src/content/moves/<branch>.ts`, keyed b
 - Placement: `x` names the joint pinned horizontally to `at[0]` (default `hip`). `y` is `'floor'` (default: lowest point rests on the floor) or a joint pinned to `at[1]` (hangs: `x: 'hand', y: 'hand', at: [0, -210]`).
 - `front: true` draws a front view: angles mean left/right (-90 = viewer's left, 90 = right); near limbs sit on the viewer's left. Use it for archer, cossack, side plank, flag, middle split, cartwheel.
 - `props`: `bar`, `rings`, `wall`, `pole`, `box {x,w,h}`, `bars` (parallel bars end-on). `floor: false` hides the floor.
-- `ms`: transition time (default 900). Holds use 2 keys: entry, then the hold with a small change.
+- `ms`: base transition time (default 900). Holds use 2 keys: entry, then the hold with a small change (breathing, tension).
+
+## Timing and momentum
+
+Motion must read as a person moving mass, not a puppet between poses. `beats` (one per key) and `flow` do this:
+
+- `dur`: relative length of the transition to the next key. Strength reps: lowering 1.5-2, rising 1 (controlled eccentric, strong concentric). Explosive moves: load 1, drive 0.4-0.6.
+- `ease`: `io` default; `snap` for explosive drives (jump, kip, clap, muscle-up pull); `out` rising into an apex or settling into a hold; `in` falling, dropping into a catch; `lin` for steady gaits and crawls (`cycle`).
+- `hold`: pause on a key. Default 0.3 only at a bounce's turnarounds. Short pause at the top/bottom of reps; none mid-flight.
+- `lift`: height above the pinned placement. Flight phases use it: takeoff key lift 0 with `ease: 'out'`, apex key with lift and `ease: 'in'`, landing lift 0. The figure must actually leave the floor.
+- `flow`: 0.1-0.25 on swings, jumps, throws, kicks and rolls so forearms, shins and head trail the body. Leave it 0 when hands or feet are planted (contacts would slide).
+- Add anticipation and follow-through as keys: dip before a jump, absorb after a landing, swing back before a kip.
 
 ## Rules
 

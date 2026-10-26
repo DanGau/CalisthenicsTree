@@ -99,7 +99,7 @@ function prop(p: Prop, front: boolean) {
 
 /** Bounds over every key, so the frame stays still while the figure moves. */
 function frame(m: Move) {
-  const pts = sequence(m).flatMap((k) => Object.values(place(m, k)))
+  const pts = sequence(m).flatMap((k) => Object.values(place(m, k.pose, k.lift)))
   const xs = pts.map((p) => p.x)
   const ys = pts.map((p) => p.y)
   const pad = 18
@@ -114,10 +114,10 @@ function frame(m: Move) {
   return `${(cx - w / 2).toFixed(1)} ${y0.toFixed(1)} ${w.toFixed(1)} ${(y1 - y0).toFixed(1)}`
 }
 
-const scene = (m: Move, pose: Pose) =>
-  `${(m.props ?? []).map((p) => prop(p, !!m.front)).join('')}${m.floor === false ? '' : '<line class="floor" x1="-600" y1="0" x2="600" y2="0"/>'}<g class="fig">${body(place(m, pose), !!m.front)}</g>`
+const scene = (m: Move, pose: Pose, lift = 0) =>
+  `${(m.props ?? []).map((p) => prop(p, !!m.front)).join('')}${m.floor === false ? '' : '<line class="floor" x1="-600" y1="0" x2="600" y2="0"/>'}<g class="fig">${body(place(m, pose, lift), !!m.front)}</g>`
 
-export const still = (m: Move, pose: Pose) => `<svg class="figure" viewBox="${frame(m)}" role="img">${scene(m, pose)}</svg>`
+export const still = (m: Move, pose: Pose, lift = 0) => `<svg class="figure" viewBox="${frame(m)}" role="img">${scene(m, pose, lift)}</svg>`
 
 /** Animates every `.figure[data-move]` inside `root` until they leave the page. */
 export function animate(root: HTMLElement, moves: Record<string, Move>) {
@@ -129,7 +129,8 @@ export function animate(root: HTMLElement, moves: Record<string, Move>) {
     if (!svgs.some((s) => s.isConnected)) return
     for (const s of svgs) {
       const m = moves[s.dataset.move!]
-      s.innerHTML = scene(m, reduce ? m.keys[m.keys.length - 1] : at(m, now - t0))
+      const { pose, lift } = reduce ? { pose: m.keys[m.keys.length - 1], lift: 0 } : at(m, now - t0)
+      s.innerHTML = scene(m, pose, lift)
     }
     requestAnimationFrame(tick)
   }
