@@ -30,13 +30,22 @@ const negativa: Pose = (() => {
   return plant(p, { hand: -44 }, 24, { k: { hand: 1 } })
 })()
 
-// Baby freeze: from a crouch, tip onto the side of the head; near elbow wedged under the hip, knees resting on it.
+// Baby freeze: from a crouch, tip onto the side of the head, hips high; the near elbow posts under the hips
+// and both knees rest on top of it.
 const babyIn: Pose = plant([125, 0, 0, 0, 0, 0, 0, 0, 0, 115, 100], { hand: 42, farHand: 42, foot: 4, farFoot: 4 }, 40)
 const baby = (b: number): Pose => {
-  const p: Pose = [66 + b, 0, 0, 0, 0, 92 + b, 228 + b, 102 + b, 238 + b, 52 + b, 30]
+  const p: Pose = [45 + b, 0, 0, 0, 0, 0, 0, 0, 0, 45 + b, 25]
   const f = base(p)
-  const [sx] = pos(p, 'shoulder')
-  return reach(p, { hand: [sx - 6, f], farHand: [sx + 26, f] }, { k: { hand: 1, farHand: -1 } })
+  const S = joints(p).shoulder
+  // Elbow E: an upper arm (29) from the shoulder, and a thigh (38) from the hip to a knee resting on top of it.
+  const [dx, dy] = [-S.x, 13 - S.y]
+  const d = Math.hypot(dx, dy)
+  const a = (29 * 29 - 38 * 38 + d * d) / (2 * d)
+  const h = Math.sqrt(29 * 29 - a * a)
+  const E = { x: S.x + (a * dx + h * dy) / d, y: S.y + (a * dy - h * dx) / d }
+  const q = reach(p, { hand: [E.x + Math.sqrt(25 ** 2 - (f - E.y) ** 2), f], farHand: [S.x + 26, f] }, { k: { hand: -1, farHand: -1 } })
+  const thigh = (Math.atan2(E.x, E.y - 13) * 180) / Math.PI
+  return [q[0], q[1], q[2], q[3], q[4], thigh, thigh - 150, thigh + 8, thigh - 140, q[9], q[10]]
 }
 
 // Queda de rins: torso tipped to the floor on the near elbow under the ribs, head just off the floor.
@@ -124,13 +133,13 @@ export const MOVES: Record<string, Move> = {
   chair_freeze: { keys: [chair(-50), chair(-55)], ms: 1100, beats: holdBeats(1.2, 1.4) },
   back_spin: {
     keys: [spinSit, spinWind, spinTuck(0), spinTuck(14), spinTuck(0), spinTuck(14), spinOpen], mode: 'cycle', ms: 500, flow: 0.2,
-    beats: [{ hold: 0.3, dur: 0.9 }, { dur: 0.4, ease: 'snap' }, ...steady(3, 0.45), { dur: 0.6, ease: 'out' }, { dur: 1 }],
+    beats: [{ hold: 0.3, dur: 0.9 }, { turn: 30, dur: 0.4, ease: 'snap' }, ...[120, 240, 360, 480].map((turn): Beat => ({ turn, dur: 0.45, ease: 'lin' })), { turn: 560, dur: 1.2, ease: 'out' }],
   },
   macaco: { keys: [macSit, macReach, macOver, macLand], mode: 'cycle', ms: 650, flow: 0.12, beats: [{ hold: 0.3, dur: 1 }, { dur: 0.5, ease: 'snap' }, { dur: 0.6, ease: 'in' }, { hold: 0.2, dur: 1.2 }] },
   turtle_freeze: { keys: [turtle(-6), turtle(6)], ms: 800, beats: [{ hold: 0.2, dur: 1.2 }, { hold: 0.2, dur: 1.2 }] },
   windmill: { keys: [mill(0), mill(90), mill(180), mill(270)], mode: 'cycle', front: true, x: 'shoulder', y: 'shoulder', at: [0, -18], ms: 340, flow: 0.2, beats: steady(4) },
   swipe: { keys: [swipeDown, swipeUp, rot(swipeDown, 360)], mode: 'cycle', ms: 650, flow: 0.2, beats: [{ hold: 0.4, dur: 0.45, ease: 'snap' }, { lift: 22, dur: 0.5, ease: 'in' }, { hold: 0.2, dur: 0.01 }] },
   airchair: { keys: [airIn, airchair(140), airchair(146)], ms: 900, beats: [{ hold: 0.4, dur: 1.3 }, { dur: 0.8, ease: 'out' }, { hold: 1.4, dur: 0.8 }] },
-  flare: { keys: [flare(0), flare(38), flare(0), flare(-38)], mode: 'cycle', front: true, ms: 280, flow: 0.22, beats: steady(4) },
+  flare: { keys: [flare(0), flare(38), flare(0), flare(-38)], mode: 'cycle', front: true, ms: 280, flow: 0.22, beats: [0.7, 1, 0.7, 1].map((trunk): Beat => ({ trunk, ease: 'lin' })) },
   hollowback: { keys: [hollow(0), hollow(15)], ms: 1100, beats: holdBeats(1.4, 1.2) },
 }

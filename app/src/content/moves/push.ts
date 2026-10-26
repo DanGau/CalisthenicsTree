@@ -190,37 +190,52 @@ const hDive = (() => {
 })()
 const hCobra = reachTo((t) => [t, 0, 0, 0, 0, -82, -82, -82, -82, t + 28, t + 50], ARM - 1, HD, 0, -1, 100, 175)
 
-// Front view from slightly above: the back rises behind the head, hips level with the shoulders.
-const facing = (scap = 0): Pose => [180, 0, 0, 0, 0, 0, 0, 0, 0, 0, 180, scap]
-/** Straight legs fanned out so the feet rest `floor` below the hands. */
-const feetDown = (p: Pose, floor: number): Pose => {
-  const b = joints(p, true)
-  const a = Math.acos(Math.min(1, (b.hand.y + floor - b.hip.y) / (LEN.thigh + LEN.shin + LEN.sole))) / D2R
-  const s = Math.sign(b.nearHip.x - b.farHip.x)
-  return set(set(p, [5, 6], s * a), [7, 8], -s * a)
-}
-
 /**
- * Archer, front view, feet wide: hands fixed `span` apart, `floor` below them. Top: both arms straight;
- * bottom: the chest drops over the near hand, which bends with the elbow out, while the far arm stays straight.
+ * Archer, front view from above: hands planted `span` apart, feet planted wide, hips fixed `HIP` above the floor.
+ * The trunk points at the viewer, foreshortened: as the chest drops over the near hand it nears the floor and
+ * the hips stay up, so it reads longer and tilts toward the near side. The near elbow bends out; the far arm
+ * stays straight. `f` in [0, 1] runs top to bottom. Returns the pose and its trunk scale.
  */
-function archerFront(span: number, floor = 0): [Pose, Pose] {
+const HIP = 60
+function archer(span: number, f: number): { pose: Pose; trunk: number } {
   const r = ARM - 0.3
-  const at = (p: Pose, near: number, depth: number): Pose => {
-    const b = joints(p, true)
-    const s = Math.sign(b.nearShoulder.x - b.farShoulder.x)
-    const nx = b.nearShoulder.x + s * near
-    const y = b.nearShoulder.y + depth
-    const to = { hand: [nx, y] as [number, number], farHand: [nx - s * span, y] as [number, number] }
-    const [k1, k2] = [reach(p, to, { front: true, k: { hand: 1, farHand: -1 } }), reach(p, to, { front: true, k: { hand: -1, farHand: 1 } })]
-    // Bent elbow points out, away from the body.
-    return feetDown(s * joints(k1, true).elbow.x > s * joints(k2, true).elbow.x ? k1 : k2, floor)
-  }
-  const w = (span - 34) / 2
-  const dx = span - 35
-  return [at(facing(), w, Math.sqrt(r * r - w * w)), at(facing(-2), -1, Math.sqrt(r * r - dx * dx))]
+  const g = 17
+  // World: x from the near hand (near side -x), y up from the floor.
+  const w = (span - 2 * g) / 2
+  const top = { near: w, depth: Math.sqrt(r * r - w * w) }
+  const dx = span - 2 * g - 1
+  const low = { near: -1, depth: Math.sqrt(r * r - dx * dx) }
+  const near = top.near + (low.near - top.near) * f
+  const depth = top.depth + (low.depth - top.depth) * f
+  const nearShoulder = { x: near, y: depth }
+  const shoulder = { x: nearShoulder.x + g, y: depth }
+  const hip = { x: span / 2, y: HIP }
+  // Hip frame (y down): trunk from hip to shoulder.
+  const v = { x: shoulder.x - hip.x, y: hip.y - shoulder.y }
+  const t = Math.atan2(v.x, v.y) / D2R
+  const trunk = Math.hypot(v.x, v.y) / (LEN.waist + LEN.chest)
+  const p: Pose = [t, 0, 0, 0, 0, 0, 0, 0, 0, t, t, -2 * f]
+  // reach roots the arms on the full-length trunk: aim at the shoulder-relative targets.
+  const b = joints(p, true)
+  const fs = joints(p, true, false, trunk)
+  const aim = (root: Pt, from: Pt, x: number): [number, number] => [root.x + x - hip.x - from.x, root.y + hip.y - from.y]
+  const hand = aim(b.nearShoulder, fs.nearShoulder, 0)
+  const far = aim(b.farShoulder, fs.farShoulder, span)
+  const reachX = Math.sqrt((LEN.thigh + LEN.shin) ** 2 - (HIP - LEN.sole) ** 2) - 12
+  // Feet planted wide, knees soft and out. The sole runs along the shin, so the ankle is re-aimed until it rests.
+  const feet = (drop: number) => ({ foot: [-10 - reachX, hip.y - drop] as [number, number], farFoot: [10 + reachX, hip.y - drop] as [number, number] })
+  const legs = (q: Pose) => { const j = joints(q, true); return reach(q, feet(j.toe.y - j.foot.y), { front: true, k: { foot: -1, farFoot: 1 } }) }
+  const pick = (k: number) => legs(legs(reach(p, { hand, farHand: far, ...feet(LEN.sole) }, { front: true, k: { hand: k, farHand: -k, foot: -1, farFoot: 1 } })))
+  const [k1, k2] = [pick(1), pick(-1)]
+  // The bent elbow points out, away from the body.
+  return { pose: joints(k1, true).elbow.x < joints(k2, true).elbow.x ? k1 : k2, trunk }
 }
-const [arcTop, arcBottom] = archerFront(84)
+/** Archer rep: top, halfway, bottom, halfway; the halfway keys keep the hands planted through the blend. */
+const archerMove = (span: number, down: number, up: number, o: Partial<Move> = {}): Move => {
+  const ks = [0, 0.5, 1, 0.5].map((f) => archer(span, f))
+  const beats: Beat[] = [{ hold: 0.4, dur: down / 2 }, { dur: down / 2 }, { hold: 0.15, dur: up / 2 }, { dur: up / 2 }]
+  return { keys: ks.map((k) => k.pose), front: true, x: 'hand', mode: 'cycle', ms: 800, beats: beats.map((b, i) => ({ ...b, trunk: ks[i].trunk })), ...o }
+}
 
 // Clap: toes stay down, the chest pops up, hands meet under the chest.
 const clapAir = (() => {
@@ -254,12 +269,15 @@ const aztecAir = (() => {
   return armsTo(p, { x: b.toe.x - 4, y: b.toe.y - 6 }, 1)
 })()
 
-// Ring archer, front view: the far ring swings out, the chest sinks below the near ring.
-const [raTop, raBottom] = archerFront(80, RING_H)
-const ringArcher: Move = { keys: [raTop, raBottom], front: true, x: 'hand', y: 'hand', at: [0, -RING_H] }
-const bothRings = (m: Move): Prop[] => {
-  const b = place(m, m.keys[0])
-  return [b.hand, b.farHand].map((h) => ({ t: 'rings', x: Math.round(h.x), y: Math.round(h.y) }))
+// Ring archer, front view: the far ring swings out, the chest sinks below the near ring; feet on blocks level with the rings.
+const ringArcher = archerMove(80, 2.2, 1.3, { y: 'hand', at: [0, -RING_H] })
+/** Archer tempo with the trunk foreshortened on both keys. */
+const ringsAndBlocks = (m: Move): Prop[] => {
+  const b = place(m, m.keys[0], { trunk: m.beats![0].trunk })
+  return [
+    ...[b.hand, b.farHand].map((h): Prop => ({ t: 'rings', x: Math.round(h.x), y: Math.round(h.y) })),
+    ...[b.foot, b.farFoot].map((f): Prop => ({ t: 'box', x: Math.round(f.x - 9), w: 18, h: RING_H })),
+  ]
 }
 
 const half = (a: Pose, b: Pose, t: number) => blend(a, b, t, 'lin')
@@ -276,7 +294,7 @@ export const MOVES: Record<string, Move> = {
   diamond_pu: { keys: [diaTop, diaBottom], x: 'hand', ...tempo(), ms: 800 },
   hindu_pu: { keys: [hPike, hDive, hCobra], x: 'hand', mode: 'cycle', ms: 900, beats: [{ hold: 0.3, dur: 1.4 }, { dur: 0.9, ease: 'out' }, { hold: 0.5, dur: 1.4 }] },
   decline_pu: withProps({ keys: [decTop, decBottom], x: 'hand', ...tempo(), ms: 800 }, toeBox),
-  archer_pu: { keys: [arcTop, arcBottom], front: true, x: 'hand', ...tempo(2, 1.2), ms: 800 },
+  archer_pu: archerMove(84, 2, 1.2),
   clap_pu: plyo(clapAir),
   ring_pu: { ...rto([ringTop, ringBottom], 800), ...tempo() },
   oap_incline: withProps({ keys: [oneArm(incTop), oneArm(incBottom)], x: 'hand', ...tempo(2, 1.3), ms: 800 }, handBox),
@@ -287,6 +305,6 @@ export const MOVES: Record<string, Move> = {
     keys: [top, half(top, bottom, 0.55), aztecAir, top, half(top, bottom, 0.4)], mode: 'cycle', ms: 700,
     beats: [{ hold: 0.4, dur: 1.1 }, { hold: 0.05, dur: 0.55, ease: 'out' }, { lift: 55, dur: 0.5, ease: 'in' }, { dur: 0.35, ease: 'out' }, { dur: 0.8 }],
   },
-  ring_archer: { ...ringArcher, props: bothRings(ringArcher), ...tempo(2.2, 1.3), ms: 800 },
+  ring_archer: { ...ringArcher, props: ringsAndBlocks(ringArcher) },
   oapu_tight: { keys: [oneArm(top), oneArm(bottom)], x: 'hand', ...tempo(2.4, 1.5), ms: 800 },
 }

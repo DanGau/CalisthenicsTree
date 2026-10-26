@@ -108,6 +108,9 @@ const overBody = body(150, 128, 120, [14, 0, 14, 0], 180, 2)
 const turnover = grip(overBody, chestPt(overBody, 0.3, 17), -1, true)
 const supportBody = body(168, 172, 178, [10, 2, 10, 2], 180, -4)
 const support = grip(supportBody, [14, 8], 1, true)
+// Descent: chest stays at the bar, body tall under it, elbows bending past the ribs.
+const closeBody = body(182, 188, 184, [8, 2, 8, 2], 180, -3)
+const closeDown = grip(closeBody, chestPt(closeBody, 0.85, 14), -1, true)
 
 /** Kip and pull the bar to the belly, then lower under control. */
 const kip = (ms: number): Move => side({
@@ -118,11 +121,11 @@ const kip = (ms: number): Move => side({
 /** Muscle-up: the pull (kipped or strict), a fast turnover, press out, hold, then lower back through the dip. */
 const mu = (kipped: boolean, ms: number, props?: Move['props']): Move => side({
   mode: 'cycle', flow: kipped ? 0.15 : 0,
-  keys: [passive, ...(kipped ? [arch, hollow] : [active]), highPull, turnover, support, turnover, highPull, active],
+  keys: [passive, ...(kipped ? [arch, hollow] : [active]), highPull, turnover, support, turnover, closeDown, sMid, active],
   beats: [
     { hold: 0.2, dur: kipped ? 0.8 : 0.45 },
     ...(kipped ? [{ dur: 0.6 }, { dur: 0.45, ease: 'snap' as const }] : [{ dur: 1.1, ease: 'out' as const }]),
-    { dur: kipped ? 0.3 : 0.5, ease: 'snap' }, { dur: 0.6, ease: 'out' }, { hold: 0.6, dur: 0.9 }, { dur: 0.7 }, { dur: 0.9, ease: 'out' }, { dur: 0.4 },
+    { dur: kipped ? 0.3 : 0.5, ease: 'snap' }, { dur: 0.6, ease: 'out' }, { hold: 0.6, dur: 0.9 }, { dur: 0.7 }, { dur: 0.8 }, { dur: 0.7, ease: 'out' }, { dur: 0.4 },
   ],
 }, ms, props)
 

@@ -1,5 +1,5 @@
 import { blend, joints, type Move, type Pose } from '../../core/figure'
-import { breathe, H, KNEEL, put, rep, where } from './mobility'
+import { breathe, H, INSTEP, put, rep, where } from './mobility'
 
 type Legs = [number, number, number, number]
 const LEGS0: Legs = [0, 0, 0, 0]
@@ -33,15 +33,19 @@ const boxBridge = (t: number, c: number, head: number, hip: [number, number]): P
 // Camel: knees down at x 0; hips drive forward, chest lifts, hands find the heels.
 const camel = (thigh: number, t: number, c: number, head: number, hands: [number, number]): Pose => {
   const hip: [number, number] = [-Math.sin((thigh * Math.PI) / 180) * 38, H.knee + Math.cos((thigh * Math.PI) / 180) * 38]
-  return put([t, 0, 0, 0, 0, thigh, KNEEL, thigh, KNEEL, c, head], hip, { hand: hands, farHand: hands }, { hand: 1, farHand: 1 })
+  return put([t, 0, 0, 0, 0, thigh, INSTEP, thigh, INSTEP, c, head], hip, { hand: hands, farHand: hands }, { hand: 1, farHand: 1 })
 }
-const HEEL: [number, number] = [-37, 13]
+// Palms on the heels of the pointed feet.
+const HEEL = ((): [number, number] => {
+  const [x, h] = where([180, 0, 0, 0, 0, 0, INSTEP, 0, INSTEP], [0, H.knee + 38], 'heel', false, true)
+  return [x, h + H.hand]
+})()
 
 // Bench opener: knees at x 0, elbows fixed on the bench edge, hands behind the head; the chest sinks.
 const BENCH = { x: 52, h: 46 }
 const opener = (thigh: number, t: number, c: number, head: number): Pose => {
   const hip: [number, number] = [-Math.sin((thigh * Math.PI) / 180) * 38, H.knee + Math.cos((thigh * Math.PI) / 180) * 38]
-  const p: Pose = [t, 0, -85, 0, -85, thigh, KNEEL, thigh, KNEEL, c, head]
+  const p: Pose = [t, 0, -85, 0, -85, thigh, INSTEP, thigh, INSTEP, c, head]
   const [sx, sy] = where(p, hip, 'shoulder')
   const u = (Math.atan2(BENCH.x + 8 - sx, sy - BENCH.h - 5) * 180) / Math.PI
   p[1] = p[3] = u
@@ -58,13 +62,18 @@ const wallKey = (t: number, c: number, head: number, hip: [number, number], hand
 // Kneeling drop-back: knees at x 0; hands land by the feet.
 const kneelKey = (thigh: number, t: number, c: number, head: number, arms: number | [number, number]): Pose => {
   const hip: [number, number] = [-Math.sin((thigh * Math.PI) / 180) * 38, H.knee + Math.cos((thigh * Math.PI) / 180) * 38]
-  const p: Pose = typeof arms === 'number' ? [t, arms, arms, arms, arms, thigh, KNEEL, thigh, KNEEL, c, head] : [t, -90, -90, -90, -90, thigh, KNEEL, thigh, KNEEL, c, head]
+  const p: Pose = typeof arms === 'number' ? [t, arms, arms, arms, arms, thigh, INSTEP, thigh, INSTEP, c, head] : [t, -90, -90, -90, -90, thigh, INSTEP, thigh, INSTEP, c, head]
   return typeof arms === 'number' ? put(p, hip, {}) : put(p, hip, { hand: arms, farHand: arms }, { hand: 1, farHand: 1 })
 }
 
 // Standing to bridge and back, feet at x 66: hips push forward over the feet, arms reach back overhead.
 const archFree = (t: number, c: number, head: number, arms: number, hip: [number, number]): Pose =>
   put([t, arms, arms, arms, arms, 0, 0, 0, 0, c, head], hip, { foot: [66, H.ankle], farFoot: [66, H.ankle] })
+
+// High plank facing +x, hands at x 0 under the shoulders, on the toes.
+const plank = put([116, 0, 0, 0, 0, -73, -73, -73, -73, 116, 122], [-25.5, 37], { hand: [0, H.hand], farHand: [0, H.hand] }, { hand: 1, farHand: 1 })
+/** Spine a turn back, so the roll from the bridge (spine at -100) passes over the top. */
+const over = (p: Pose): Pose => p.map((v, i) => (i === 0 || i === 9 || i === 10 ? (v ?? 0) - 360 : v)) as Pose
 
 /** Far arm straight up off the floor. */
 const farUp = (p: Pose): Pose => [p[0], p[1], p[2], -180, -180, ...p.slice(5)] as Pose
@@ -93,7 +102,7 @@ export const MOVES: Record<string, Move> = {
     ...rep(boxBridge(-135, -95, -60, [24, 50]), boxBridge(-150, -95, -40, [20, 62]), 1, 1.6, 0.3, 0.9),
     x: 'hand', at: [-6, 0], props: [{ t: 'box', x: -40, w: 40, h: BOX }], ms: 1000,
   },
-  camel: { ...breathe([camel(0, 180, 180, 180, [-10, 62]), camel(-22, 200, 265, 300, HEEL)]), x: 'knee' },
+  camel: { ...breathe([camel(0, 180, 180, 180, [-10, 62]), camel(-28, 210, 275, 305, HEEL)], 900, camel(-26, 206, 266, 298, HEEL)), x: 'knee', point: true },
   wall_angels: { front: true, ms: 1000, ...rep([180, 90, 180, -90, -180, 0, 0, 0, 0, 180, 180, -3], [180, 155, 170, -155, -170, 0, 0, 0, 0, 180, 180, 4], 1.6, 1.6, 0.4, 0.4) },
   // Press to the head, then drive up with momentum; lower slowly back through the head.
   full_bridge: {
@@ -104,7 +113,7 @@ export const MOVES: Record<string, Move> = {
       { hold: 1, dur: 0.8, ease: 'in' }, { dur: 0.8, ease: 'out' }, { hold: 0.2, dur: 0.6, ease: 'in' }, { dur: 0.6, ease: 'out' },
     ],
   },
-  bench_opener: { ...breathe([opener(10, 98, 100, 90), opener(18, 96, 68, 55)]), x: 'knee', props: [{ t: 'box', x: BENCH.x, w: 40, h: BENCH.h }] },
+  bench_opener: { ...breathe([opener(10, 98, 100, 90), opener(18, 96, 68, 55)]), x: 'knee', point: true, props: [{ t: 'box', x: BENCH.x, w: 40, h: BENCH.h }] },
   // Shift over the hands first, then the free leg points up.
   one_leg_bridge: {
     keys: [full, bridge(-100, -50, -10, -8, 66, [0, 0, 165, 165])], x: 'hand', ms: 1000,
@@ -126,7 +135,7 @@ export const MOVES: Record<string, Move> = {
   // Lower slowly, then the last part is a fast drop onto the hands; drive back up.
   kneel_drop: {
     keys: [kneelKey(0, -180, -180, -180, -180), kneelKey(-22, -165, -120, -95, -120), kneelKey(-35, -150, -65, -20, [-36, H.hand]), kneelKey(-22, -165, -120, -95, -120)],
-    mode: 'cycle', x: 'knee', ms: 900,
+    mode: 'cycle', x: 'knee', ms: 900, point: true,
     beats: [{ hold: 0.5, dur: 1.8 }, { dur: 0.45, ease: 'in' }, { hold: 0.5, dur: 0.6, ease: 'snap' }, { dur: 1.1, ease: 'out' }],
   },
   // Lean back slowly, then fall the last part onto the hands.
@@ -141,15 +150,11 @@ export const MOVES: Record<string, Move> = {
     x: 'foot', at: [66, 0], ms: 900,
     beats: [{ hold: 0.6, dur: 1.1, ease: 'io' }, { dur: 0.6, ease: 'snap' }, { dur: 1, ease: 'out' }, { hold: 0.6 }],
   },
-  // The far hand swings up and over as the hips turn toward the floor.
+  // Far hand reaches up and over as the hips turn; the body rolls round the near hand to face the floor in a plank, and back.
   bridge_rotation: {
-    keys: [
-      full,
-      farUp(bridge(-112, -120, -130, -2)),
-      put([-100, 0, 0, -200, -200, 0, 0, 0, 0, -115, -140], [42, 30], { hand: [0, H.hand], farHand: [-30, H.hand], foot: [66, H.ankle], farFoot: [66, H.ankle] }, { hand: 1, farHand: -1 }),
-    ],
-    x: 'hand', ms: 1000, flow: 0,
-    beats: [{ hold: 0.5, dur: 1 }, { dur: 1.1 }, { hold: 0.6 }],
+    keys: [full, farUp(bridge(-112, -120, -130, -2)), over(farUp(plank)), over(plank)],
+    x: 'hand', ms: 1000,
+    beats: [{ hold: 0.5, dur: 1 }, { turn: 60, dur: 0.6, ease: 'lin' }, { turn: 120, dur: 1, ease: 'out' }, { turn: 180, hold: 0.8 }],
   },
   // Rock over the hands, kick through handstand and back down.
   tick_tock: {

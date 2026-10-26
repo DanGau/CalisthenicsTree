@@ -59,14 +59,16 @@ const pigeonIn = (() => {
  * elbows a touch out; the trunk leans toward the viewer so the hips sit just outside the near elbow.
  */
 const twist = (legs: [number, number, number, number], head = 195): Pose => [-88, 10, -4, -10, 4, ...legs, 188, head]
-/** Shins of a twist solved so the feet rest on the floor. */
-const feetDown = (p: Pose): Pose => {
+/** Shins of a twist solved so the feet rest on the floor (trunk foreshortened to `trunk`). */
+const feetDown = (p: Pose, trunk = 1): Pose => {
   const at = (s: number) => set(set(p, [6], s), [8], s - 6)
-  return at(solve((s) => { const b = joints(at(s), true); return Math.max(b.foot.y, b.farFoot.y) + LEN.sole - b.hand.y }, 150, 20))
+  return at(solve((s) => { const b = joints(at(s), true, false, trunk); return Math.max(b.foot.y, b.farFoot.y) + LEN.sole - b.hand.y }, 150, 20))
 }
-// Side crow: both knees stacked on the near upper arm, shins folded back under.
+// Side crow: both knees stacked on the near upper arm, shins folded back under. Leaning onto the arm, the chest
+// tips toward the viewer (trunk foreshortened) and the hips settle onto the near elbow.
+const SC = { in: 0.9, on: 0.6 }
 const sideCrow = twist([80, 130, 74, 124])
-const sideCrowIn = feetDown(twist([112, 60, 106, 54]))
+const sideCrowIn = feetDown(twist([112, 60, 106, 54]), SC.in)
 // Grasshopper: the near leg straight across both upper arms, the far leg bent with its foot by the near knee.
 const grasshopper = twist([-88, -88, 150, 70], 190)
 const grasshopperIn = (() => {
@@ -125,7 +127,7 @@ const nod = (p: Pose, d = 3): Pose => set(set(p, [0], p[0] + d), [9], (p[9] ?? p
 export const MOVES: Record<string, Move> = {
   frog_stand: bal(frogIn, frog, nod(frog)),
   crow: bal(crowIn, crow, nod(crow)),
-  side_crow: bal(sideCrowIn, sideCrow, nod(sideCrow, -3), { front: true }),
+  side_crow: bal(sideCrowIn, sideCrow, nod(sideCrow, -3), { front: true, beats: holdBeats(1.4, 1.5).map((b, i) => ({ ...b, trunk: i ? SC.on : SC.in })) }),
   crane: bal(crow, crane, nod(crane)),
   tripod_hs: { keys: [tripodTuck, tripod], x: 'hand', ms: 900, beats: [{ hold: 0.5, dur: 1.8 }, { hold: 0.9 }] },
   flying_pigeon: bal(pigeonIn, pigeon, nod(pigeon)),

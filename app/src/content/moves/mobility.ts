@@ -1,19 +1,28 @@
-import { blend, joints, LEN, type Beat, type Move, type Pose } from '../../core/figure'
+import { blend, joints, LEN, type Beat, type Move, type Pose, type Stage } from '../../core/figure'
 
 const D = 180 / Math.PI
 
 /**
  * A stretch on the breath: ease in through `path` to its last key, sink there on the exhale,
- * hold, release a little on the inhale, sink again, then come out.
+ * hold, release a little on the inhale (`release`, default a 30% blend back), sink again, then come out.
+ * `stages`: per `path` key (lift, turn, trunk); the release lerps them too.
  */
-export function breathe(path: Pose[], ms = 900): Pick<Move, 'keys' | 'mode' | 'beats' | 'ms'> {
-  const deep = path[path.length - 1]
-  const before = path[path.length - 2] ?? deep
-  const into: Beat[] = path.slice(0, -1).map((_, i) => ({ hold: i ? 0 : 0.5, dur: 1.8 }))
+export function breathe(path: Pose[], ms = 900, release?: Pose, stages: Partial<Stage>[] = []): Pick<Move, 'keys' | 'mode' | 'beats' | 'ms'> {
+  const n = path.length
+  const deep = path[n - 1]
+  const before = path[n - 2] ?? deep
+  const sd = stages[n - 1] ?? {}
+  const sb = stages[n - 2] ?? sd
+  const mid: Partial<Stage> = {}
+  for (const k of ['lift', 'turn', 'trunk'] as const) if (sd[k] !== undefined || sb[k] !== undefined) {
+    const d = sd[k] ?? (k === 'trunk' ? 1 : 0)
+    mid[k] = d + ((sb[k] ?? (k === 'trunk' ? 1 : 0)) - d) * 0.3
+  }
+  const into: Beat[] = path.slice(0, -1).map((_, i) => ({ ...stages[i], hold: i ? 0 : 0.5, dur: 1.8 }))
   return {
-    keys: [...path, blend(deep, before, 0.3), deep],
+    keys: [...path, release ?? blend(deep, before, 0.3), deep],
     mode: 'cycle', ms,
-    beats: [...into, { hold: 1, dur: 1.1 }, { hold: 0.2, dur: 1.8 }, { hold: 1.2, dur: 2 }],
+    beats: [...into, { ...sd, hold: 1, dur: 1.1 }, { ...mid, hold: 0.2, dur: 1.8 }, { ...sd, hold: 1.2, dur: 2 }],
   }
 }
 
@@ -34,17 +43,19 @@ const SLOT: Record<Limb, number> = { hand: 1, farHand: 3, foot: 5, farFoot: 7 }
 export const H = { hand: 4, ankle: 5, knee: 5, lie: 11 }
 /** Shin of a kneeling leg: back along the floor, toes tucked, knee H.knee up. */
 export const KNEEL = -100
+/** Shin of a kneeling leg with the top of the foot on the floor (move `point: true`). */
+export const INSTEP = -89
 
 /** World point [x, height above floor] of a joint, with the hip at world `hip`. */
-export function where(p: Pose, hip: [number, number], j: keyof ReturnType<typeof joints>, front = false): [number, number] {
-  const b = joints(p, front)[j]
+export function where(p: Pose, hip: [number, number], j: keyof ReturnType<typeof joints>, front = false, point = false, trunk = 1): [number, number] {
+  const b = joints(p, front, point, trunk)[j]
   return [hip[0] + b.x, hip[1] - b.y]
 }
 
 /** Hip at world `hip`; each limb end reaches its world point. k: elbows default back (-1), knees forward (1). */
-export function put(p: Pose, hip: [number, number], to: Partial<Record<Limb, [number, number]>>, k: Partial<Record<Limb, number>> = {}, front = false): Pose {
+export function put(p: Pose, hip: [number, number], to: Partial<Record<Limb, [number, number]>>, k: Partial<Record<Limb, number>> = {}, front = false, trunk = 1): Pose {
   const out = [...p] as Pose
-  const b = joints(p, front)
+  const b = joints(p, front, false, trunk)
   for (const [l, [x, h]] of Object.entries(to) as [Limb, [number, number]][]) {
     const i = SLOT[l]
     const isArm = i < 5
@@ -66,7 +77,7 @@ export function put(p: Pose, hip: [number, number], to: Partial<Record<Limb, [nu
 /** All fours, knee at world x 0: thigh angle, spine and head; hands planted at x 43. */
 const quad = (thigh: number, t: number, c: number, head: number, far?: [number, number]): Pose => {
   const hip: [number, number] = [-Math.sin(thigh / D) * LEN.thigh, H.knee + Math.cos(thigh / D) * LEN.thigh]
-  const p: Pose = [t, 0, 0, far?.[0] ?? 0, far?.[1] ?? 0, thigh, KNEEL, thigh, KNEEL, c, head]
+  const p: Pose = [t, 0, 0, far?.[0] ?? 0, far?.[1] ?? 0, thigh, INSTEP, thigh, INSTEP, c, head]
   return put(p, hip, far ? { hand: [43, H.hand] } : { hand: [43, H.hand], farHand: [43, H.hand] })
 }
 // Thread the needle: far hand slides under the chest along the floor.
@@ -74,7 +85,7 @@ const thread = (() => {
   const p = quad(0, 107, 96, 40, [0, 0])
   return put(p, [0, 43], { farHand: [6, H.hand + 2] }, { farHand: 1 })
 })()
-const kneePin = { x: 'knee' as const, at: [0, 0] as [number, number] }
+const kneePin = { x: 'knee' as const, at: [0, 0] as [number, number], point: true }
 
 /** Squat with the ankles at world x 0 and the hip at [x, height]. */
 const squat = (hip: [number, number], t: number, c: number, arms: [number, number, number, number]): Pose =>
@@ -87,7 +98,7 @@ const hipsHands = (p: Pose): Pose => put(p, [0, 81], { hand: [6, 103], farHand: 
 // Knee to wall: front foot at x 0, rear knee down at x -34; the hip rides the rear thigh forward.
 const kneeToWall = (hx: number): Pose => {
   const hy = H.knee + Math.sqrt(LEN.thigh ** 2 - (hx + 34) ** 2)
-  const p: Pose = [178, 0, 0, 0, 0, 0, 0, ang(-34 - hx, hy - H.knee), KNEEL, 176]
+  const p: Pose = [178, 0, 0, 0, 0, 0, 0, ang(-34 - hx, hy - H.knee), INSTEP, 176]
   return put(put(p, [hx, hy], { foot: [0, H.ankle] }), [hx, hy], { hand: [WALL - 4, 100], farHand: [WALL - 4, 100] })
 }
 const WALL = 30
@@ -109,7 +120,7 @@ const knees9090: [Pose, Pose, Pose] = [
 ]
 
 // Shinbox: rear (far) foot fixed; the hip rises over the rear knee to a tall kneel.
-const box = (rear: number, front: [number, number], t: number): Pose => [t, 80, 100, 80, 100, front[0], front[1], rear, KNEEL, t - 5]
+const box = (rear: number, front: [number, number], t: number): Pose => [t, 80, 100, 80, 100, front[0], front[1], rear, INSTEP, t - 5]
 
 // Toe squat: kneel on tucked toes, then sit back onto the heels.
 const toeKneel: Pose = [180, 10, 10, 10, 10, 0, -102, 0, -102]
@@ -149,26 +160,27 @@ export const MOVES: Record<string, Move> = {
     mode: 'cycle', x: 'foot', ms: 1100, beats: circle(5),
   },
   // Heel stays down while the knee drives over the toes to touch the wall.
-  ankle_df: { x: 'foot', props: [{ t: 'wall', x: WALL }], ms: 1000, ...rep(kneeToWall(-24), kneeToWall(-12), 1.2, 1.2, 0.3, 0.6) },
+  ankle_df: { x: 'foot', point: 'far', props: [{ t: 'wall', x: WALL }], ms: 1000, ...rep(kneeToWall(-24), kneeToWall(-12), 1.2, 1.2, 0.3, 0.6) },
   shoulder_cars: {
     keys: [stand, [180, 90, 90, -2, -4, 0, 0, 0, 0, 180, 180, -1], [180, 180, 180, -2, -4, 0, 0, 0, 0, 180, 180, 5], [180, 270, 270, -2, -4, 0, 0, 0, 0, 180, 180, 2], [180, 360, 362, -2, -4, 0, 0, 0, 0, 180, 180, -3]],
     mode: 'cycle', ms: 1000, beats: circle(5),
   },
   // From leaning forward to tall: pelvis tucks, hip pushes forward over the rear knee.
-  couch: { ...breathe([couch(2, 160, 162), couch(-20, 188, 178)]), x: 'knee', at: [5, 0], props: [{ t: 'wall', x: -12 }] },
+  couch: { ...breathe([couch(2, 160, 162), couch(-20, 188, 178)]), x: 'knee', at: [5, 0], point: 'near', props: [{ t: 'wall', x: -12 }] },
   // Knees sweep over the top and drop to the other side; rest there.
-  pigeon_9090: { keys: knees9090, front: true, ms: 1000, beats: [{ hold: 0.8, dur: 1.3, ease: 'in' }, { dur: 1.3, ease: 'out' }, { hold: 0.8 }] },
+  // The trunk turns with the knees to square up over the front shin.
+  pigeon_9090: { keys: knees9090, front: true, ms: 1000, beats: [{ turn: 40, hold: 0.8, dur: 1.3, ease: 'in' }, { dur: 1.3, ease: 'out' }, { turn: -40, hold: 0.8 }] },
   // Thread the needle: far hand slides under the chest, then opens to the ceiling; eyes follow it.
   thoracic: { keys: [thread, quad(0, 107, 112, 170, [180, 180])], ...kneePin, ms: 1000, beats: [{ hold: 0.8, dur: 1.8 }, { hold: 1, dur: 1.8 }] },
   spinal_waves: {
     keys: wave, mode: 'cycle', ...kneePin, ms: 700,
     beats: [{ ease: 'lin' }, { ease: 'out' }, { hold: 0.4, dur: 1.4, ease: 'in' }, { ease: 'lin' }, { ease: 'out' }, { hold: 0.4, dur: 1.4, ease: 'in' }],
   },
-  // Hips drive up off the floor to a tall kneel, then lower with control.
+  // Hips drive up off the floor and turn square to a tall kneel, then lower with control.
   shinbox: {
-    keys: [box(-84, [84, KNEEL], 182), box(-45, [40, KNEEL], 172), box(0, [0, KNEEL], 180), box(-45, [40, KNEEL], 176)],
-    mode: 'cycle', x: 'farFoot', at: [-40, 0], ms: 900,
-    beats: [{ hold: 0.6, dur: 0.6, ease: 'in' }, { dur: 0.8, ease: 'out' }, { hold: 0.6, dur: 1.2 }, { dur: 1.4, ease: 'out' }],
+    keys: [box(-84, [84, INSTEP], 182), box(-45, [40, INSTEP], 172), box(0, [0, INSTEP], 180), box(-45, [40, INSTEP], 176)],
+    mode: 'cycle', x: 'farFoot', at: [-40, 0], ms: 900, point: true,
+    beats: [{ turn: 55, hold: 0.6, dur: 0.6, ease: 'in' }, { turn: 25, dur: 0.8, ease: 'out' }, { hold: 0.6, dur: 1.2 }, { turn: 25, dur: 1.4, ease: 'out' }],
   },
   dislocates: {
     keys: [[180, 25, 25, 25, 25, 0, 0, 0, 0, 180, 180, -2], [180, 180, 180, 180, 180, 0, 0, 0, 0, 180, 180, 5], [180, 330, 330, 330, 330, 0, 0, 0, 0, 180, 180, -2]],

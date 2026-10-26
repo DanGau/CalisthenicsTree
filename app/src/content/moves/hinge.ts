@@ -55,10 +55,11 @@ export const MOVES: Record<string, Move> = {
   sl_hip_thrust: { ...rep(thrust(15), thrust(43), 0.8, 1.6, 0.3, 0.6), x: 'foot', at: [84, 0], props: [{ t: 'box', x: -45, w: 50, h: 33 }] },
   // Hinge down slowly, the rear leg rising as a counterweight; drive the hip forward to stand.
   sl_rdl: { ...rep(rdlTop, rdl(93, 93, 96, [-87, -87]), 1.9, 1.1, 0.4, 0.3), x: 'foot', ms: 1000 },
-  // Hips open: chest turns up, free arm to the ceiling, rear knee bends out. Slow both ways.
+  // Hips open: the pelvis turns about the stance leg, chest to the side, free arm to the ceiling, rear knee bends out. Slow both ways.
   airplane: {
-    ...rep(rdl(93, 93, 96, [-87, -87]), rdl(96, 102, 140, [-98, -150], [178, 178]), 1.6, 1.4, 0.4, 0.8),
-    x: 'foot', ms: 1000,
+    keys: [rdl(93, 93, 96, [-87, -87]), rdl(96, 102, 140, [-98, -150], [178, 178])],
+    beats: [{ hold: 0.4, dur: 1.6 }, { turn: 65, hold: 0.8, dur: 1.4 }],
+    mode: 'cycle', x: 'foot', ms: 1000,
   },
   // Slow lowering that speeds up as the lever lengthens, then a fast catch; push back up.
   nordic_neg: {

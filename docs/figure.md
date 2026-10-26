@@ -30,8 +30,10 @@ Motion must read as a person moving mass, not a puppet between poses. `beats` (o
 - `dur`: relative length of the transition to the next key. Strength reps: lowering 1.5-2, rising 1 (controlled eccentric, strong concentric). Explosive moves: load 1, drive 0.4-0.6.
 - `ease`: `io` default; `snap` for explosive drives (jump, kip, clap, muscle-up pull); `out` rising into an apex or settling into a hold; `in` falling, dropping into a catch; `lin` for steady gaits and crawls (`cycle`).
 - `hold`: pause on a key. Default 0.3 only at a bounce's turnarounds. Short pause at the top/bottom of reps; none mid-flight.
+- Move-level `climb`: height gained per loop (rope climbs); the view follows up.
 - `shift`: forward offset within a loop (broad jump distance, pushing off a wall). Move-level `travel`: distance per loop for gaits, runs, crawls, walks; the view follows the figure and the floor marks slide past, so the loop is seamless.
 - `turn`: degrees about the vertical axis; 180 is mirrored. Animate 0 → 180 to roll over or turn round (bridge rotation, turning back to the box).
+- `back: true` (with `front`): seen from behind, no face.
 - `trunk`: trunk length scale to foreshorten a trunk pointing at the viewer in front view (pancake, wipers, flare).
 - Loops must restart honestly: no teleports. Climb back onto the box, walk back, or travel.
 - `lift`: height above the pinned placement. Flight phases use it: takeoff key lift 0 with `ease: 'out'`, apex key with lift and `ease: 'in'`, landing lift 0. The figure must actually leave the floor.

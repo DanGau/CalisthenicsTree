@@ -63,9 +63,9 @@ const dragon = (t: number, tucked = false): Pose => {
   return reach(p, { hand: [s[0] - 34, s[1] + 4], farHand: [s[0] - 34, s[1] + 4] }, { k: { hand: 1, farHand: 1 } })
 }
 
-// Wipers (front view): legs up at the bar, swung side to side from the hips.
-// Hips counter-swing the legs.
-const wiper = (side: number): Pose => fgrip(body(180 + side * 0.3, 180, 180, [180 + side, 180 + side, 180 + side, 180 + side], 180, -3), [28, -52.8], [-28, -52.8])
+// Wipers (front view): lying back under the bar, trunk foreshortened toward the viewer, straight legs
+// up at the bar sweep side to side from the hips; the pelvis counter-rotates a little.
+const wiper = (side: number): Pose => fgrip(body(180 - side * 0.15, 180, 180, [180 + side, 180 + side, 180 + side, 180 + side], 180, -3), [28, -52.8], [-28, -52.8])
 
 const hb = (hold: number, ...durs: number[]): Move['beats'] => durs.map((d, i) => ({ hold: i === 0 || i === durs.length - 1 ? hold : 0, dur: d }))
 
@@ -83,7 +83,7 @@ export const MOVES: Record<string, Move> = {
   ttb: { ...rep(hang, null, [legsUp, ttbTop], { rise: 1.1, lower: 1.8, top: 0.25 }), ...hangPin, ms: 900 },
   dragon_flag: { keys: [dragon(10), dragon(-78)], mode: 'cycle', ...dragonPin, ms: 1000, beats: [{ hold: 0.3, dur: 2.2 }, { hold: 0.3, dur: 1.4 }] },
   lsit_30: { keys: [ell, support([93, 93, 93, 93], 177)], ...supportPin, ms: 1000, beats: hb(1.4, 1.6, 1) },
-  wipers: { keys: [wiper(-35), wiper(35)], front: true, ...hangPin, at: [28, -210], ms: 1000, beats: hb(0.3, 1.4, 1) },
+  wipers: { keys: [wiper(-75), wiper(0), wiper(75)], front: true, ...hangPin, at: [28, -210], ms: 1000, beats: [{ hold: 0.3, dur: 0.8, trunk: 0.4, ease: 'in' }, { dur: 0.8, trunk: 0.4, ease: 'out' }, { hold: 0.3, trunk: 0.4 }] },
   standing_rollout: { ...rep(stand(28, 0), null, [stand(flatT, flatT - 180)], { rise: 2, lower: 1.3, top: 0.3 }), x: 'foot', ms: 1000 },
   vsit: { keys: [vs(196, 92, 8), vs(204, 130, 12)], ms: 1000, beats: [{ hold: 0.3, dur: 1.2, ease: 'out' }, { hold: 1.2 }] },
   v120: { keys: [vs(206, 132, 12), vs(216, 170, 16)], ms: 1000, beats: [{ hold: 0.3, dur: 1.2, ease: 'out' }, { hold: 1.2 }] },

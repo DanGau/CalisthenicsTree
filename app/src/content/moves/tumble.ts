@@ -1,4 +1,4 @@
-import { joints, type Beat, type Move, type Pose } from '../../core/figure'
+import { joints, place, type Beat, type Joint, type Move, type Pose } from '../../core/figure'
 import { plant, pos, reach, rot } from './legs'
 
 // Rotations: forward rolls turn the figure by -360, backward ones by +360; the last key is the first turned once.
@@ -99,11 +99,24 @@ const salto: Beat[] = [
   { lift: 62, dur: 0.6, ease: 'in' }, { lift: 12, dur: 0.3, ease: 'in' }, { dur: 1.2, ease: 'out' }, { hold: 0.3, dur: 0.01 },
 ]
 
+/** Adds travel: each transition keeps the named joint still on the floor; a number moves that far (rolling, flight). */
+export const travelled = (m: Move, by: (Joint | number)[]): Move => {
+  const n = m.keys.length
+  const x = (i: number, j: Joint) => place(m, m.keys[i % n], { ...m.beats?.[i % n], shift: 0 })[j].x
+  let s = 0
+  const beats = by.map((b, i): Beat => {
+    const shift = s
+    s += typeof b === 'number' ? b : x(i, b) - x(i + 1, b)
+    return { ...m.beats?.[i], shift }
+  })
+  return { ...m, beats, travel: s }
+}
+
 export const MOVES: Record<string, Move> = {
-  fwd_roll: { keys: fwdRoll, mode: 'cycle', ms: 600, beats: roll(3), flow: 0.1 },
-  back_roll: { keys: backRoll, mode: 'cycle', ms: 650, beats: roll(2, 0.8), flow: 0.1 },
-  shoulder_roll: { keys: [reachUp, crouch(118, 44), shoulderBall(15), shoulderBall(-90), shoulderBall(-170), squat(-205, -270), rot(reachUp, -360)], mode: 'cycle', ms: 600, beats: roll(3), flow: 0.1 },
-  cartwheel: { keys: cart(), mode: 'cycle', front: true, ms: 650, beats: wheel },
+  fwd_roll: travelled({ keys: fwdRoll, mode: 'cycle', ms: 600, beats: roll(3), flow: 0.1 }, ['foot', 'hand', 40, 35, 30, 'foot', 0]),
+  back_roll: travelled({ keys: backRoll, mode: 'cycle', ms: 650, beats: roll(2, 0.8), flow: 0.1 }, ['foot', -30, -35, -30, 'foot', 0]),
+  shoulder_roll: travelled({ keys: [reachUp, crouch(118, 44), shoulderBall(15), shoulderBall(-90), shoulderBall(-170), squat(-205, -270), rot(reachUp, -360)], mode: 'cycle', ms: 600, beats: roll(3), flow: 0.1 }, ['foot', 'hand', 40, 35, 30, 'foot', 0]),
+  cartwheel: travelled({ keys: cart(), mode: 'cycle', front: true, ms: 650, beats: wheel }, ['foot', 'hand', 'farHand', 'farFoot', 0]),
   back_ext_roll: {
     keys: [stand, squat(165, 100), ears(255), palms(ears(335), -6, 1), handsBack, snap, absorb(360), rot(stand, 360)], mode: 'cycle', ms: 600,
     beats: [{ hold: 0.4, dur: 1 }, { dur: 0.7, ease: 'in' }, { dur: 0.6, ease: 'lin' }, { dur: 0.5, ease: 'snap' }, { hold: 0.15, dur: 0.5, ease: 'in' }, { lift: 10, dur: 0.4, ease: 'in' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
@@ -120,7 +133,7 @@ export const MOVES: Record<string, Move> = {
     keys: [lie, rockBack, kick, kipFly, kipLand, squat(160), stand, squat(165), sitDown], mode: 'cycle', ms: 550, flow: 0.12,
     beats: [{ hold: 0.4, dur: 1.1 }, { hold: 0.15, dur: 0.35, ease: 'snap' }, { dur: 0.45, ease: 'out' }, { lift: 32, dur: 0.45, ease: 'in' }, { dur: 0.5, ease: 'out' }, { dur: 1, ease: 'out' }, { hold: 0.8, dur: 1 }, { dur: 0.9, ease: 'in' }, { dur: 1, ease: 'out' }],
   },
-  one_hand_cart: { keys: cart(true), mode: 'cycle', front: true, ms: 650, beats: wheel },
+  one_hand_cart: travelled({ keys: cart(true), mode: 'cycle', front: true, ms: 650, beats: wheel }, ['foot', 'farHand', 'farHand', 'farFoot', 0]),
   hs_roll: {
     keys: [reachUp, lungeDown, hs, hsBend, palms(ball(-40), 4, 1), ball(-90), ball(-170), squat(-205, -270), rot(reachUp, -360)], mode: 'cycle', ms: 650,
     beats: [{ hold: 0.3, dur: 0.9 }, { dur: 0.8, ease: 'out' }, { hold: 1, dur: 1.4 }, { dur: 0.7, ease: 'in' }, { dur: 0.6, ease: 'lin' }, { dur: 0.6, ease: 'lin' }, { dur: 0.6, ease: 'out' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],

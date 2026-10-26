@@ -19,6 +19,16 @@ export const yOf = (m: Move, p: Pose, j: keyof Body) => place(m, p)[j].y
 // sets the hand point; the top rotates the straight body about the heels until the chest meets it.
 const straight = (t: number): Pose => body(t, t, t - 4, [t + 180, t + 180, t + 180, t + 180], t + 270)
 type Arms = (p: Pose) => Pose
+/** Top of a row: blades squeezed together, chest proud toward the hands, chin tucked. */
+const squeeze = (p: Pose): Pose => { const q = [...p] as Pose; q[9] = p[0] - 10; q[10] = p[0] - 2; q[11] = -3; return q }
+/** Shifts each key's angles by whole turns to sit nearest the previous key, so blends take the short way. */
+const unwrap = (keys: Pose[]): [Pose, null, Pose[]] => {
+  const out = keys.reduce<Pose[]>((acc, k) => {
+    const prev = acc.at(-1)
+    return [...acc, prev ? (k.map((v, i) => v! - Math.round((v! - prev[i]!) / 360) * 360) as Pose) : k]
+  }, [])
+  return [out[0], null, out.slice(1)]
+}
 const rowMove = (t0: number, prop: 'bar' | 'rings', top: Arms = (p) => p, bottom: Arms = (p) => p, ms = 900): Move => {
   const m: Move = { keys: [], x: 'foot', at: [60, 0], ms }
   const H = place(m, straight(t0)).hand
@@ -29,11 +39,15 @@ const rowMove = (t0: number, prop: 'bar' | 'rings', top: Arms = (p) => p, bottom
   }
   let t1 = t0
   for (let t = t0; t > t0 - 80; t -= 0.25) if (gap(t) < gap(t1)) t1 = t
-  const p = straight(t1)
-  const hip = place(m, p).hip
-  const h: [number, number] = [H.x - hip.x, H.y - hip.y]
-  const pulled = reach(p, { hand: h, farHand: h }, { k: { hand: -1, farHand: -1 } })
-  return { ...m, ...rep(bottom(straight(t0)), null, [top(pulled)], { rise: 0.9, lower: 1.5 }), props: [{ t: prop, x: H.x, y: H.y }] }
+  // Hands stay on the bar through the pull: intermediate keys re-aim the arms at it.
+  const at = (f: number): Pose => {
+    const q = straight(t0 + (t1 - t0) * f)
+    const p = f === 1 ? squeeze(q) : q
+    const hip = place(m, p).hip
+    const h: [number, number] = [H.x - hip.x, H.y - hip.y]
+    return reach(p, { hand: h, farHand: h }, { k: { hand: -1, farHand: -1 } })
+  }
+  return { ...m, ...rep(...unwrap([bottom(at(0)), bottom(at(0.4)), top(at(0.75)), top(at(1))]), { rise: 0.9, lower: 1.5 }), props: [{ t: prop, x: H.x, y: H.y }] }
 }
 const oneArm: Arms = (p) => [p[0], p[1], p[2], 90, 90, ...p.slice(5)] as Pose
 // Archer: the far arm stays straight, reaching to its ring.
@@ -43,7 +57,7 @@ const straightFar: Arms = (p) => [...p.slice(0, 3), p[0] + 255, p[0] + 255, ...p
 const feetUpBase: Move = { keys: [], x: 'hand', y: 'hand', at: [0, -110], props: [], ms: 1000 }
 const fuBottom = straight(-82)
 const heelY = yOf(feetUpBase, fuBottom, 'heel')
-const pulled = (t: number): Pose => { const p = straight(t); return grip(p, chestPt(p, 0.7, 16), -1, true) }
+const pulled = (t: number): Pose => { const p = squeeze(straight(t)); return grip(p, chestPt(p, 0.7, 16), -1, true) }
 const fuTop = pulled(solve(-120, -60, (t) => yOf(feetUpBase, pulled(t), 'heel') - heelY))
 const fb = place(feetUpBase, fuBottom)
 const heel = { x: fb.heel.x, y: Math.max(fb.heel.y, fb.foot.y) + 3 }
@@ -71,7 +85,7 @@ const chinOver = grip(chinBody, chestPt(chinBody, 1, 15), -1, true)
 export const MOVES: Record<string, Move> = {
   incline_row: rowMove(-122, 'bar'),
   row: rowMove(-104, 'rings'),
-  feet_up_row: { ...feetUpBase, keys: [fuBottom, fuTop], props: [{ t: 'rings', x: 0, y: -110 }, { t: 'box', x: heel.x - 30, w: 50, h: -heel.y }] },
+  feet_up_row: { ...feetUpBase, ...rep(fuBottom, null, [fuTop], { rise: 0.9, lower: 1.5 }), props: [{ t: 'rings', x: 0, y: -110 }, { t: 'box', x: heel.x - 30, w: 50, h: -heel.y }] },
   archer_row: rowMove(-104, 'rings', straightFar),
   tuck_fl: lhold(tuck),
   oa_row: rowMove(-104, 'rings', oneArm, oneArm, 1000),

@@ -5,10 +5,10 @@ const sub = (a: Pt, b: Pt): Pt => ({ x: a.x - b.x, y: a.y - b.y })
 const mix = (a: Pt, b: Pt, t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
 const off = (a: Pt, n: Pt, d: number): Pt => ({ x: a.x + n.x * d, y: a.y + n.y * d })
 /** Unit normal of a→b, turned so it faces the figure's front when the segment points up. */
-const normal = (a: Pt, b: Pt): Pt => {
+const normal = (a: Pt, b: Pt, s = 1): Pt => {
   const d = sub(b, a)
   const l = Math.hypot(d.x, d.y) || 1
-  return { x: d.y / l * -1, y: d.x / l }
+  return { x: (-d.y / l) * s, y: (d.x / l) * s }
 }
 
 /** A tapered capsule from `a` (width `wa`) to `b` (width `wb`): one limb segment. */
@@ -41,7 +41,8 @@ const leg = (hp: Pt, k: Pt, a: Pt, heel: Pt, toe: Pt, cls: string) =>
   limb(hp, k, 15, 10, cls) + limb(k, a, 10, 7, cls) + limb(heel, toe, 7, 5, `${cls} shoe`) + limb(hp, mix(hp, k, 0.45), 17, 15, `${cls} shorts`)
 
 /** Side view torso: pelvis, a slight belly, and a chest deeper than the waist. */
-function torso(b: Body, front: boolean) {
+/** `s` is -1 when the figure is turned past 90 and faces the other way. */
+function torso(b: Body, front: boolean, s: number) {
   if (front) {
     // n points from the spine toward the near (viewer's left) side.
     const g = sub(b.nearShoulder, b.shoulder)
@@ -53,8 +54,8 @@ function torso(b: Body, front: boolean) {
       off(b.hip, n, -14), off(b.waist, n, -12), off(top, n, -14), b.farShoulder, mix(b.shoulder, b.head, 0.3)], 'skin')
       + blob([off(belt, n, 13), off(b.hip, n, 15), off(seat, n, 10), off(seat, n, -10), off(b.hip, n, -15), off(belt, n, -13)], 'shorts')
   }
-  const nl = normal(b.hip, b.waist)
-  const nu = normal(b.waist, b.shoulder)
+  const nl = normal(b.hip, b.waist, s)
+  const nu = normal(b.waist, b.shoulder, s)
   const chest = mix(b.waist, b.shoulder, 0.6)
   return blob([off(b.hip, nl, -10), off(b.waist, nl, -8), off(chest, nu, -10), off(b.shoulder, nu, -7), mix(b.shoulder, b.head, 0.3),
     off(b.shoulder, nu, 8), off(chest, nu, 12), off(b.waist, nl, 10), off(b.hip, nl, 9), off(mix(b.hip, b.waist, -0.35), nl, 0)], 'skin')
@@ -62,36 +63,41 @@ function torso(b: Body, front: boolean) {
       off(mix(b.hip, b.waist, -0.35), nl, 4), off(b.hip, nl, 10), off(mix(b.hip, b.waist, 0.5), nl, 10.5)], 'shorts')
 }
 
-function head(b: Body, front: boolean) {
+function head(b: Body, front: boolean, s: number, back = false) {
   const base = mix(b.shoulder, b.head, 0.35)
   const neck = limb(b.shoulder, base, 10, 9, 'skin')
   const skull = dot(b.head, LEN.head, 'skin')
+  if (front && back) return neck + skull + dot(b.head, LEN.head - 1, 'hair')
   if (front) return neck + skull + dot(off(b.head, normal(b.shoulder, b.head), -4), 1.6, 'eye') + dot(off(b.head, normal(b.shoulder, b.head), 4), 1.6, 'eye')
   const up = sub(b.head, b.shoulder)
   const l = Math.hypot(up.x, up.y) || 1
   const u = { x: up.x / l, y: up.y / l }
-  const fwd = normal(b.shoulder, b.head)
+  const fwd = normal(b.shoulder, b.head, s)
   const face = (d: number, h: number) => ({ x: b.head.x + fwd.x * d + u.x * h, y: b.head.y + fwd.y * d + u.y * h })
   // Hair caps the back and top; eye and nose show which way the figure looks.
   const r = LEN.head + 0.8
   const [h1, h2] = [face(-r * 0.7, -r * 0.7), face(r * 0.55, r * 0.83)]
-  const hair = `<path class="hair" d="M${f(h1.x)} ${f(h1.y)}A${f(r)} ${f(r)} 0 0 1 ${f(h2.x)} ${f(h2.y)}Q${f(face(-2, 4).x)} ${f(face(-2, 4).y)} ${f(h1.x)} ${f(h1.y)}Z"/>`
+  const hair = `<path class="hair" d="M${f(h1.x)} ${f(h1.y)}A${f(r)} ${f(r)} 0 0 ${s > 0 ? 1 : 0} ${f(h2.x)} ${f(h2.y)}Q${f(face(-2, 4).x)} ${f(face(-2, 4).y)} ${f(h1.x)} ${f(h1.y)}Z"/>`
   const nose = limb(face(9, 0), face(12.5, -1.5), 3.5, 2.5, 'skin')
   return neck + skull + nose + hair + dot(face(6, 2), 1.6, 'eye')
 }
 
-function body(b: Body, front: boolean) {
+function body(b: Body, front: boolean, s = 1, back = false) {
   const far = arm(b.farShoulder, b.farElbow, b.farHand, 'f') + leg(b.farHip, b.farKnee, b.farFoot, b.farHeel, b.farToe, 'f')
   const near = leg(b.nearHip, b.knee, b.foot, b.heel, b.toe, 'n') + arm(b.nearShoulder, b.elbow, b.hand, 'n')
-  return front ? torso(b, true) + head(b, true) + far + near : far + torso(b, false) + head(b, false) + near
+  return front ? torso(b, true, s) + head(b, true, s, back) + far + near : far + torso(b, false, s) + head(b, false, s) + near
 }
 
-function prop(p: Prop, front: boolean) {
+function prop(p: Prop, front: boolean, up = 0) {
   switch (p.t) {
     case 'bar': return front ? `<line class="prop" x1="${p.x - 70}" y1="${p.y}" x2="${p.x + 70}" y2="${p.y}"/>` : `<line class="prop thin" x1="${p.x - 26}" y1="-400" x2="${p.x}" y2="${p.y}"/><line class="prop thin" x1="${p.x + 26}" y1="-400" x2="${p.x}" y2="${p.y}"/><circle class="prop bar" r="5" cx="${p.x}" cy="${p.y}"/>`
     case 'rings': return `<line class="prop thin" x1="${p.x}" y1="-400" x2="${p.x}" y2="${p.y - 6}"/><circle class="prop ring" r="6" cx="${p.x}" cy="${p.y}"/>`
     case 'wall': return `<rect class="prop fill" x="${p.x}" y="-400" width="12" height="400"/>`
-    case 'pole': return `<line class="prop" x1="${p.x}" y1="-400" x2="${p.x}" y2="0"/>`
+    case 'pole': {
+      // Marks every 30 slide past as the view climbs.
+      const marks = Array.from({ length: 21 }, (_, i) => Math.floor(-up / 30) * 30 + (i - 10) * 30).filter((y) => y < 0)
+      return `<line class="prop" x1="${p.x}" y1="${-up - 2000}" x2="${p.x}" y2="0"/>${marks.map((y) => `<line class="prop mark" x1="${p.x - 4}" y1="${y}" x2="${p.x + 4}" y2="${y + 3}"/>`).join('')}`
+    }
     case 'box': return `<rect class="prop fill" x="${p.x}" y="${-p.h}" width="${p.w}" height="${p.h}" rx="3"/>`
     case 'bars': return `<line class="prop thin" x1="${p.x}" y1="${p.y}" x2="${p.x}" y2="0"/><circle class="prop" r="4" cx="${p.x}" cy="${p.y}"/>`
   }
@@ -99,8 +105,8 @@ function prop(p: Prop, front: boolean) {
 
 /** Bounds over every key, so the frame stays still while the figure moves. */
 function frame(m: Move) {
-  // A travelling move is framed without its travel: the view follows it.
-  const pts = sequence(m).flatMap((k) => Object.values(place(m, k.pose, m.travel ? { ...k, shift: 0 } : k)))
+  // A travelling or climbing move is framed without it: the view follows.
+  const pts = sequence(m).flatMap((k) => Object.values(place(m, k.pose, { ...k, shift: m.travel ? 0 : k.shift, lift: m.climb ? 0 : k.lift })))
   const xs = pts.map((p) => p.x)
   const ys = pts.map((p) => p.y)
   const pad = 18
@@ -123,8 +129,9 @@ function floor(cam: number) {
 
 function scene(m: Move, pose: Pose, st: Partial<Stage> = {}) {
   const cam = m.travel ? (st.shift ?? 0) : 0
-  const world = `${(m.props ?? []).map((p) => prop(p, !!m.front)).join('')}${m.floor === false ? '' : floor(cam)}<g class="fig">${body(place(m, pose, st), !!m.front)}</g>`
-  return cam ? `<g transform="translate(${f(-cam)} 0)">${world}</g>` : world
+  const up = m.climb ? (st.lift ?? 0) : 0
+  const world = `${(m.props ?? []).map((p) => prop(p, !!m.front, up)).join('')}${m.floor === false ? '' : floor(cam)}<g class="fig">${body(place(m, pose, st), !!m.front, Math.cos(((st.turn ?? 0) * Math.PI) / 180) < 0 ? -1 : 1, m.back)}</g>`
+  return cam || up ? `<g transform="translate(${f(-cam)} ${f(up)})">${world}</g>` : world
 }
 
 export const still = (m: Move, pose: Pose, st: Partial<Stage> = {}) => `<svg class="figure" viewBox="${frame(m)}" role="img">${scene(m, pose, st)}</svg>`

@@ -40,8 +40,10 @@ export type Move = {
   at?: [number, number]
   props?: Prop[]
   front?: boolean
-  /** Toes pointed all loop (kneeling, prone, tops of the feet on the floor). */
-  point?: boolean
+  /** With `front`: seen from behind (no face). */
+  back?: boolean
+  /** Toes pointed all loop (kneeling, prone, tops of the feet on the floor); 'near' or 'far' for one foot. */
+  point?: boolean | 'near' | 'far'
   floor?: boolean
   /** Milliseconds per transition. */
   ms?: number
@@ -49,6 +51,8 @@ export type Move = {
   beats?: Beat[]
   /** Distance the figure travels each loop (`cycle` gaits, runs, crawls, walks); the view follows it. */
   travel?: number
+  /** Height gained each loop (rope climbs); the view follows it up. */
+  climb?: number
   /** Overlap: forearms, shins and head trail the body by this fraction of a transition (0.1-0.25 for swings, throws, flight). */
   flow?: number
 }
@@ -63,14 +67,14 @@ export type Ease = 'io' | 'in' | 'out' | 'snap' | 'lin'
  * `lift`: height above the move's pinned placement (flight phases). `shift`: forward offset (travel within
  * a loop: broad jump, push away from a wall). `turn`: degrees the body has turned about its vertical axis
  * (0 side view, 90 facing the viewer edge-on, 180 mirrored: rolling over, turning round). `trunk`: trunk length
- * scale for foreshortening (front view, trunk pointing at the viewer: 0.4-0.8). `hold`: pause on this key in
+ * scale for foreshortening (front view, trunk pointing at the viewer: 0.4-0.8); `legs` the same for both legs. `hold`: pause on this key in
  * transitions (default: 0.3 at the turnaround keys of a bounce, else 0). `dur`: length of the
  * transition to the next key in transitions (default 1). `ease`: how that transition moves.
  */
-export type Stage = { lift: number; shift: number; turn: number; trunk: number }
+export type Stage = { lift: number; shift: number; turn: number; trunk: number; legs: number }
 export type Beat = Partial<Stage> & { hold?: number; dur?: number; ease?: Ease }
-const STAGE: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1 }
-const stage = (b: Beat): Stage => ({ lift: b.lift ?? 0, shift: b.shift ?? 0, turn: b.turn ?? 0, trunk: b.trunk ?? 1 })
+const STAGE: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1 }
+const stage = (b: Beat): Stage => ({ lift: b.lift ?? 0, shift: b.shift ?? 0, turn: b.turn ?? 0, trunk: b.trunk ?? 1, legs: b.legs ?? 1 })
 
 const EASE: Record<Ease, (t: number) => number> = {
   io: (t) => t * t * (3 - 2 * t),
@@ -105,7 +109,7 @@ export function footAngle(shin: number) {
 }
 
 /** Joint positions with the hip at the origin. */
-export function joints(p: Pose, front = false, point = false, trunk = 1): Body {
+export function joints(p: Pose, front = false, point: Move['point'] = false, trunk = 1, legs = 1): Body {
   const [t, nu, nf, fu, ff, nt, ns, ft, fs, c, h] = full(p)
   const hip = { x: 0, y: 0 }
   const waist = dir(t, LEN.waist * trunk)
@@ -119,18 +123,19 @@ export function joints(p: Pose, front = false, point = false, trunk = 1): Body {
   const fH = add(hip, side(t, GIRDLE.hip))
   const elbow = add(nS, dir(nu, LEN.upper))
   const farElbow = add(fS, dir(fu, LEN.upper))
-  const knee = add(nH, dir(nt, LEN.thigh))
-  const farKnee = add(fH, dir(ft, LEN.thigh))
-  const foot = add(knee, dir(ns, LEN.shin))
-  const farFoot = add(farKnee, dir(fs, LEN.shin))
+  const knee = add(nH, dir(nt, LEN.thigh * legs))
+  const farKnee = add(fH, dir(ft, LEN.thigh * legs))
+  const foot = add(knee, dir(ns, LEN.shin * legs))
+  const farFoot = add(farKnee, dir(fs, LEN.shin * legs))
   // The sole sits below the ankle; side view: heel just behind, toes ahead.
-  const sole = (f: Pt, s: number, len: number) => add(add(f, dir(s, LEN.sole)), dir(point ? s + 15 : footAngle(s), front ? 0 : len))
+  const sole = (f: Pt, s: number, len: number, pt: boolean) => add(add(f, dir(s, LEN.sole)), dir(pt ? s + 15 : footAngle(s), front ? 0 : len))
+  const [pn, pf] = [point === true || point === 'near', point === true || point === 'far']
   return {
     hip, waist, shoulder: sh, head: add(shoulder, dir(h, LEN.neck)),
     elbow, hand: add(elbow, dir(nf, LEN.fore)), farElbow, farHand: add(farElbow, dir(ff, LEN.fore)),
     knee, farKnee, foot, farFoot,
-    toe: sole(foot, ns, LEN.foot), farToe: sole(farFoot, fs, LEN.foot),
-    heel: sole(foot, ns, -4), farHeel: sole(farFoot, fs, -4),
+    toe: sole(foot, ns, LEN.foot, pn), farToe: sole(farFoot, fs, LEN.foot, pf),
+    heel: sole(foot, ns, -4, pn), farHeel: sole(farFoot, fs, -4, pf),
     nearShoulder: nS, nearHip: nH, farShoulder: fS, farHip: fH,
   }
 }
@@ -139,10 +144,12 @@ const POINTS = ['hip', 'waist', 'shoulder', 'elbow', 'hand', 'farElbow', 'farHan
 
 /** Joints placed in the scene per the move's pins. */
 export function place(m: Move, p: Pose, st: Partial<Stage> = {}): Body {
-  const { lift, shift, turn, trunk } = { ...STAGE, ...st }
-  const raw = joints(p, m.front, m.point, trunk)
+  const { lift, shift, turn, trunk, legs } = { ...STAGE, ...st }
+  const raw = joints(p, m.front, m.point, trunk, legs)
   // Turning about the vertical axis squeezes x about the hip; past 90 the figure faces the other way.
-  const k = Math.cos((turn * Math.PI) / 180)
+  // A floor of 0.3 width keeps the body readable mid-turn; it flips sides at 90 like a cartoon turn.
+  const c = Math.cos((turn * Math.PI) / 180)
+  const k = (c < 0 ? -1 : 1) * (0.3 + 0.7 * Math.abs(c))
   const b = {} as Body
   for (const [n, v] of Object.entries(raw)) b[n as keyof Body] = { x: v.x * k, y: v.y }
   const [ax, ay] = m.at ?? [0, 0]
@@ -218,10 +225,11 @@ export function at(m: Move, ms: number): Stage & { pose: Pose } {
   const turnTo = wrap ? nf.turn + Math.round((f.turn - nf.turn) / 360) * 360 : nf.turn
   return {
     pose: blend(from, to, local, f.ease, m.flow ?? 0),
-    lift: lerp(f.lift, nf.lift),
+    lift: loop * (m.climb ?? 0) + lerp(f.lift, nf.lift + (wrap ? m.climb ?? 0 : 0)),
     shift: loop * travel + lerp(f.shift, nf.shift + (wrap ? travel : 0)),
     turn: lerp(f.turn, turnTo),
     trunk: lerp(f.trunk, nf.trunk),
+    legs: lerp(f.legs, nf.legs),
   }
 }
 
