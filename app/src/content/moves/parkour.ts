@@ -118,7 +118,7 @@ const runBox: Prop = { t: 'box', x: faceX(runPlant), w: 50, h: RUN }
 const runStep: Pose = reach([172, 175, 178, 175, 178, 20, 0, 70, 95, 175, 185], { farFoot: [faceX(runPlant) - 6, 8] })
 /** Hands hooked on the top of the run wall at this lift. */
 const grabTop = (p: Pose, lift: number): Pose => {
-  const dy = place({ keys: [p] }, p, lift).hip.y
+  const dy = place({ keys: [p] }, p, { lift }).hip.y
   const top: P2 = [faceX(runPlant) + 4, -RUN - dy]
   return reach(p, { hand: top, farHand: top })
 }

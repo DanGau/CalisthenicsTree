@@ -1,4 +1,4 @@
-import { at, LEN, place, sequence, type Body, type Move, type Pose, type Prop, type Pt } from '../core/figure'
+import { at, LEN, place, sequence, type Body, type Move, type Pose, type Prop, type Pt, type Stage } from '../core/figure'
 
 const f = (n: number) => n.toFixed(1)
 const sub = (a: Pt, b: Pt): Pt => ({ x: a.x - b.x, y: a.y - b.y })
@@ -99,7 +99,8 @@ function prop(p: Prop, front: boolean) {
 
 /** Bounds over every key, so the frame stays still while the figure moves. */
 function frame(m: Move) {
-  const pts = sequence(m).flatMap((k) => Object.values(place(m, k.pose, k.lift)))
+  // A travelling move is framed without its travel: the view follows it.
+  const pts = sequence(m).flatMap((k) => Object.values(place(m, k.pose, m.travel ? { ...k, shift: 0 } : k)))
   const xs = pts.map((p) => p.x)
   const ys = pts.map((p) => p.y)
   const pad = 18
@@ -114,10 +115,19 @@ function frame(m: Move) {
   return `${(cx - w / 2).toFixed(1)} ${y0.toFixed(1)} ${w.toFixed(1)} ${(y1 - y0).toFixed(1)}`
 }
 
-const scene = (m: Move, pose: Pose, lift = 0) =>
-  `${(m.props ?? []).map((p) => prop(p, !!m.front)).join('')}${m.floor === false ? '' : '<line class="floor" x1="-600" y1="0" x2="600" y2="0"/>'}<g class="fig">${body(place(m, pose, lift), !!m.front)}</g>`
+/** Floor line with marks every 40, so travel shows as the ground sliding past. */
+function floor(cam: number) {
+  const marks = Array.from({ length: 31 }, (_, i) => Math.floor(cam / 40) * 40 + (i - 15) * 40)
+  return `<line class="floor" x1="${cam - 600}" y1="0" x2="${cam + 600}" y2="0"/>${marks.map((x) => `<line class="floor mark" x1="${x}" y1="2" x2="${x - 6}" y2="9"/>`).join('')}`
+}
 
-export const still = (m: Move, pose: Pose, lift = 0) => `<svg class="figure" viewBox="${frame(m)}" role="img">${scene(m, pose, lift)}</svg>`
+function scene(m: Move, pose: Pose, st: Partial<Stage> = {}) {
+  const cam = m.travel ? (st.shift ?? 0) : 0
+  const world = `${(m.props ?? []).map((p) => prop(p, !!m.front)).join('')}${m.floor === false ? '' : floor(cam)}<g class="fig">${body(place(m, pose, st), !!m.front)}</g>`
+  return cam ? `<g transform="translate(${f(-cam)} 0)">${world}</g>` : world
+}
+
+export const still = (m: Move, pose: Pose, st: Partial<Stage> = {}) => `<svg class="figure" viewBox="${frame(m)}" role="img">${scene(m, pose, st)}</svg>`
 
 /** Animates every `.figure[data-move]` inside `root` until they leave the page. */
 export function animate(root: HTMLElement, moves: Record<string, Move>) {
@@ -129,8 +139,8 @@ export function animate(root: HTMLElement, moves: Record<string, Move>) {
     if (!svgs.some((s) => s.isConnected)) return
     for (const s of svgs) {
       const m = moves[s.dataset.move!]
-      const { pose, lift } = reduce ? { pose: m.keys[m.keys.length - 1], lift: 0 } : at(m, now - t0)
-      s.innerHTML = scene(m, pose, lift)
+      const st = reduce ? { pose: m.keys[m.keys.length - 1], lift: 0 } : at(m, now - t0)
+      s.innerHTML = scene(m, st.pose, st)
     }
     requestAnimationFrame(tick)
   }

@@ -47,6 +47,8 @@ export type Move = {
   ms?: number
   /** Per key, parallel to `keys`: lift, holds and the timing of the transition to the next key. */
   beats?: Beat[]
+  /** Distance the figure travels each loop (`cycle` gaits, runs, crawls, walks); the view follows it. */
+  travel?: number
   /** Overlap: forearms, shins and head trail the body by this fraction of a transition (0.1-0.25 for swings, throws, flight). */
   flow?: number
 }
@@ -58,11 +60,17 @@ export type Move = {
 export type Ease = 'io' | 'in' | 'out' | 'snap' | 'lin'
 
 /**
- * `lift`: height above the move's pinned placement (flight phases). `hold`: pause on this key in
+ * `lift`: height above the move's pinned placement (flight phases). `shift`: forward offset (travel within
+ * a loop: broad jump, push away from a wall). `turn`: degrees the body has turned about its vertical axis
+ * (0 side view, 90 facing the viewer edge-on, 180 mirrored: rolling over, turning round). `trunk`: trunk length
+ * scale for foreshortening (front view, trunk pointing at the viewer: 0.4-0.8). `hold`: pause on this key in
  * transitions (default: 0.3 at the turnaround keys of a bounce, else 0). `dur`: length of the
  * transition to the next key in transitions (default 1). `ease`: how that transition moves.
  */
-export type Beat = { lift?: number; hold?: number; dur?: number; ease?: Ease }
+export type Stage = { lift: number; shift: number; turn: number; trunk: number }
+export type Beat = Partial<Stage> & { hold?: number; dur?: number; ease?: Ease }
+const STAGE: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1 }
+const stage = (b: Beat): Stage => ({ lift: b.lift ?? 0, shift: b.shift ?? 0, turn: b.turn ?? 0, trunk: b.trunk ?? 1 })
 
 const EASE: Record<Ease, (t: number) => number> = {
   io: (t) => t * t * (3 - 2 * t),
@@ -97,11 +105,11 @@ export function footAngle(shin: number) {
 }
 
 /** Joint positions with the hip at the origin. */
-export function joints(p: Pose, front = false, point = false): Body {
+export function joints(p: Pose, front = false, point = false, trunk = 1): Body {
   const [t, nu, nf, fu, ff, nt, ns, ft, fs, c, h] = full(p)
   const hip = { x: 0, y: 0 }
-  const waist = dir(t, LEN.waist)
-  const shoulder = add(waist, dir(c, LEN.chest))
+  const waist = dir(t, LEN.waist * trunk)
+  const shoulder = add(waist, dir(c, LEN.chest * trunk))
   // Front view: limbs hang from shoulders and hips set apart; side view: they share a joint.
   const side = (deg: number, w: number): Pt => (front ? dir(deg + 90, w) : { x: 0, y: 0 })
   const sh = add(shoulder, dir(c, p[11] ?? 0))
@@ -130,13 +138,18 @@ export function joints(p: Pose, front = false, point = false): Body {
 const POINTS = ['hip', 'waist', 'shoulder', 'elbow', 'hand', 'farElbow', 'farHand', 'knee', 'farKnee', 'foot', 'farFoot', 'toe', 'farToe', 'heel', 'farHeel'] as const
 
 /** Joints placed in the scene per the move's pins. */
-export function place(m: Move, p: Pose, lift = 0): Body {
-  const b = joints(p, m.front, m.point)
+export function place(m: Move, p: Pose, st: Partial<Stage> = {}): Body {
+  const { lift, shift, turn, trunk } = { ...STAGE, ...st }
+  const raw = joints(p, m.front, m.point, trunk)
+  // Turning about the vertical axis squeezes x about the hip; past 90 the figure faces the other way.
+  const k = Math.cos((turn * Math.PI) / 180)
+  const b = {} as Body
+  for (const [n, v] of Object.entries(raw)) b[n as keyof Body] = { x: v.x * k, y: v.y }
   const [ax, ay] = m.at ?? [0, 0]
   const xj = b[m.x ?? 'hip']
   const lowest = Math.max(...POINTS.map((k) => b[k].y), b.head.y + LEN.head)
   const dy = ((m.y ?? 'floor') === 'floor' ? ay - lowest : ay - b[m.y as Joint].y) - lift
-  const dx = ax - xj.x
+  const dx = ax - xj.x + shift
   const out = {} as Body
   for (const [k, v] of Object.entries(b)) out[k as keyof Body] = { x: v.x + dx, y: v.y + dy }
   return out
@@ -155,16 +168,16 @@ export function blend(a: Pose, b: Pose, t: number, ease: Ease = 'io', flow = 0):
   }) as Pose
 }
 
-export type Frame = { pose: Pose; lift: number; hold: number; dur: number; ease: Ease }
+export type Frame = Stage & { pose: Pose; hold: number; dur: number; ease: Ease }
 
 /** The frames one loop plays: bounce runs the keys back in reverse with mirrored timing. */
 export function sequence(m: Move): Frame[] {
   const n = m.keys.length
   const bounce = (m.mode ?? 'bounce') === 'bounce' && n > 1
   const beat = (i: number): Beat => m.beats?.[i] ?? {}
-  const turn = (i: number) => bounce && (i === 0 || i === n - 1)
+  const end = (i: number) => bounce && (i === 0 || i === n - 1)
   const out = m.keys.map((pose, i): Frame => ({
-    pose, lift: beat(i).lift ?? 0, hold: beat(i).hold ?? (turn(i) ? 0.3 : 0), dur: beat(i).dur ?? 1, ease: beat(i).ease ?? 'io',
+    pose, ...stage(beat(i)), hold: beat(i).hold ?? (end(i) ? 0.3 : 0), dur: beat(i).dur ?? 1, ease: beat(i).ease ?? 'io',
   }))
   if (!bounce) return out
   // Going back from key i to i - 1 replays the forward transition i - 1 → i in reverse.
@@ -177,12 +190,16 @@ export function sequence(m: Move): Frame[] {
   return [...out.slice(0, -1), last, ...back]
 }
 
-/** Pose and lift at `ms` into the loop. */
-export function at(m: Move, ms: number): { pose: Pose; lift: number } {
+/** Length of one loop in ms. */
+export const loopMs = (m: Move) => sequence(m).reduce((s, f) => s + (f.hold + f.dur) * (m.ms ?? 900), 0)
+
+/** Pose and stage at `ms` into the move; `travel` accumulates across loops. */
+export function at(m: Move, ms: number): Stage & { pose: Pose } {
   const seq = sequence(m)
-  if (seq.length === 1) return { pose: seq[0].pose, lift: seq[0].lift }
+  if (seq.length === 1) return seq[0]
   const step = m.ms ?? 900
-  const total = seq.reduce((s, f) => s + (f.hold + f.dur) * step, 0)
+  const total = loopMs(m)
+  const loop = Math.floor(Math.max(0, ms) / total)
   let t = Math.max(0, ms) % total
   const span = (i: number) => (seq[i].hold + seq[i].dur) * step
   let i = 0
@@ -190,15 +207,26 @@ export function at(m: Move, ms: number): { pose: Pose; lift: number } {
   const f = seq[i]
   const local = Math.max(0, (t - f.hold * step) / (f.dur * step))
   const from = full(f.pose)
+  const wrap = i === seq.length - 1
   const nf = seq[(i + 1) % seq.length]
   const next = full(nf.pose)
   // Wrapping to the first key: drop whole turns so a roll keeps rolling instead of unwinding.
-  const to = i === seq.length - 1 ? (next.map((v, j) => v + Math.round((from[j] - v) / 360) * 360) as Pose) : next
-  return { pose: blend(from, to, local, f.ease, m.flow ?? 0), lift: f.lift + (nf.lift - f.lift) * EASE[f.ease](local) }
+  const to = wrap ? (next.map((v, j) => v + Math.round((from[j] - v) / 360) * 360) as Pose) : next
+  const e = EASE[f.ease](local)
+  const lerp = (a: number, b: number) => a + (b - a) * e
+  const travel = m.travel ?? 0
+  const turnTo = wrap ? nf.turn + Math.round((f.turn - nf.turn) / 360) * 360 : nf.turn
+  return {
+    pose: blend(from, to, local, f.ease, m.flow ?? 0),
+    lift: lerp(f.lift, nf.lift),
+    shift: loop * travel + lerp(f.shift, nf.shift + (wrap ? travel : 0)),
+    turn: lerp(f.turn, turnTo),
+    trunk: lerp(f.trunk, nf.trunk),
+  }
 }
 
 /** Lowest joint of a pose as placed; a value above 0 means it sinks into the floor. */
-export const sink = (m: Move, p: Pose, lift = 0) => {
-  const b = place(m, p, lift)
+export const sink = (m: Move, p: Pose, st: Partial<Stage> = {}) => {
+  const b = place(m, p, st)
   return Math.max(...POINTS.map((k) => b[k].y), b.head.y + LEN.head)
 }

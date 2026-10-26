@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { at, type Pose } from './figure'
+import { at, place, type Pose } from './figure'
 
 test('a cycle wrapping to its first key keeps turning forward', () => {
   const a: Pose = [180, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -10,4 +10,12 @@ test('a cycle wrapping to its first key keeps turning forward', () => {
   const mid = at(m, 3 * 1170 - 450).pose[0]
   expect(mid).toBeGreaterThan(520)
   expect(mid).toBeLessThan(540)
+})
+
+test('travel accumulates across loops and turn mirrors x', () => {
+  const p: Pose = [180, 0, 0, 0, 0, 0, 0, 0, 0]
+  const m = { keys: [p, p], mode: 'cycle' as const, ms: 100, travel: 50 }
+  expect(at(m, 2 * 200).shift).toBeCloseTo(100)
+  const hand = (turn: number) => place({ keys: [p] }, [180, 90, 90, 0, 0, 0, 0, 0, 0], { turn }).hand.x
+  expect(hand(180)).toBeCloseTo(-hand(0))
 })
