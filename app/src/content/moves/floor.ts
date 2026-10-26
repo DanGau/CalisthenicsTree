@@ -1,6 +1,6 @@
 import { joints, type Beat, type Move, type Pose } from '../../core/figure'
 import { holdBeats, plant, pos, reach, rot } from './legs'
-import { ball, star } from './tumble'
+import { ball, star, travelled } from './tumble'
 
 /** Lowest point of the head and trunk, in hip coordinates. */
 const base = (p: Pose, front = false) => {
@@ -129,7 +129,7 @@ export const MOVES: Record<string, Move> = {
   negativa: { keys: [ginga('far'), negativa], mode: 'cycle', ms: 900, flow: 0.1, beats: [{ hold: 0.2, dur: 0.9, ease: 'in' }, { hold: 0.6, dur: 1.3 }] },
   baby_freeze: { keys: [babyIn, baby(0), baby(4)], ms: 900, beats: [{ hold: 0.4, dur: 1.2 }, { dur: 0.8, ease: 'out' }, { hold: 1.4, dur: 0.8 }] },
   qdr: { keys: [qdr([150, 20, 155, 30]), qdr([-80, -80, -70, -70])], ms: 1100, beats: holdBeats(1.2, 1.2) },
-  au: { keys: [star(180, 30, 25), star(90, 57, 45), star(0, 25, 60), star(-90, 57, 45), star(-180, 30, 25)], mode: 'cycle', front: true, ms: 900, beats: [{ hold: 0.4, dur: 1, ease: 'in' }, { dur: 1, ease: 'lin' }, { dur: 1, ease: 'lin' }, { dur: 1.1, ease: 'out' }, { hold: 0.3, dur: 0.01 }] },
+  au: travelled({ keys: [star(180, 30, 25), star(90, 57, 45), star(0, 25, 60), star(-90, 57, 45), star(-180, 30, 25)], mode: 'cycle', front: true, ms: 900, beats: [{ hold: 0.4, dur: 1, ease: 'in' }, { dur: 1, ease: 'lin' }, { dur: 1, ease: 'lin' }, { dur: 1.1, ease: 'out' }, { hold: 0.3, dur: 0.01 }] }, ['foot', 'hand', 'farHand', 'farFoot', 0]),
   chair_freeze: { keys: [chair(-50), chair(-55)], ms: 1100, beats: holdBeats(1.2, 1.4) },
   back_spin: {
     keys: [spinSit, spinWind, spinTuck(0), spinTuck(14), spinTuck(0), spinTuck(14), spinOpen], mode: 'cycle', ms: 500, flow: 0.2,

@@ -46,13 +46,13 @@ const flight = (lift: number, dur = 0.5): Beat[] => [{ dur: 0.55, ease: 'out' },
 
 /** Where a key sits: a hip shift on the floor, a joint at an x on the floor, or a joint at a point (lifted to it). */
 type Spot = number | { j: Joint; x: number } | { j: Joint; at: P2 }
-const spot = (p: Pose, s: Spot): Beat => {
+const spot = (p: Pose, s: Spot, turn = 0): Beat => {
   if (typeof s === 'number') return { shift: s }
-  const b = place({ keys: [p] }, p)[s.j]
+  const b = place({ keys: [p] }, p, { turn })[s.j]
   return 'x' in s ? { shift: s.x - b.x } : { lift: b.y - s.at[1], shift: s.at[0] - b.x }
 }
 type Key = [Pose, Spot, Beat?]
-const keyed = (ks: Key[]): { keys: Pose[]; beats: Beat[] } => ({ keys: ks.map((k) => k[0]), beats: ks.map(([p, s, b]) => ({ ...b, ...spot(p, s) })) })
+const keyed = (ks: Key[]): { keys: Pose[]; beats: Beat[] } => ({ keys: ks.map((k) => k[0]), beats: ks.map(([p, s, b]) => ({ ...b, ...spot(p, s, b?.turn) })) })
 
 /** Arms swinging opposite the legs, feet h ahead and behind. */
 const walk = (s: 1 | -1, h: number): Pose => plant([178, 8 - 22 * s, 14 - 14 * s, -8 + 22 * s, -10 + 14 * s, 0, 0, 0, 0, 178, 178], { foot: s * h, farFoot: -s * h }, 79)
@@ -134,7 +134,6 @@ const speed = overAndBack([
 // Wall catch and climb: hands hook the top of a 150 wall whose face is at x 30.
 const W = 150
 const wall: Prop = { t: 'box', x: 30, w: 60, h: W }
-const onWall: Pick<Move, 'x' | 'y' | 'at' | 'props'> = { x: 'hand', y: 'hand', at: [36, -W], props: [wall] }
 /** Hands at `hand` from the hip; feet pressed to the wall face (6 left of the hand) at depth `fy` below the hip. */
 const onFace = (t: number, hand: P2, fy: number, legs: [number, number, number, number] = [0, 0, 0, 0]): Pose => {
   const p = reach([t, 0, 0, 0, 0, ...legs, t, t + 10], { hand, farHand: hand })
@@ -171,6 +170,15 @@ const grabTop = (p: Pose, lift: number): Pose => {
   return reach(p, { hand: top, farHand: top })
 }
 const runHang: Pose = reach([176, 0, 0, 0, 0, 6, -2, 6, -2, 176, 182], { hand: [8, -94], farHand: [8, -94] })
+
+/** Crouched on the wall top, hands on its edge, about to lower back down the face. */
+const edgeCrouch: Pose = plant([140, 0, 0, 0, 0, 0, 0, 0, 0, 130, 150], { hand: 30, farHand: 30, foot: 0, farFoot: 0 }, 40)
+const GRIP: Spot = { j: 'hand', at: [36, -W] }
+const climb = keyed([
+  [hang, GRIP, { hold: 0.5, dur: 0.6, ease: 'snap' }], [pull, GRIP, { dur: 0.8, ease: 'out' }], [press, GRIP, { dur: 0.8 }],
+  [stand, { j: 'foot', at: [60, -W - 5] }, { hold: 0.4, dur: 0.6 }], [stand, { j: 'foot', at: [60, -W - 5] }, { turn: 180, dur: 0.8 }],
+  [edgeCrouch, { j: 'hand', at: [34, -W] }, { turn: 180, hold: 0.2, dur: 1.2 }],
+])
 
 const flipPlant: Pose = [195, 160, 160, 160, 160, 55, 95, 0, 0, 205, 215]
 
@@ -229,7 +237,7 @@ export const MOVES: Record<string, Move> = {
     beats: [{ hold: 0.3, dur: 1 }, { hold: 0.12, dur: 0.45, ease: 'snap' }, ...flight(85, 0.45), { lift: BOX, hold: 0.1, dur: 1, ease: 'out' }, { lift: BOX, hold: 0.4, dur: 0.9 }, { dur: 0.9 }],
   },
   speed_vault: { ...speed, ms: 480, flow: 0.15 },
-  climb_up: { keys: [hang, pull, press], ...onWall, ms: 800, beats: [{ hold: 0.5, dur: 0.6, ease: 'snap' }, { dur: 0.8, ease: 'out' }, { hold: 0.6 }] },
+  climb_up: { ...climb, mode: 'cycle', props: [wall], ms: 800 },
   depth_jump: { ...depth, mode: 'cycle', props: [dropBox], ms: 600, flow: 0.12 },
   kong: { ...kong, ms: 500, flow: 0.15 },
   tic_tac: { ...ticTac, mode: 'cycle', props: [{ t: 'wall', x: faceX(ticPlant) }], ms: 550, flow: 0.15 },

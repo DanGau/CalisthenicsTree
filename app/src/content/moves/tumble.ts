@@ -117,45 +117,45 @@ export const MOVES: Record<string, Move> = {
   back_roll: travelled({ keys: backRoll, mode: 'cycle', ms: 650, beats: roll(2, 0.8), flow: 0.1 }, ['foot', -30, -35, -30, 'foot', 0]),
   shoulder_roll: travelled({ keys: [reachUp, crouch(118, 44), shoulderBall(15), shoulderBall(-90), shoulderBall(-170), squat(-205, -270), rot(reachUp, -360)], mode: 'cycle', ms: 600, beats: roll(3), flow: 0.1 }, ['foot', 'hand', 40, 35, 30, 'foot', 0]),
   cartwheel: travelled({ keys: cart(), mode: 'cycle', front: true, ms: 650, beats: wheel }, ['foot', 'hand', 'farHand', 'farFoot', 0]),
-  back_ext_roll: {
+  back_ext_roll: travelled({
     keys: [stand, squat(165, 100), ears(255), palms(ears(335), -6, 1), handsBack, snap, absorb(360), rot(stand, 360)], mode: 'cycle', ms: 600,
     beats: [{ hold: 0.4, dur: 1 }, { dur: 0.7, ease: 'in' }, { dur: 0.6, ease: 'lin' }, { dur: 0.5, ease: 'snap' }, { hold: 0.15, dur: 0.5, ease: 'in' }, { lift: 10, dur: 0.4, ease: 'in' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  },
-  dive_roll: {
+  }, ['foot', -30, -35, 'hand', -20, -20, 'foot', 0]),
+  dive_roll: travelled({
     keys: [reachUp, load, [50, 40, 40, 40, 40, -130, -130, -130, -130, 45, 40], palms(ball(15), 8), ball(-90), ball(-170), squat(-205, -270), rot(reachUp, -360)], mode: 'cycle', ms: 550, flow: 0.15,
     beats: [{ hold: 0.4, dur: 1 }, { hold: 0.1, dur: 0.6, ease: 'out' }, { lift: 45, dur: 0.6, ease: 'in' }, { dur: 0.6, ease: 'lin' }, { dur: 0.6, ease: 'lin' }, { dur: 0.7, ease: 'out' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  },
-  roundoff: {
+  }, ['foot', 45, 30, 40, 35, 30, 'foot', 0]),
+  roundoff: travelled({
     keys: [star(180, 20, 12), star(90, 57, 40), star(0, 18, 10), star(-60, 25, 0), star(-180, 20, 0)], mode: 'cycle', front: true, ms: 550,
     beats: [{ hold: 0.4, dur: 1, ease: 'in' }, { dur: 0.9, ease: 'lin' }, { dur: 0.6, ease: 'snap' }, { lift: 25, dur: 0.6, ease: 'in' }, { hold: 0.4, dur: 0.01 }],
-  },
+  }, ['foot', 'hand', 'farHand', 20, 0]),
   kip_up: {
     keys: [lie, rockBack, kick, kipFly, kipLand, squat(160), stand, squat(165), sitDown], mode: 'cycle', ms: 550, flow: 0.12,
     beats: [{ hold: 0.4, dur: 1.1 }, { hold: 0.15, dur: 0.35, ease: 'snap' }, { dur: 0.45, ease: 'out' }, { lift: 32, dur: 0.45, ease: 'in' }, { dur: 0.5, ease: 'out' }, { dur: 1, ease: 'out' }, { hold: 0.8, dur: 1 }, { dur: 0.9, ease: 'in' }, { dur: 1, ease: 'out' }],
   },
   one_hand_cart: travelled({ keys: cart(true), mode: 'cycle', front: true, ms: 650, beats: wheel }, ['foot', 'farHand', 'farHand', 'farFoot', 0]),
-  hs_roll: {
+  hs_roll: travelled({
     keys: [reachUp, lungeDown, hs, hsBend, palms(ball(-40), 4, 1), ball(-90), ball(-170), squat(-205, -270), rot(reachUp, -360)], mode: 'cycle', ms: 650,
     beats: [{ hold: 0.3, dur: 0.9 }, { dur: 0.8, ease: 'out' }, { hold: 1, dur: 1.4 }, { dur: 0.7, ease: 'in' }, { dur: 0.6, ease: 'lin' }, { dur: 0.6, ease: 'lin' }, { dur: 0.6, ease: 'out' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  },
-  front_walkover: { keys: [reachUp, lungeDown, splitFwd, bridgeFwd, rot(reachUp, -360)], mode: 'cycle', ms: 750, beats: [{ hold: 0.4, dur: 1 }, { dur: 0.9, ease: 'out' }, { hold: 0.1, dur: 1.1 }, { hold: 0.2, dur: 1.3 }, { hold: 0.3, dur: 0.01 }] },
-  back_walkover: { keys: [reachUp, leanBack, bridgeBack, splitBack, rot(reachUp, 360)], mode: 'cycle', ms: 750, beats: [{ hold: 0.4, dur: 1.2 }, { dur: 1.1, ease: 'in' }, { hold: 0.2, dur: 0.9, ease: 'out' }, { dur: 1.1 }, { hold: 0.3, dur: 0.01 }] },
-  aerial: {
+  }, ['foot', 'hand', 'hand', 'hand', 35, 30, 30, 'foot', 0]),
+  front_walkover: travelled({ keys: [reachUp, lungeDown, splitFwd, bridgeFwd, rot(reachUp, -360)], mode: 'cycle', ms: 750, beats: [{ hold: 0.4, dur: 1 }, { dur: 0.9, ease: 'out' }, { hold: 0.1, dur: 1.1 }, { hold: 0.2, dur: 1.3 }, { hold: 0.3, dur: 0.01 }] }, ['foot', 'hand', 'hand', 'foot', 0]),
+  back_walkover: travelled({ keys: [reachUp, leanBack, bridgeBack, splitBack, rot(reachUp, 360)], mode: 'cycle', ms: 750, beats: [{ hold: 0.4, dur: 1.2 }, { dur: 1.1, ease: 'in' }, { hold: 0.2, dur: 0.9, ease: 'out' }, { dur: 1.1 }, { hold: 0.3, dur: 0.01 }] }, ['foot', 'foot', 'hand', 'foot', 0]),
+  aerial: travelled({
     keys: [star(180, 160, 4), star(170, 170, 14), star(90, 150, 50), star(0, 150, 50), star(-90, 150, 45), star(-180, 160, 8), star(-180, 160, 4)], mode: 'cycle', front: true, ms: 500, flow: 0.15,
     beats: [{ hold: 0.3, dur: 1 }, { dur: 0.6, ease: 'out' }, { lift: 40, dur: 0.6, ease: 'lin' }, { lift: 55, dur: 0.6, ease: 'lin' }, { lift: 35, dur: 0.6, ease: 'in' }, { dur: 0.8, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  },
-  front_handspring: {
+  }, ['foot', 30, 40, 40, 30, 'farFoot', 0]),
+  front_handspring: travelled({
     keys: [reachUp, lunge, reachDown, hurdle, hs, flyFwd, landArch, archAbsorb, rot(reachUp, -360)], mode: 'cycle', ms: 550, flow: 0.15,
     beats: [{ hold: 0.4, dur: 0.8 }, { dur: 0.4, ease: 'in' }, { dur: 0.35, ease: 'lin' }, { dur: 0.4, ease: 'in' }, { dur: 0.45, ease: 'snap' }, { lift: 62, dur: 0.5, ease: 'in' }, { dur: 0.4, ease: 'out' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  },
-  back_handspring: {
+  }, [30, 'foot', 'foot', 'hand', 50, 40, 'foot', 'foot', 0]),
+  back_handspring: travelled({
     keys: [reachUp, sit, throwBack, flyBack, handsBack, snap, absorb(360), rot(reachUp, 360)], mode: 'cycle', ms: 550, flow: 0.15,
     beats: [{ hold: 0.4, dur: 0.9 }, { hold: 0.05, dur: 0.45, ease: 'snap' }, { dur: 0.45, ease: 'out' }, { lift: 60, dur: 0.45, ease: 'in' }, { dur: 0.35, ease: 'snap' }, { lift: 14, dur: 0.4, ease: 'in' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  },
+  }, ['foot', 'foot', -40, -40, 'hand', -30, 'foot', 0]),
   butterfly_kick: {
     keys: [bfRise, bfWind, bfTake, bfAir1, bfAir2, bfLand], mode: 'cycle', ms: 500, flow: 0.2,
     beats: [{ hold: 0.3, dur: 1 }, { hold: 0.05, dur: 0.6, ease: 'snap' }, { dur: 0.45, ease: 'out' }, { lift: 62, dur: 0.45, ease: 'lin' }, { lift: 55, dur: 0.45, ease: 'in' }, { dur: 1, ease: 'out' }],
   },
-  back_tuck: { keys: [reachUp, load, takeoff, ball(290), ball(410), opening(360), absorb(360), rot(reachUp, 360)], mode: 'cycle', ms: 450, flow: 0.15, beats: salto },
-  front_tuck: { keys: [reachUp, load, takeoff, ball(70), ball(-50), opening(-360), absorb(-360), rot(reachUp, -360)], mode: 'cycle', ms: 450, flow: 0.15, beats: salto },
+  back_tuck: travelled({ keys: [reachUp, load, takeoff, ball(290), ball(410), opening(360), absorb(360), rot(reachUp, 360)], mode: 'cycle', ms: 450, flow: 0.15, beats: salto }, ['foot', 'foot', -10, -10, -10, -5, 'foot', 0]),
+  front_tuck: travelled({ keys: [reachUp, load, takeoff, ball(70), ball(-50), opening(-360), absorb(-360), rot(reachUp, -360)], mode: 'cycle', ms: 450, flow: 0.15, beats: salto }, ['foot', 'foot', 10, 10, 10, 5, 'foot', 0]),
 }
