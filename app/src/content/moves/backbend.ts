@@ -1,47 +1,139 @@
-import type { Move, Pose } from '../../core/figure'
+import { joints, type Move, type Pose } from '../../core/figure'
+import { H, KNEEL, put, where } from './mobility'
 
-const stand: Pose = [180, 0, 0, 0, 0, 0, 0, 0, 0]
-const armsUp: Pose = [180, 180, 180, 180, 180, 0, 0, 0, 0]
-const kneel: Pose = [180, -10, 160, -10, 160, 0, -105, 0, -105]
-// Full bridge: hands (50·cos67 + 54·cos30) and feet (38·cos40 + 38·cos10) land at the same depth.
-const bridge: Pose = [-67, -30, -30, -30, -30, 40, -10, 40, -10]
-const lying: Pose = [-90, -150, 23, -150, 23, 135, 14, 135, 14]
-const arch: Pose = [-150, -135, -135, -135, -135, 25, -15, 25, -15]
-const kneelArch: Pose = [-150, -140, -140, -140, -140, -15, -105, -15, -105]
-const kneelBridge: Pose = [-70, -70, -70, -70, -70, -20, -105, -20, -105]
+type Legs = [number, number, number, number]
+const LEGS0: Legs = [0, 0, 0, 0]
+
+/**
+ * Bridge with hands at world x 0 and feet at x `feet`: the spine shape (t pelvis, c chest, head)
+ * and the shoulder's x set the hip; arms reach the floor straight, knees bend to the feet.
+ */
+function bridge(t: number, c: number, head: number, sx: number, feet = 66, far?: Legs): Pose {
+  const p: Pose = [t, 0, 0, 0, 0, ...(far ?? LEGS0), c, head]
+  const s = joints(p).shoulder
+  const hip: [number, number] = [sx - s.x, H.hand + Math.sqrt(53.8 ** 2 - sx ** 2) + s.y]
+  const to = far ? { foot: [feet, H.ankle] as [number, number] } : { foot: [feet, H.ankle] as [number, number], farFoot: [feet, H.ankle] as [number, number] }
+  return put(p, hip, { ...to, hand: [0, H.hand], farHand: [0, H.hand] }, { hand: 1, farHand: 1 })
+}
+const full = bridge(-100, -55, -10, -4)
+// Supine, hands planted by the ears (elbows up), heels by the seat at x 78.
+const lying = put([-90, 0, 0, 0, 0, 0, 0, 0, 0, -90, -90], [61, H.lie], { hand: [0, H.hand], farHand: [0, H.hand], foot: [78, H.ankle], farFoot: [78, H.ankle] })
+
+const armsUp: Pose = [-180, -180, -180, -180, -180, 0, 0, 0, 0]
+
+// Reverse tabletop: hands at x 0 under the shoulders, shins vertical.
+const tableSit = put([-150, 0, 0, 0, 0, 0, 0, 0, 0, -150, -160], [30, 10], { hand: [0, H.hand], farHand: [0, H.hand], foot: [82, H.ankle], farFoot: [82, H.ankle] })
+const tableTop = put([-97, 0, 0, 0, 0, 0, 0, 0, 0, -97, -60], [45.6, 52], { hand: [0, H.hand], farHand: [0, H.hand], foot: [82, H.ankle], farFoot: [82, H.ankle] })
+
+// Elevated bridge: hands on a box top (30) at x -6, shoulders pushed over them.
+const BOX = 30
+const boxBridge = (t: number, c: number, head: number, hip: [number, number]): Pose =>
+  put([t, 0, 0, 0, 0, 0, 0, 0, 0, c, head], hip, { hand: [-6, BOX + H.hand], farHand: [-6, BOX + H.hand], foot: [55, H.ankle], farFoot: [55, H.ankle] }, { hand: 1, farHand: 1 })
+
+// Camel: knees down at x 0; hips drive forward, chest lifts, hands find the heels.
+const camel = (thigh: number, t: number, c: number, head: number, hands: [number, number]): Pose => {
+  const hip: [number, number] = [-Math.sin((thigh * Math.PI) / 180) * 38, H.knee + Math.cos((thigh * Math.PI) / 180) * 38]
+  return put([t, 0, 0, 0, 0, thigh, KNEEL, thigh, KNEEL, c, head], hip, { hand: hands, farHand: hands }, { hand: 1, farHand: 1 })
+}
+const HEEL: [number, number] = [-37, 13]
+
+// Bench opener: knees at x 0, elbows fixed on the bench edge, hands behind the head; the chest sinks.
+const BENCH = { x: 52, h: 46 }
+const opener = (thigh: number, t: number, c: number, head: number): Pose => {
+  const hip: [number, number] = [-Math.sin((thigh * Math.PI) / 180) * 38, H.knee + Math.cos((thigh * Math.PI) / 180) * 38]
+  const p: Pose = [t, 0, -85, 0, -85, thigh, KNEEL, thigh, KNEEL, c, head]
+  const [sx, sy] = where(p, hip, 'shoulder')
+  const u = (Math.atan2(BENCH.x + 8 - sx, sy - BENCH.h - 5) * 180) / Math.PI
+  p[1] = p[3] = u
+  return p
+}
+
+// Wall walk-down: wall face at x 0, feet at x 72; hands walk down the wall to the floor.
+const wallKey = (t: number, c: number, head: number, hip: [number, number], hand: number | null): Pose => {
+  const p: Pose = [t, -150, -150, -150, -150, 0, 0, 0, 0, c, head]
+  const to = { foot: [72, H.ankle] as [number, number], farFoot: [72, H.ankle] as [number, number] }
+  return hand === null ? put(p, hip, to) : put(p, hip, { ...to, hand: [4, hand], farHand: [4, hand] }, { hand: 1, farHand: 1 })
+}
+
+// Kneeling drop-back: knees at x 0; hands land by the feet.
+const kneelKey = (thigh: number, t: number, c: number, head: number, arms: number | [number, number]): Pose => {
+  const hip: [number, number] = [-Math.sin((thigh * Math.PI) / 180) * 38, H.knee + Math.cos((thigh * Math.PI) / 180) * 38]
+  const p: Pose = typeof arms === 'number' ? [t, arms, arms, arms, arms, thigh, KNEEL, thigh, KNEEL, c, head] : [t, -90, -90, -90, -90, thigh, KNEEL, thigh, KNEEL, c, head]
+  return typeof arms === 'number' ? put(p, hip, {}) : put(p, hip, { hand: arms, farHand: arms }, { hand: 1, farHand: 1 })
+}
+
+// Standing to bridge and back, feet at x 66: hips push forward over the feet, arms reach back overhead.
+const archFree = (t: number, c: number, head: number, arms: number, hip: [number, number]): Pose =>
+  put([t, arms, arms, arms, arms, 0, 0, 0, 0, c, head], hip, { foot: [66, H.ankle], farFoot: [66, H.ankle] })
+
+/** Far arm straight up off the floor. */
+const farUp = (p: Pose): Pose => [p[0], p[1], p[2], -180, -180, ...p.slice(5)] as Pose
 
 export const MOVES: Record<string, Move> = {
-  cobra: { keys: [[92, -110, 0, -110, 0, -86, -86, -86, -86], [128, -40, 20, -40, 20, -86, -86, -86, -86]], x: 'hip', ms: 1300 },
-  table: { keys: [[-140, -45, -45, -45, -45, 135, 45, 135, 45], [-110, 0, 0, 0, 0, 90, 0, 90, 0]], x: 'foot', ms: 1100 },
+  // Lumbar then thoracic extension; hips stay down, neck long.
+  cobra: {
+    keys: [
+      put([96, 0, 0, 0, 0, -92, -92, -92, -92, 112, 112], [0, H.lie], { hand: [38, H.hand], farHand: [38, H.hand] }),
+      put([118, 0, 0, 0, 0, -92, -92, -92, -92, 160, 165], [0, H.lie], { hand: [38, H.hand], farHand: [38, H.hand] }),
+    ],
+    x: 'hip', ms: 1400,
+  },
+  table: { keys: [tableSit, tableTop], x: 'hand', ms: 1200 },
   bridge_box: {
-    keys: [[-90, -140, -105, -140, -105, 135, 30, 135, 30], [-70, -70, -70, -70, -70, 30, -5, 30, -5]],
-    x: 'foot', at: [40, 0], props: [{ t: 'box', x: -105, w: 35, h: 35 }], ms: 1100,
+    keys: [boxBridge(-135, -95, -60, [24, 50]), boxBridge(-150, -95, -40, [20, 62])],
+    x: 'hand', at: [-6, 0], props: [{ t: 'box', x: -40, w: 40, h: BOX }], ms: 1200,
   },
-  camel: { keys: [kneel, [-110, 0, 0, 0, 0, -15, -105, -15, -105]], x: 'knee', ms: 1400 },
-  wall_angels: { keys: [[180, -90, -180, 90, 180, 0, 0, 0, 0], [180, -160, -170, 160, 170, 0, 0, 0, 0]], front: true, ms: 1200 },
-  full_bridge: { keys: [lying, bridge], x: 'foot', at: [40, 0], ms: 1100 },
+  camel: {
+    keys: [camel(0, 180, 180, 180, [-10, 62]), camel(-22, 200, 265, 300, HEEL)],
+    x: 'knee', ms: 1500,
+  },
+  wall_angels: { keys: [[180, 90, 180, -90, -180, 0, 0, 0, 0], [180, 155, 170, -155, -170, 0, 0, 0, 0]], front: true, ms: 1300 },
+  full_bridge: { keys: [lying, bridge(-100, -55, -10, 0, 78)], x: 'hand', ms: 1200 },
   bench_opener: {
-    keys: [[90, 150, -60, 150, -60, 0, -105, 0, -105], [75, 160, -50, 160, -50, -25, -105, -25, -105]],
-    x: 'knee', at: [0, 0], props: [{ t: 'box', x: 45, w: 40, h: 48 }], ms: 1500,
+    keys: [opener(10, 98, 100, 90), opener(18, 96, 68, 55)],
+    x: 'knee', props: [{ t: 'box', x: BENCH.x, w: 40, h: BENCH.h }], ms: 1500,
   },
-  one_leg_bridge: { keys: [bridge, [-70, -15, -15, -15, -15, 40, -10, 170, 170]], x: 'foot', ms: 1100 },
+  // Shift over the hands first, then the free leg points up.
+  one_leg_bridge: { keys: [full, bridge(-100, -50, -10, -8, 66, [0, 0, 165, 165])], x: 'hand', ms: 1200 },
   bridge_walk: {
-    keys: [armsUp, [-160, -150, -150, -150, -150, 15, -15, 15, -15], [-120, -90, -90, -90, -90, 30, -15, 30, -15], bridge],
-    x: 'foot', at: [60, 0], props: [{ t: 'wall', x: -58 }], ms: 1000,
+    keys: [
+      wallKey(184, 196, 205, [76, 80], null),
+      wallKey(205, 245, 260, [80, 74], 130),
+      wallKey(225, 285, 310, [80, 68], 60),
+      bridge(260, 305, 350, 8, 72),
+    ],
+    x: 'foot', at: [72, 0], props: [{ t: 'wall', x: -12 }], ms: 1100,
   },
-  straight_bridge: { keys: [bridge, [-75, 0, 0, 0, 0, 28, 28, 28, 28]], x: 'hand', ms: 1300 },
-  kneel_drop: { keys: [[180, 180, 180, 180, 180, 0, -105, 0, -105], kneelArch, kneelBridge], x: 'knee', ms: 900 },
-  stand_to_bridge: { keys: [armsUp, arch, bridge], x: 'foot', ms: 900 },
+  // Chest pushes through until the arms are vertical; legs straighten.
+  straight_bridge: { keys: [full, bridge(-115, -25, 0, 0)], x: 'hand', ms: 1400 },
+  kneel_drop: {
+    keys: [kneelKey(0, -180, -180, -180, -180), kneelKey(-22, -165, -120, -95, -120), kneelKey(-35, -150, -65, -20, [-36, H.hand])],
+    x: 'knee', ms: 1000,
+  },
+  stand_to_bridge: {
+    keys: [armsUp, archFree(-168, -140, -120, -140, [74, 79]), full],
+    x: 'foot', at: [66, 0], ms: 1000,
+  },
   bridge_stand: {
-    keys: [bridge, [-88, 0, 0, 0, 0, 60, -30, 60, -30], [-170, -120, -120, -120, -120, 20, -20, 20, -20], stand],
-    x: 'foot', ms: 900,
+    keys: [full, bridge(-112, -75, -40, 12), archFree(-160, -140, -140, -120, [72, 77]), armsUp],
+    x: 'foot', at: [66, 0], ms: 1000,
   },
+  // The far hand swings up and over as the hips turn toward the floor.
   bridge_rotation: {
-    keys: [bridge, [-90, 0, 0, 180, 180, 20, -5, 20, -5], [-109, 0, 0, 0, 0, 0, 105, 0, 105]],
-    x: 'hip', ms: 1100,
+    keys: [
+      full,
+      farUp(bridge(-112, -120, -130, -2)),
+      put([-120, 0, 0, -290, -300, 0, 0, 0, 0, -165, -175], [34, 22], { hand: [0, H.hand], farHand: [40, H.hand], foot: [66, H.ankle], farFoot: [66, H.ankle] }, { hand: 1, farHand: 1 }),
+    ],
+    x: 'hand', ms: 1200,
   },
+  // Kick from the bridge through handstand and back down.
   tick_tock: {
-    keys: [bridge, [0, 0, 0, 0, 0, 180, 180, 180, 180], [67, 30, 30, 30, 30, 320, 370, 320, 370]],
-    x: 'hand', ms: 900,
+    keys: [
+      full,
+      put([-50, 0, 0, 0, 0, 30, 10, 170, 170, -20, -5], [25, 95], { hand: [0, H.hand], farHand: [0, H.hand], foot: [66, H.ankle] }, { hand: 1, farHand: 1 }),
+      [0, 0, 0, 0, 0, 180, 180, 180, 180, 0, 10],
+    ],
+    x: 'hand', ms: 1000,
   },
 }

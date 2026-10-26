@@ -4,13 +4,16 @@ Each skill has a looping cartoon in `app/src/content/moves/<branch>.ts`, keyed b
 
 ## Pose
 
-`Pose` = 9 absolute angles in degrees: `[torso, nearUpper, nearFore, farUpper, farFore, nearThigh, nearShin, farThigh, farShin]`.
+`Pose` = 9 to 11 absolute angles in degrees: `[torso, nearUpper, nearFore, farUpper, farFore, nearThigh, nearShin, farThigh, farShin, chest?, head?]`.
+
+- `torso` is pelvis→waist; `chest` is waist→shoulders (default = torso), so the spine can hollow, arch or round. `head` (default = chest) nods or looks up. Use them: a hollow body, a cat-cow, a bridge or a dragon flag reads only with a bent spine.
 
 - 0 = straight down, 90 = forward (+x, the way the figure faces, to the right), 180 = up, -90 = back.
 - Each angle is the direction of that segment from its parent joint: torso hip→shoulder (180 = upright), upper arm shoulder→elbow, forearm elbow→hand, thigh hip→knee, shin knee→ankle.
 - Angles never wrap: 0 → 360 animates a full turn. Use this for rolls and flips.
-- Lengths: torso 50, neck to head centre 17, head radius 10, upper arm 28, forearm 26, thigh 38, shin 38. Arm 54, leg 76.
-- Feet point at shin + 90 (side view). y grows downward; the floor is y = 0.
+- Body: median US man, about 7 heads tall. Lengths (`LEN`): waist 22 + chest 24 = trunk 46, neck to head centre 18, head radius 11, upper arm 29, forearm 25 (hand = palm), thigh 38, shin 38, sole 5 below the ankle, foot 13. Arm 54, leg 76 + sole.
+- Feet are automatic (`footAngle`): flat when the shin is near vertical, square to the shin in a plank, pointed when inverted. y grows downward; the floor is y = 0.
+- Drawn as a solid cartoon: tapered limbs, shaped chest and belly, blue shorts mark the pelvis so hip hinge vs spine bend is visible.
 
 ## Move
 
@@ -23,5 +26,6 @@ Each skill has a looping cartoon in `app/src/content/moves/<branch>.ts`, keyed b
 ## Rules
 
 - Tests require one move per skill and nothing sinking below the floor.
-- Use geometry: e.g. a push-up plank at 25° puts the shoulders 54 up, exactly one straight arm.
+- Use geometry, not guesses: contacts (hands on floor or bar, feet on box) must touch. Helpers `leg`/`arm` (IK) in `moves/legs.ts`.
+- Show the biomechanics that the cues name: scapula and spine position, hip hinge vs squat, knee tracking, lockout, lean.
 - Check with `MSYS_NO_PATHCONV=1 npm run -s eye -- '#/moves/<branch>' <name>` and look at the screenshot. The review page shows the live loop then each key.

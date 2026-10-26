@@ -1,4 +1,5 @@
-import type { Move, Pose } from '../../core/figure'
+import { place, type Move, type Pose } from '../../core/figure'
+import { solve } from './frontlever'
 
 // Rings side view. Back lever: face down, torso 90, legs -90, arms just behind vertical.
 const rings = { t: 'rings', x: 0, y: -210 } as const
@@ -15,9 +16,13 @@ const bl = (thighN: number, shinN: number, thighF = thighN, shinF = shinN): Pose
 // Hips a touch low on entry, then level.
 const low = (p: Pose): Pose => [p[0] + 8, p[1], p[2], p[3], p[4], p[5] + 8, p[6] + 8, p[7] + 8, p[8] + 8]
 
+// Reverse plank: arms straight down, body one line solved so hands and heels both touch; chest lifts and head drops back.
+const rpLine = (t: number): Pose => [t, 0, 0, 0, 0, t + 180, t + 180, t + 180, t + 180]
+const rpT = solve(-140, -95, (t) => place({ keys: [] }, rpLine(t)).heel.y - place({ keys: [] }, rpLine(t)).hand.y)
+const rp = (open: number): Pose => { const p = rpLine(rpT); p[9] = rpT - open; p[10] = rpT - open * 2; return p }
+
 export const MOVES: Record<string, Move> = {
-  // Plank at 25° puts the shoulders 54 up: one straight arm under them.
-  reverse_plank: { keys: [[-110, 0, 0, 0, 0, 70, 70, 70, 70], [-115, 0, 0, 0, 0, 65, 65, 65, 65]], x: 'hand', ms: 1300 },
+  reverse_plank: { keys: [rp(0), rp(10)], x: 'hand', ms: 1300 },
   inverted_hang: hangOn([hang, tuckHang, invTuck, invStraight]),
   skin_cat: hangOn([hang, tuckHang, invTuck, german], 1300),
   german_hang: hangOn([[530, 180, 180, 180, 180, 338, 338, 338, 338], german], 1500),

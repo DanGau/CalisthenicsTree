@@ -1,4 +1,4 @@
-import { joints, type Joint, type Move, type Pose, type Pt } from '../../core/figure'
+import { joints, LEN, type Joint, type Move, type Pose, type Pt } from '../../core/figure'
 
 const D = 180 / Math.PI
 const wrap = (v: number) => ((((v + 180) % 360) + 360) % 360) - 180
@@ -13,9 +13,9 @@ export function ik(dx: number, dy: number, a: number, b: number, k: number): [nu
   return [u, l]
 }
 /** Thigh and shin angles reaching (dx, dy) from the hip; k = 1 bends the knee forward. */
-export const leg = (dx: number, dy: number, k = 1) => ik(dx, dy, 38, 38, k)
+export const leg = (dx: number, dy: number, k = 1) => ik(dx, dy, LEN.thigh, LEN.shin, k)
 /** Upper and forearm angles reaching (dx, dy) from the shoulder; k = -1 bends the elbow back. */
-export const arm = (dx: number, dy: number, k = -1) => ik(dx, dy, 28, 26, k)
+export const arm = (dx: number, dy: number, k = -1) => ik(dx, dy, LEN.upper, LEN.fore, k)
 
 type Limb = 'hand' | 'farHand' | 'foot' | 'farFoot'
 const SLOT: Record<Limb, number> = { hand: 1, farHand: 3, foot: 5, farFoot: 7 }
@@ -25,8 +25,8 @@ function root(p: Pose, l: Limb, front: boolean): Pt {
   const b = joints(p, front)
   const i = SLOT[l]
   const mid = b[l === 'hand' ? 'elbow' : l === 'farHand' ? 'farElbow' : l === 'foot' ? 'knee' : 'farKnee']
-  const len = i < 5 ? 28 : 38
-  return { x: mid.x - Math.sin(p[i] / D) * len, y: mid.y - Math.cos(p[i] / D) * len }
+  const len = i < 5 ? LEN.upper : LEN.thigh
+  return { x: mid.x - Math.sin(p[i]! / D) * len, y: mid.y - Math.cos(p[i]! / D) * len }
 }
 
 /** Re-aims limbs so each end lands at a point given in hip coordinates. */
@@ -42,6 +42,24 @@ export function reach(p: Pose, to: Partial<Record<Limb, [number, number]>>, opts
   return out
 }
 
+/**
+ * Like `reach`, with every limb end on the line y = `floor` (hip coordinates) at the given x:
+ * hands rest the palm on it, feet rest the lowest point of the sole.
+ */
+export function plant(p: Pose, to: Partial<Record<Limb, number>>, floor: number, opts: { front?: boolean; k?: Partial<Record<Limb, number>> } = {}): Pose {
+  const at = (drop: Partial<Record<Limb, number>>) =>
+    Object.fromEntries(Object.entries(to).map(([l, x]) => [l, [x, floor - (drop[l as Limb] ?? 0)]])) as Partial<Record<Limb, [number, number]>>
+  let out = reach(p, at({}), opts)
+  for (let i = 0; i < 4; i++) {
+    const b = joints(out, !!opts.front)
+    const drop: Partial<Record<Limb, number>> = {}
+    if (to.foot !== undefined) drop.foot = Math.max(b.toe.y, b.heel.y) - b.foot.y
+    if (to.farFoot !== undefined) drop.farFoot = Math.max(b.farToe.y, b.farHeel.y) - b.farFoot.y
+    out = reach(p, at(drop), opts)
+  }
+  return out
+}
+
 /** Where a joint sits in hip coordinates. */
 export const pos = (p: Pose, j: Joint | 'farKnee', front = false): [number, number] => {
   const b = joints(p, front)
@@ -49,72 +67,81 @@ export const pos = (p: Pose, j: Joint | 'farKnee', front = false): [number, numb
 }
 
 /** Adds r degrees to every angle (rotates the whole figure). */
-export const rot = (p: Pose, r: number) => p.map((v) => v + r) as Pose
+export const rot = (p: Pose, r: number) => p.map((v) => v! + r) as Pose
 
-const armsFwd = (t: number, legs: [number, number, number, number]): Pose => [t, 90, 90, 90, 90, ...legs]
+/** Standing tall, arms relaxed. */
+export const STAND: Pose = [180, 8, 14, -8, -10, 0, 0, 0, 0, 180, 180]
+/** Arms reaching forward at shoulder height; c = chest, h = head. */
+const fwd = (t: number, c = t, h = 172): Pose => [t, 90, 90, 90, 90, 0, 0, 0, 0, c, h]
 
-// Box squat: thighs level puts the hips 38 up, the box top.
-const boxSit = armsFwd(150, [90, 0, 90, 0])
-const deep = (t: number): Pose => armsFwd(t, [...leg(16, 26), ...leg(16, 26)] as [number, number, number, number])
+// Box squat: hips back to a 38 box, shins near vertical, chest leans to balance.
+const boxTop = fwd(180, 180, 180)
+const boxSit = plant(fwd(145, 152), { foot: 30, farFoot: 30 }, 44)
+const deep = plant(fwd(132, 145, 168), { foot: 22, farFoot: 22 }, 30)
 
-// Cossack (front view): bent thigh at 105 puts the foot 28 below the hip; the straight leg reaches it at 68Â°.
-const cossL: Pose = [175, 30, 150, -30, -150, 105, 0, -68, -68]
-const cossR: Pose = [185, 30, 150, -30, -150, 68, 68, -105, 0]
+// Cossack (front view): bent thigh at 105 puts the foot 28 below the hip; the straight leg reaches it at 68°.
+const cossL: Pose = [175, 30, 150, -30, -150, 105, 0, -68, -68, 172, 180]
+const cossR: Pose = [185, 30, 150, -30, -150, 68, 68, -105, 0, 188, 180]
 
-const splitTop: Pose = [180, 8, 14, -8, -10, ...leg(32, 66), ...leg(-32, 66)]
-const splitLow: Pose = [180, 8, 14, -8, -10, ...leg(30, 38), ...leg(-46, 36)]
+// Split squat: front shin near vertical, back knee drops to just off the floor.
+const splitTop = plant([180, 8, 14, -8, -10, 0, 0, 0, 0], { foot: 30, farFoot: -36 }, 76)
+const splitLow = plant([180, 8, 14, -8, -10, 0, 0, 0, 0], { foot: 36, farFoot: -42 }, 44)
 
-// Step-up: near foot on a 40 box, far foot on the floor 40 lower.
-const stepLow: Pose = [165, 20, 30, -20, -30, ...leg(22, 32), ...leg(-6, 69)]
-const stepTop: Pose = [178, -15, 20, 15, 60, 0, 0, 90, 0]
+// Step-up: near foot on a 40 box, far foot on the floor; top: stand tall on the box, far knee up.
+const stepLow = plant(plant([160, 30, 40, -30, -20, 0, 0, 0, 0, 165, 172], { foot: 22 }, 58), { farFoot: -16 }, 98)
+const stepTop: Pose = [180, -10, 20, 10, 60, 0, 0, 90, 0, 180, 180]
 
 // Shrimp: back knee lands under the hip; the near hand holds the back foot.
-const shrimpPose = (t: number, h: number, kneeDown: boolean, both: boolean, pole: boolean): Pose => {
-  const back: [number, number] = kneeDown ? [-20, -150] : [-10, -130]
-  let p: Pose = [t, 0, 0, 90, 90, ...leg(12, h), ...back]
+const shrimpPose = (t: number, f: number, back: [number, number], both: boolean, pole: boolean): Pose => {
+  let p = plant([t, 0, 0, 90, 90, 0, 0, ...back, t + 6, 172], { foot: 12 }, f)
   const foot = pos(p, 'farFoot')
   p = reach(p, { hand: foot, ...(both ? { farHand: foot } : {}) }, { k: { hand: 1, farHand: 1 } })
   if (pole) {
     const s = pos(p, 'shoulder')
-    p = reach(p, { farHand: [s[0] + 48, s[1]] })
+    p = reach(p, { farHand: [s[0] + 44, s[1] + 6] })
   }
   return p
 }
-const shrimpTop = (both = false, pole = false) => shrimpPose(172, 74, false, both, pole)
-const shrimpLow = (both = false, pole = false) => shrimpPose(145, 36, true, both, pole)
+const shrimpTop = (both = false, pole = false) => shrimpPose(172, 79, [-12, -150], both, pole)
+const shrimpLow = (both = false, pole = false, f = 42) => shrimpPose(142, f, [-Math.acos(Math.min(1, (f - 4) / 38)) * 180 / Math.PI - 4, -150], both, pole)
 
 // Sissy: shin leans forward, thigh and torso one straight line leaning back from the knee.
-const sissyLow = (pole: boolean): Pose => [215, pole ? 70 : 100, pole ? 90 : 100, pole ? 70 : 100, pole ? 90 : 100, 35, -55, 35, -55]
-const sissyTop = (pole: boolean): Pose => [180, pole ? 60 : 90, pole ? 80 : 90, pole ? 60 : 90, pole ? 80 : 90, 0, 0, 0, 0]
-
-// Pistol: deep near leg, far leg level and clear of the floor.
-const pistolLow = (free: number): Pose => [130, 90, 90, 90, 90, 100, -30, free, free]
-const pistolTop: Pose = [178, 90, 90, 90, 90, 0, 0, 70, 70]
-
-// Bulgarian: near foot pinned on the floor, rear foot on a 40 bench 65 behind it.
-const bulg = (h: number, fx: number): Pose => {
-  const p: Pose = [178, 8, 14, -8, -10, ...leg(fx, h), 0, 0]
-  return reach(p, { farFoot: [fx - 65, h - 40] })
+const sissyArms = (pole: boolean): [number, number, number, number] => (pole ? [60, 90, 60, 90] : [100, 100, 100, 100])
+const toPole = (p: Pose, pole: boolean): Pose => {
+  if (!pole) return p
+  const [fx] = pos(p, 'foot')
+  const [, sy] = pos(p, 'shoulder')
+  return reach(p, { hand: [fx + 46, sy + 14], farHand: [fx + 46, sy + 14] })
 }
+const sissyLow = (pole: boolean): Pose => toPole([218, ...sissyArms(pole), 38, -58, 38, -58, 218, 190], pole)
+const sissyTop = (pole: boolean): Pose => toPole([180, ...sissyArms(pole), 0, 0, 0, 0, 180, 180], pole)
+
+// Pistol: deep near leg, heel down, far leg straight and clear of the floor.
+const pistolLow = (free: number): Pose => plant([125, 90, 90, 90, 90, 0, 0, free, free, 138, 165], { foot: 26 }, 24)
+const pistolTop: Pose = [180, 90, 90, 90, 90, 0, 0, 70, 70, 180, 180]
+
+// Bulgarian: front foot on the floor, rear instep on a 40 bench behind.
+const bulg = (f: number, fx: number): Pose =>
+  plant(plant([180, 8, 14, -8, -10, 0, 0, 0, 0, 180, 180], { foot: fx }, f), { farFoot: -44 }, f - 40)
 
 // Reverse Nordic: kneel on the shins, lean the straight hip line back from the knee.
-const kneel = (lean: number): Pose => [180 + lean, 100 + lean, 100 + lean, 100 + lean, 100 + lean, lean, -90, lean, -90]
+const kneel = (lean: number): Pose => [180 + lean, 90 + lean, 90 + lean, 90 + lean, 90 + lean, lean, -90, lean, -90, 180 + lean, 180 + lean * 0.6]
 
 export const MOVES: Record<string, Move> = {
-  box_squat: { keys: [[178, 80, 90, 80, 90, 0, 0, 0, 0], boxSit], x: 'foot', props: [{ t: 'box', x: -58, w: 34, h: 38 }] },
-  squat: { keys: [[178, 90, 90, 90, 90, 0, 0, 0, 0], deep(135)], x: 'foot' },
+  box_squat: { keys: [boxTop, boxSit], x: 'foot', props: [{ t: 'box', x: -64, w: 36, h: 38 }] },
+  squat: { keys: [boxTop, deep], x: 'foot' },
   cossack: { keys: [cossL, cossR], front: true, ms: 1300 },
   split_squat: { keys: [splitTop, splitLow] },
-  step_up: { keys: [stepLow, stepTop], x: 'foot', y: 'foot', at: [0, -40], props: [{ t: 'box', x: -22, w: 50, h: 40 }] },
-  assisted_shrimp: { keys: [shrimpTop(false, true), shrimpLow(false, true)], x: 'foot', props: [{ t: 'pole', x: 62 }] },
-  bulgarian: { keys: [bulg(70, 26), bulg(38, 30)], x: 'foot', y: 'foot', at: [0, -1], props: [{ t: 'box', x: -84, w: 36, h: 40 }] },
-  box_pistol: { keys: [pistolTop, armsFwd(150, [90, 0, 85, 85])], x: 'foot', props: [{ t: 'box', x: -58, w: 34, h: 38 }] },
+  step_up: { keys: [stepLow, stepTop], x: 'foot', y: 'foot', at: [0, -45], props: [{ t: 'box', x: -26, w: 52, h: 40 }] },
+  assisted_shrimp: { keys: [shrimpTop(false, true), shrimpLow(false, true)], x: 'foot', props: [{ t: 'pole', x: 60 }] },
+  bulgarian: { keys: [bulg(78, 24), bulg(46, 30)], x: 'foot', props: [{ t: 'box', x: -88, w: 36, h: 40 }] },
+  box_pistol: { keys: [pistolTop, plant([145, 90, 90, 90, 90, 0, 0, 86, 86, 152, 170], { foot: 30 }, 44)], x: 'foot', props: [{ t: 'box', x: -64, w: 36, h: 38 }] },
   shrimp: { keys: [shrimpTop(), shrimpLow()], x: 'foot' },
-  sissy: { keys: [sissyTop(true), sissyLow(true)], x: 'foot', props: [{ t: 'pole', x: 52 }] },
-  pistol: { keys: [pistolTop, pistolLow(88)], x: 'foot' },
-  adv_shrimp: { keys: [shrimpTop(true), shrimpPose(140, 40, false, true, false)], x: 'foot' },
+  sissy: { keys: [sissyTop(true), sissyLow(true)], x: 'foot', props: [{ t: 'pole', x: 50 }] },
+  pistol: { keys: [pistolTop, pistolLow(87)], x: 'foot' },
+  adv_shrimp: { keys: [shrimpTop(true), shrimpLow(true, false, 50)], x: 'foot' },
   reverse_nordic: { keys: [kneel(0), kneel(55)], x: 'knee', ms: 1400 },
-  deficit_pistol: { keys: [pistolTop, pistolLow(55)], x: 'foot', y: 'foot', at: [0, -40], props: [{ t: 'box', x: -22, w: 40, h: 40 }] },
+  deficit_pistol: { keys: [pistolTop, pistolLow(55)], x: 'foot', y: 'foot', at: [0, -45], props: [{ t: 'box', x: -26, w: 44, h: 40 }] },
   full_sissy: { keys: [sissyTop(false), sissyLow(false)], x: 'foot' },
-  dragon_pistol: { keys: [[178, 90, 90, 90, 90, 0, 0, -20, 60], [130, 90, 90, 90, 90, 100, -30, 15, 100]], x: 'foot' },
+  dragon_pistol: { keys: [[180, 90, 90, 90, 90, 0, 0, -15, 40, 180, 180], plant([125, 90, 90, 90, 90, 0, 0, 55, 95, 138, 165], { foot: 26 }, 24)], x: 'foot' },
 }

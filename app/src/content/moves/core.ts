@@ -1,48 +1,88 @@
-import type { Move, Pose } from '../../core/figure'
+import { place, type Move, type Pose } from '../../core/figure'
+import { solve } from './frontlever'
+import { pos, reach, rot } from './legs'
+import { body, fgrip, grip } from './pull'
 
-const bar = { t: 'bar', x: 0, y: -210 } as const
-const hangPin = { x: 'hand' as const, y: 'hand' as const, at: [0, -210] as [number, number], props: [bar] }
-const hang: Pose = [180, 180, 180, 180, 180, 0, 0, 0, 0]
-const table: Pose = [-90, 180, 180, 180, 180, 180, 90, 180, 90]
-const hollow: Pose = [-100, -100, -100, -100, -100, 100, 100, 100, 100]
-const rock = (p: Pose, d: number) => p.map((a) => a + d) as Pose
-// Parallettes 30 up: hip sits 34 up, so level legs clear the floor.
-const bars = { t: 'bars', x: 0, y: -30 } as const
-const supportPin = { x: 'hand' as const, y: 'hand' as const, at: [0, -30] as [number, number], props: [bars] }
-const feetDown: Pose = [180, 0, 0, 0, 0, 100, 0, 100, 0]
-const tuck: Pose = [180, 0, 0, 0, 0, 145, 10, 145, 10]
-const ell: Pose = [180, 0, 0, 0, 0, 90, 90, 90, 90]
-// Dragon flag: shoulders on a bench, body pivots as one piece from the shoulders.
+
+// On the back, head to the left. Low back flat (torso -92), the chest curls up off the floor in the hollow.
+const table: Pose = [-90, 180, 180, 180, 180, 180, 90, 180, 90, -90, -96]
+const bugL: Pose = [-90, -100, -100, 180, 180, 180, 90, 98, 98, -90, -96]
+const bugR: Pose = [-90, 180, 180, -100, -100, 98, 98, 180, 90, -90, -96]
+// Hollow: ribs down, shoulders and legs just off the floor, arms by the ears.
+const hollow = (lift = 0): Pose => [-93, -104 - lift, -104 - lift, -104 - lift, -104 - lift, 100 + lift, 100 + lift, 100 + lift, 100 + lift, -112 - lift, -122 - lift]
+// Arch (face down, head right): glutes squeeze the legs up, chest lifts, neck long.
+const arch = (lift: number): Pose => [92, 100 + lift, 100 + lift, 100 + lift, 100 + lift, -92 - lift, -92 - lift, -92 - lift, -92 - lift, 100 + lift, 104 + lift]
+
+// Hanging, side view.
+const hangPin = { x: 'hand' as const, y: 'hand' as const, at: [0, -210] as [number, number], props: [{ t: 'bar', x: 0, y: -210 } as const] }
+const hang = body(180, 182, 184, [2, 0, 2, 0], 176)
+// The pelvis curls: hips roll forward under the waist while the chest stays tall.
+const kneeUp = body(200, 178, 182, [140, 20, 140, 20], 172)
+const legsUp = body(196, 178, 182, [92, 92, 92, 92], 174)
+// Toes to bar: lean back on straight arms, roll the pelvis up, straight legs reach the bar.
+const ttbTop = (() => {
+  const p = body(232, 200, 196, [0, 0, 0, 0], 150)
+  const h = pos(p, 'hand')
+  return reach(p, { foot: [h[0] + 6, h[1] + 8], farFoot: [h[0] + 6, h[1] + 8] }, { k: { foot: -1, farFoot: -1 } })
+})()
+
+// Support on parallettes 40 up: arms locked beside the hips, shoulders pushed down, slight round of the upper back.
+const BARS = -40
+const supportPin = { x: 'hand' as const, y: 'hand' as const, at: [0, BARS] as [number, number], props: [{ t: 'bars', x: 0, y: BARS } as const] }
+const support = (legs: [number, number, number, number], t = 178): Pose => grip(body(t, t - 8, t - 4, legs), [3, 8], 1, true)
+const feetDown = support([100, 8, 100, 8])
+const tuck = support([138, 16, 138, 16])
+const ell = support([90, 90, 90, 90], 176)
+
+// Floor V-sits: straight arms angled to the floor just behind the hips; the further the lean, the higher the legs.
+const vs = (t: number, legs: number, a: number): Pose => body(t, t - 10, t - 16, [legs, legs, legs, legs], a)
+
+// Kneeling rollout: shins on the floor, hollow trunk, straight arms reach the floor at the wheel.
+const onFloor = (p: Pose, from: 'knee' | 'foot', k = -1): Pose => {
+  const s = pos(p, 'shoulder')
+  const f = pos(p, from)
+  const dy = f[1] + (from === 'foot' ? 5 : 4) - s[1]
+  const dx = Math.sqrt(Math.max(0, 53.9 ** 2 - dy ** 2))
+  return reach(p, { hand: [s[0] + dx, s[1] + dy], farHand: [s[0] + dx, s[1] + dy] }, { k: { hand: k, farHand: k } })
+}
+const kneel = (thigh: number, t: number): Pose => onFloor([t, 0, 0, 0, 0, thigh, -90, thigh, -90, t - 8, t - 14], 'knee')
+// Standing rollout: legs straight, the body opens from a pike to one line just off the floor.
+const stand = (t: number, legs: number): Pose => onFloor([t, 0, 0, 0, 0, legs, legs, legs, legs, t - 6, t - 12], 'foot')
+const flatT = solve(80, 100, (t) => {
+  const b = place({ keys: [] }, stand(t, t - 180))
+  return b.hand.y - Math.max(b.foot.y, b.heel.y, b.toe.y)
+})
+
+// Dragon flag: shoulders and head on a bench, hands grip behind the head, body one line from the shoulders.
 const bench = { t: 'box', x: -70, w: 70, h: 40 } as const
-const dragonPin = { x: 'shoulder' as const, y: 'shoulder' as const, at: [-10, -50] as [number, number], props: [bench] }
-const dragon = (t: number, tuckIt = false): Pose =>
-  [t, -100, -10, -100, -10, tuckIt ? t + 130 : t + 180, tuckIt ? t + 10 : t + 180, tuckIt ? t + 130 : t + 180, tuckIt ? t + 10 : t + 180]
+const dragonPin = { x: 'shoulder' as const, y: 'shoulder' as const, at: [-10, -48] as [number, number], props: [bench] }
+const dragon = (t: number, tucked = false): Pose => {
+  const legs: [number, number, number, number] = tucked ? [t + 135, t + 15, t + 135, t + 15] : [t + 180, t + 180, t + 180, t + 180]
+  const p: Pose = [t, 0, 0, 0, 0, ...legs, t, -90]
+  const s = pos(p, 'shoulder')
+  return reach(p, { hand: [s[0] - 34, s[1] + 4], farHand: [s[0] - 34, s[1] + 4] }, { k: { hand: 1, farHand: 1 } })
+}
+
+// Wipers (front view): legs up at the bar, swung side to side from the hips.
+const wiper = (side: number): Pose => fgrip(body(180 + side * 0.3, 180, 180, [180 + side, 180 + side, 180 + side, 180 + side]), [28, -52.8], [-28, -52.8])
 
 export const MOVES: Record<string, Move> = {
-  dead_bug: {
-    keys: [table, [-90, -95, -95, 180, 180, 180, 90, 95, 95], table, [-90, 180, 180, -95, -95, 95, 95, 180, 90]],
-    mode: 'cycle', ms: 1100,
-  },
-  hollow_hold: { keys: [hollow, [-102, -102, -102, -102, -102, 102, 102, 102, 102]], ms: 1400 },
-  arch_hold: { keys: [[95, 95, 95, 95, 95, -95, -95, -95, -95], [108, 108, 108, 108, 108, -106, -106, -106, -106]], ms: 1300 },
-  hollow_rock: { keys: [rock(hollow, -14), rock(hollow, 14)], ms: 700 },
-  knee_raise: { keys: [hang, [176, 175, 175, 175, 175, 140, 10, 140, 10]], ...hangPin },
-  rollout_knee: { keys: [[109, 0, 0, 0, 0, -10, -105, -10, -105], [97, 62, 62, 62, 62, -60, -105, -60, -105]], x: 'knee', ms: 1200 },
+  dead_bug: { keys: [table, bugL, table, bugR], mode: 'cycle', ms: 1100 },
+  hollow_hold: { keys: [hollow(), hollow(3)], ms: 1400 },
+  arch_hold: { keys: [arch(0), arch(12)], ms: 1300 },
+  hollow_rock: { keys: [rot(hollow(), -14), rot(hollow(), 14)], ms: 700 },
+  knee_raise: { keys: [hang, kneeUp], ...hangPin },
+  rollout_knee: { keys: [kneel(-5, 115), kneel(-62, 100)], x: 'knee', ms: 1300 },
   tuck_lsit: { keys: [feetDown, tuck], ...supportPin, ms: 1000 },
-  leg_raise: { keys: [hang, [176, 178, 178, 178, 178, 90, 90, 90, 90]], ...hangPin },
-  tuck_dragon: { keys: [dragon(0, true), dragon(-70, true)], ...dragonPin, ms: 1500 },
+  leg_raise: { keys: [hang, legsUp], ...hangPin },
+  tuck_dragon: { keys: [dragon(10, true), dragon(-72, true)], ...dragonPin, ms: 1500 },
   lsit: { keys: [tuck, ell], ...supportPin, ms: 1000 },
-  ttb: { keys: [hang, [200, 160, 160, 160, 160, 170, 170, 170, 170]], ...hangPin, ms: 1000 },
-  dragon_flag: { keys: [dragon(0), dragon(-75)], ...dragonPin, ms: 1600 },
-  lsit_30: { keys: [ell, [181, 0, 0, 0, 0, 93, 93, 93, 93]], ...supportPin, ms: 2000 },
-  wipers: {
-    keys: [[180, 180, 180, 180, 180, 150, 150, 150, 150], [180, 180, 180, 180, 180, 210, 210, 210, 210]],
-    front: true, ...hangPin, ms: 1100,
-  },
-  standing_rollout: {
-    keys: [[62, 0, 0, 0, 0, 0, 0, 0, 0], [96, 59, 59, 59, 59, -80, -80, -80, -80]], x: 'foot', ms: 1400,
-  },
-  vsit: { keys: [[200, -5, -5, -5, -5, 90, 90, 90, 90], [200, -5, -5, -5, -5, 130, 130, 130, 130]], ms: 1200 },
-  v120: { keys: [[205, -10, -10, -10, -10, 130, 130, 130, 130], [212, -10, -10, -10, -10, 172, 172, 172, 172]], ms: 1200 },
-  manna: { keys: [[212, -10, -10, -10, -10, 172, 172, 172, 172], [235, 30, 30, 30, 30, 205, 205, 205, 205]], ms: 1400 },
+  ttb: { keys: [hang, legsUp, ttbTop], ...hangPin, ms: 900 },
+  dragon_flag: { keys: [dragon(10), dragon(-78)], ...dragonPin, ms: 1600 },
+  lsit_30: { keys: [ell, support([93, 93, 93, 93], 177)], ...supportPin, ms: 2000 },
+  wipers: { keys: [wiper(-35), wiper(35)], front: true, ...hangPin, at: [28, -210], ms: 1100 },
+  standing_rollout: { keys: [stand(28, 0), stand(flatT, flatT - 180)], x: 'foot', ms: 1500 },
+  vsit: { keys: [vs(196, 92, 8), vs(204, 130, 12)], ms: 1200 },
+  v120: { keys: [vs(206, 132, 12), vs(216, 170, 16)], ms: 1200 },
+  manna: { keys: [vs(216, 170, 16), vs(240, 200, 20)], ms: 1400 },
 }

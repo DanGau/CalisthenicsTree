@@ -1,33 +1,52 @@
 import type { Move, Pose } from '../../core/figure'
-import { plank } from './push'
+import { balance, bent, fit, handOf, line, reachTo, set, straight } from './push'
 
-const top = plank(115, 0, 0)
-const lean = plank(106, -28, -28)
-const ppLow = plank(100, -95, -30)
+const ARM = 54
 
-const frog: Pose = [95, -15, -15, -15, -15, 40, -70, 40, -70]
-const tuck: Pose = [100, -20, -20, -20, -20, 62, -80, 62, -80]
-const tuckLow: Pose = [100, -80, -25, -80, -25, 70, -100, 70, -100]
-const advTuck: Pose = [90, -25, -25, -25, -25, 60, -95, 60, -95]
-const straddle: Pose = [92, -30, -30, -30, -30, -86, -86, -95, -95]
-const oneLeg: Pose = [90, -28, -28, -28, -28, 60, -95, -90, -90]
-const full: Pose = [90, -30, -30, -30, -30, -90, -90, -90, -90]
-const fullLow: Pose = [92, -100, -25, -100, -25, -92, -92, -92, -92]
-const maltese: Pose = [90, -62, -62, -62, -62, -90, -90, -90, -90]
+// Plank family: hands fixed, toes on the floor. Hollow = upper back rounded (chest below the torso line).
+const hollow = straight((t) => line(t, -8), 0)
+const D = handOf(hollow).x
+const sag = reachTo((t) => line(t, 9, -4, 10), ARM - 0.5, D, 0, -1, 100, 150)
+const protract = reachTo((t) => line(t, -12), ARM - 0.5, D, 0, -1, 100, 150)
+const retract = reachTo((t) => line(t, 5, 0, 5), ARM - 0.5, D, 0, -1, 100, 150)
+
+// Lean: shoulders travel past the hands, the feet roll onto the toes.
+const lean = straight((t) => line(t, -10), -24)
+const ppLow = bent((t) => line(t, -2), 17, handOf(lean).x)
+
+/** Straight arms at angle u with the centre of mass over the hands. */
+const float = (body: Pose) => balance((u) => set(set(body, [1, 3], u), [2, 4], u), -75, 20)
+/** Bent arms (upper arm at u) with the forearm solved to balance. */
+const press = (body: Pose, u: number) => balance((f) => set(set(body, [1, 3], u), [2, 4], f), -60, 60)
+
+// Tuck: back rounded, knees to the chest, gaze forward.
+const tuckBody: Pose = [104, 0, 0, 0, 0, 62, -112, 62, -112, 62, 95]
+const tuck = float(tuckBody)
+// Entry: same tuck with the toes still on the floor and less lean.
+const tuckIn = fit((s) => set(set(tuckBody, [1, 2, 3, 4], -12), [6, 8], s), (b) => b.hand.y - b.toe.y, -10, -120)
+const tuckLow = press(tuckBody, -80)
+const advTuck = float([92, 0, 0, 0, 0, 32, -112, 32, -112, 90, 115])
+const straddle = float([93, 0, 0, 0, 0, -84, -84, -96, -96, 88, 110])
+const oneLeg = float([92, 0, 0, 0, 0, 32, -112, -92, -92, 89, 112])
+const fullBody: Pose = [92, 0, 0, 0, 0, -91, -91, -91, -91, 86, 108]
+const planche = float(fullBody)
+const plancheLow = press(fullBody, -82)
+// Maltese: arms out wide, so side-on the hands sit by the hips and the chest skims the floor.
+const maltese = set(set([90, 0, 0, 0, 0, -90, -90, -90, -90, 87, 108], [1, 3], -66), [2, 4], -66)
 
 const m = (keys: Pose[], ms?: number): Move => ({ keys, x: 'hand', ms })
 
 export const MOVES: Record<string, Move> = {
-  plank: m([plank(121, 0, 0), top], 1300),
-  scap_pu: m([plank(117, 3, 3), plank(112, -4, -4)], 700),
-  planche_lean: m([top, lean], 1200),
+  plank: m([sag, hollow], 1300),
+  scap_pu: m([retract, protract], 800),
+  planche_lean: m([hollow, lean], 1200),
   pp_pu: m([lean, ppLow]),
-  tuck_planche: m([frog, tuck], 1100),
+  tuck_planche: m([tuckIn, tuck], 1100),
   tuck_planche_pu: m([tuck, tuckLow]),
   adv_tuck_planche: m([tuck, advTuck], 1100),
   straddle_planche: m([advTuck, straddle], 1200),
   one_leg_planche: m([advTuck, oneLeg], 1200),
-  full_planche: m([advTuck, full], 1200),
-  planche_pu: m([full, fullLow]),
-  maltese: m([full, maltese], 1300),
+  full_planche: m([advTuck, planche], 1200),
+  planche_pu: m([planche, plancheLow]),
+  maltese: m([planche, maltese], 1300),
 }

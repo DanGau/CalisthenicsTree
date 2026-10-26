@@ -1,41 +1,82 @@
-import type { Move, Pose } from '../../core/figure'
+import { place, type Body, type Move, type Pose } from '../../core/figure'
+import { reach } from './legs'
+import { body, chestPt, grip } from './pull'
 
-// Rows: face up, head to the left, heels on the floor (x: 'foot'). Hand points come from the
-// straight-arm bottom; the top pivots on the heels until the bent arm reaches the same point.
-const inclineBottom: Pose = [-130, 160, 160, 160, 160, 50, 50, 50, 50]
-const inclineTop: Pose = [-138, 128, -143, 128, -143, 42, 42, 42, 42]
-const rowBottom: Pose = [-97, 175, 175, 175, 175, 83, 83, 83, 83]
-const rowTop: Pose = [-110, 127, -111, 127, -111, 70, 70, 70, 70]
-const rowRings = { t: 'rings', x: -60, y: -69 } as const
-const row = (keys: Pose[], ms?: number): Move => ({ keys, x: 'foot', at: [60, 0], props: [rowRings], ms })
+/** Root of f in [lo, hi] by bisection (f must change sign). */
+export const solve = (lo: number, hi: number, f: (x: number) => number) => {
+  const s = Math.sign(f(lo))
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2
+    if (Math.sign(f(mid)) === s) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+/** Scene y of a joint (0 = floor, negative = up). */
+export const yOf = (m: Move, p: Pose, j: keyof Body) => place(m, p)[j].y
 
-// Levers: hands on the bar, body horizontal face up (torso 270, legs 90).
+// Rows: face up, head to the left, heels fixed on the floor, hands fixed on the bar. The bottom angle `t0`
+// sets the hand point; the top rotates the straight body about the heels until the chest meets it.
+const straight = (t: number): Pose => body(t, t, t - 4, [t + 180, t + 180, t + 180, t + 180], t + 270)
+type Arms = (p: Pose) => Pose
+const rowMove = (t0: number, prop: 'bar' | 'rings', top: Arms = (p) => p, bottom: Arms = (p) => p, ms = 900): Move => {
+  const m: Move = { keys: [], x: 'foot', at: [60, 0], ms }
+  const H = place(m, straight(t0)).hand
+  const gap = (t: number) => {
+    const b = place(m, straight(t))
+    const c = chestPt(straight(t), 0.7, 16)
+    return Math.hypot(b.hip.x + c[0] - H.x, b.hip.y + c[1] - H.y)
+  }
+  let t1 = t0
+  for (let t = t0; t > t0 - 80; t -= 0.25) if (gap(t) < gap(t1)) t1 = t
+  const p = straight(t1)
+  const hip = place(m, p).hip
+  const h: [number, number] = [H.x - hip.x, H.y - hip.y]
+  const pulled = reach(p, { hand: h, farHand: h }, { k: { hand: -1, farHand: -1 } })
+  return { ...m, keys: [bottom(straight(t0)), top(pulled)], props: [{ t: prop, x: H.x, y: H.y }] }
+}
+const oneArm: Arms = (p) => [p[0], p[1], p[2], 90, 90, ...p.slice(5)] as Pose
+// Archer: the far arm stays straight, reaching to its ring.
+const straightFar: Arms = (p) => [...p.slice(0, 3), p[0] + 255, p[0] + 255, ...p.slice(5)] as Pose
+
+// Feet on a box above hand height: the body tips feet-high; the top key keeps the heels on the box.
+const feetUpBase: Move = { keys: [], x: 'hand', y: 'hand', at: [0, -110], props: [], ms: 1000 }
+const fuBottom = straight(-82)
+const heelY = yOf(feetUpBase, fuBottom, 'heel')
+const pulled = (t: number): Pose => { const p = straight(t); return grip(p, chestPt(p, 0.7, 16), -1, true) }
+const fuTop = pulled(solve(-120, -60, (t) => yOf(feetUpBase, pulled(t), 'heel') - heelY))
+const fb = place(feetUpBase, fuBottom)
+const heel = { x: fb.heel.x, y: Math.max(fb.heel.y, fb.foot.y) + 3 }
+
+// Levers: arms straight, hands over the upper chest, face up, head to the left. Shoulders depressed, ribs down.
 const bar = { t: 'bar', x: 0, y: -210 } as const
 const lever = (keys: Pose[], ms = 1200): Move => ({ keys, x: 'hand', y: 'hand', at: [0, -210], props: [bar], ms })
-const fl: Pose = [270, 180, 180, 180, 180, 90, 90, 90, 90]
-const tuck: Pose = [270, 180, 180, 180, 180, 225, 100, 225, 100]
-const advTuck: Pose = [270, 180, 180, 180, 180, 180, 90, 180, 90]
-const inverted: Pose = [360, 180, 180, 180, 180, 180, 180, 180, 180]
-const chinOver: Pose = [172, 79, 222, 79, 222, 20, -10, 20, -10]
-// Hips sag a little before locking level.
-const sag = (p: Pose): Pose => [p[0] - 8, p[1] + 4, p[2] + 4, p[3] + 4, p[4] + 4, p[5] - 8, p[6] - 8, p[7] - 8, p[8] - 8]
+const L = (legs: [number, number, number, number], t = 270, a = 166): Pose => body(t, t - 4, t - 6, legs, a)
+const fl = L([90, 90, 90, 90])
+const tuck = L([228, 96, 228, 96], 268, 172)
+const advTuck = L([180, 90, 180, 90])
+const inverted: Pose = body(360, 360, 360, [180, 180, 180, 180], 180)
+// Hips sag before locking level.
+const sag = (p: Pose): Pose => p.map((v, i) => (i === 0 || i >= 5 && i <= 8 ? v! - 8 : v)) as Pose
+// Bar to the hips with the body level: arms row in to the belly.
+const leverRow = (p: Pose) => grip(p, chestPt(p, 0.05, 16), 1, true)
+// Pull-up to the bar, chest over, then the straight-arm lean back to a lever.
+const chinBody = body(186, 196, 186, [12, 4, 12, 4])
+const chinOver = grip(chinBody, chestPt(chinBody, 1, 15), -1, true)
 
 export const MOVES: Record<string, Move> = {
-  incline_row: { ...row([inclineBottom, inclineTop]), props: [{ t: 'bar', x: -18, y: -132 }] },
-  row: row([rowBottom, rowTop]),
-  feet_up_row: {
-    keys: [[-80, 180, 180, 180, 180, 100, 100, 100, 100], [-90, 126, -127, 126, -127, 90, 90, 90, 90]],
-    x: 'hand', y: 'hand', at: [0, -120], props: [{ t: 'rings', x: 0, y: -120 }, { t: 'box', x: 106, w: 44, h: 88 }],
-  },
-  archer_row: row([rowBottom, [-110, 127, -111, 150, 150, 70, 70, 70, 70]]),
+  incline_row: rowMove(-122, 'bar'),
+  row: rowMove(-104, 'rings'),
+  feet_up_row: { ...feetUpBase, keys: [fuBottom, fuTop], props: [{ t: 'rings', x: 0, y: -110 }, { t: 'box', x: heel.x - 30, w: 50, h: -heel.y }] },
+  archer_row: rowMove(-104, 'rings', straightFar),
   tuck_fl: lever([sag(tuck), tuck]),
-  oa_row: row([[-97, 175, 175, 70, 160, 83, 83, 83, 83], [-110, 127, -111, 70, 160, 70, 70, 70, 70]], 1000),
+  oa_row: rowMove(-104, 'rings', oneArm, oneArm, 1000),
   adv_tuck_fl: lever([sag(advTuck), advTuck]),
-  tuck_fl_row: lever([tuck, [270, 73, 149, 73, 149, 225, 100, 225, 100]], 900),
-  oneleg_fl: lever([[270, 180, 180, 180, 180, 90, 90, 180, 90], [270, 180, 180, 180, 180, 180, 90, 90, 90]], 1300),
+  tuck_fl_row: lever([tuck, leverRow(tuck)], 900),
+  oneleg_fl: lever([L([90, 90, 180, 90]), L([180, 90, 90, 90])], 1300),
   ice_cream: lever([chinOver, fl], 1300),
-  straddle_fl: lever([sag([270, 180, 180, 180, 180, 84, 84, 96, 96]), [270, 180, 180, 180, 180, 84, 84, 96, 96]]),
+  straddle_fl: lever([sag(L([82, 82, 98, 98])), L([82, 82, 98, 98])]),
   full_fl: lever([sag(fl), fl]),
   fl_raise: lever([inverted, fl], 1500),
-  fl_pullup: lever([fl, [270, 73, 149, 73, 149, 90, 90, 90, 90]], 1000),
+  fl_pullup: lever([fl, leverRow(fl)], 1000),
 }
