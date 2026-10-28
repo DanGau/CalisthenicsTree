@@ -68,11 +68,11 @@ export const MOVES: Record<string, Move> = {
     x: 'foot', y: 'foot', at: [0, -65], props: [{ t: 'box', x: -42, w: 52, h: 60 }], ms: 1100,
     beats: [{ hold: 0.6, dur: 1.4, ease: 'in' }, { dur: 1.4, ease: 'lin' }, { dur: 1.4, ease: 'lin' }, { dur: 1.6, ease: 'out' }, { hold: 1.2 }],
   },
-  front_split_half: { ...breathe([blockSplit(34), blockSplit(27)]), x: 'hip', point: true, props: [{ t: 'box', x: -10, w: 20, h: 19 }] },
+  front_split_half: { ...breathe([blockSplit(34), blockSplit(30), blockSplit(27)], 900, blockSplit(28)), x: 'hip', point: true, props: [{ t: 'box', x: -10, w: 20, h: 19 }] },
   // Seen from the front: the chest folds down between the wide legs as the hands walk out.
   pancake: { ...breathe([pancakeKey(1, 34), pancakeKey(0.3, 22)], 900, pancakeKey(0.5, 28), [{ trunk: 1 }, { trunk: 0.3 }]), front: true, y: 'hip', at: [0, -10.6] },
   pike_full: { ...breathe([sit(128, 112, 105, [80, 12]), sit(110, 100, 95, [88, 8])]), x: 'hip' },
-  front_split: { ...breathe([split(22, [3, H.hand]), split(9.5, [3, H.hand])]), x: 'hip', point: true },
+  front_split: { ...breathe([split(22, [3, H.hand]), split(15, [3, H.hand]), split(9.5, [3, H.hand])], 900, split(11.5, [3, H.hand])), x: 'hip', point: true },
   // Hips slide down as the feet slide out, hands taking the weight.
   middle_split: { ...breathe([midHands(64, 0.42), midHands(86)], 900, midHands(80, 0.8), [{ lift: midH(64), trunk: 0.42 }, { lift: midH(86), trunk: 1 }]), front: true, y: 'hip' },
   // Fold first, then lift the heels with the hands beside the hips.

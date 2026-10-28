@@ -105,7 +105,8 @@ export function footAngle(shin: number) {
   const w = ((((shin + 180) % 360) + 360) % 360) - 180
   const a = Math.abs(w)
   const flat = 90 + w * ramp(a, 45, 75)
-  return flat + Math.sign(w) * 90 * ramp(a, 120, 160)
+  // Inverted: the toes swing from square to the shin round to in line with it.
+  return flat - 90 * ramp(a, 120, 160)
 }
 
 /** Joint positions with the hip at the origin. */

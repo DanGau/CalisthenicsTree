@@ -1,6 +1,6 @@
-import { joints, LEN, place, type Move, type Pose, type Pt } from '../../core/figure'
+import { blend, full, joints, LEN, place, type Move, type Pose, type Pt } from '../../core/figure'
 import { reach } from './legs'
-import { armsTo, holdBeats, nudge, tempo } from './push'
+import { armsTo, holdBeats, nudge, rep } from './push'
 
 const Y = -130
 const bars = { t: 'bars', x: 0, y: Y } as const
@@ -50,14 +50,19 @@ const bulgarian = (drop: number): Pose => {
   const [a, c] = [reach(p, to, { front: true, k: { hand: 1, farHand: -1 } }), reach(p, to, { front: true, k: { hand: -1, farHand: 1 } })]
   return s * joints(a, true).elbow.x > s * joints(c, true).elbow.x ? a : c
 }
-// Halfway keys keep the hands on the rings through the blend.
-const bulgarianM: Move = {
-  keys: [bulgarian(0), bulgarian(B.drop / 2), bulgarian(B.drop), bulgarian(B.drop / 2)], mode: 'cycle', front: true, x: 'hip', y: 'hand', at: [0, Y], ms: 800,
-  beats: [{ hold: 0.4, dur: 1.1, ease: 'in' }, { dur: 1.1, ease: 'out' }, { hold: 0.15, dur: 0.65, ease: 'in' }, { dur: 0.65, ease: 'out' }],
-}
+// Mid keys keep the hands on the rings along the spline.
+const bulgarianM: Move = { front: true, x: 'hip', y: 'hand', at: [0, Y], ...rep(bulgarian(0), bulgarian(B.drop), (f) => bulgarian(B.drop * f), 2, 1.2) }
 
-const dip = (top: Pose, low: Pose, props: Move['props'], down = 1.8, up = 1): Move => ({ ...on([top, low], props, 800), ...tempo(down, up) })
-const hold = (keys: Pose[], props: Move['props']): Move => ({ ...on(keys, props, 900), beats: holdBeats(1.4, 1.6) })
+/** Dip rep, seconds: shoulders and elbows bend together; the shoulders depress again only at the end of the press-out. */
+const dip = (top: Pose, low: Pose, props: Move['props'], down = 1.7, up = 1): Move => {
+  const mid = (f: number, rise: boolean) => {
+    const p = blend(top, low, f, 'lin')
+    return rise ? nudge(p, { 11: (full(low)[11] - full(top)[11]) * (1 - f) * 0.6 }) : p
+  }
+  return { ...on([], props), ...rep(top, low, mid, down, up, [0.25, 0.2]) }
+}
+/** Support hold: settle in, then breathe (≈2 s each way). */
+const hold = (keys: Pose[], props: Move['props']): Move => ({ ...on(keys, props, 1000), beats: holdBeats(1.4, 2) })
 
 export const MOVES: Record<string, Move> = {
   support_hold: hold([shrug, support, nudge(support, { 5: 3, 6: 3, 7: 3, 8: 3, 9: -1 })], [bars]),
@@ -67,7 +72,7 @@ export const MOVES: Record<string, Move> = {
   korean_dip: dip(kTop, kLow, [bar], 2, 1.2),
   straight_bar_dip: dip(sTop, sLow, [bar]),
   rto_support: hold([support, rto, nudge(rto, { 1: 2, 2: 2, 3: 2, 4: 2, 5: -3, 6: -3, 7: -3, 8: -3 })], [rings]),
-  russian_dip: { ...on([support, dipLow, forearms], [bars], 800), mode: 'cycle', beats: [{ hold: 0.4, dur: 1.8 }, { hold: 0.1, dur: 1.2 }, { hold: 0.3, dur: 2 }] },
+  russian_dip: { ...on([support, dipLow, forearms], [bars], 1000), mode: 'cycle', beats: [{ hold: 0.3, dur: 1.5 }, { hold: 0.15, dur: 1 }, { hold: 0.3, dur: 1.7 }] },
   ring_dip: dip(support, dipLow, [rings], 2, 1.1),
   lsit_dip: dip(lTop, lLow, [bars]),
   impossible_dip: dip(straightTop, straightForearm, [bars], 2.2, 1.4),

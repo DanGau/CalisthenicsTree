@@ -1,6 +1,6 @@
 import { joints, place, type Move, type Pose, type Prop } from '../../core/figure'
 import { reach } from './legs'
-import { balance, bent, fit, handOf, holdBeats, line, reachTo, set, straight, tempo } from './push'
+import { balance, bent, fit, handOf, holdBeats, line, reachTo, rep, set, straight, tween } from './push'
 
 const ARM = 54
 
@@ -27,13 +27,11 @@ const tuckBody: Pose = [104, 0, 0, 0, 0, 62, -112, 62, -112, 62, 95, D]
 const tuck = float(tuckBody)
 // Entry: same tuck with the toes still on the floor and less lean.
 const tuckIn = fit((s) => set(set(tuckBody, [1, 2, 3, 4], -12), [6, 8], s), (b) => b.hand.y - b.toe.y, -10, -120)
-const tuckLow = press(tuckBody, -80)
 const advBody = (hip: number): Pose => [92, 0, 0, 0, 0, hip, -112, hip, -112, 90, 115, D]
 const advTuck = float(advBody(32))
 const oneLeg = float([92, 0, 0, 0, 0, 32, -112, -92, -92, 89, 112, D])
 const fullBody = (dip = 0): Pose => [92 - dip, 0, 0, 0, 0, -91 + dip, -91 + dip, -91 + dip, -91 + dip, 86, 108, D]
 const planche = float(fullBody())
-const plancheLow = press(fullBody(), -82)
 
 /**
  * Front view from slightly above: the back rises behind the head (hips level with the shoulders) and straight legs fan out `a`
@@ -56,24 +54,28 @@ const parallettes = (m: Move): Prop[] => {
   const b = place(m, m.keys[0])
   return [b.hand, b.farHand].map((h) => ({ t: 'bars', x: Math.round(h.x), y: Math.round(h.y) }))
 }
-const front = (keys: Pose[], beats = holdBeats(1.4, 1.6)): Move => ({ keys, front: true, x: 'hand', beats })
+const front = (keys: Pose[], beats = holdBeats(2, 1.5)): Move => ({ keys, front: true, x: 'hand', ms: 1000, beats })
 
-const m = (keys: Pose[], ms?: number): Move => ({ keys, x: 'hand', ms })
+/** Seconds per beat unit. */
+const m = (keys: Pose[]): Move => ({ keys, x: 'hand', ms: 1000 })
+/** Planche push-up, floating: upper arm from the straight-arm hold to u, forearms solved to keep balance; slow both ways. */
+const floatRep = (body: Pose, top: Pose, u: number, down: number, up: number) =>
+  rep(top, press(body, u), (f) => press(body, top[1] + (u - top[1]) * f), down, up, [0.3, 0.3])
 
 export const MOVES: Record<string, Move> = {
-  plank: { ...m([sag, hollow, reachTo((t) => line(t, -5), ARM - 0.5, D_HANDS, 0, -1, 100, 150)]), beats: holdBeats(1.6, 1.8) },
-  scap_pu: { ...m([retract, protract], 800), beats: [{ hold: 0.3, dur: 1.2 }, { hold: 0.4, dur: 0.9 }], mode: 'cycle' },
-  planche_lean: { ...m([hollow, lean], 900), beats: [{ hold: 0.4, dur: 2 }, { hold: 1 }] },
-  pp_pu: { ...m([lean, ppLow], 800), ...tempo(2, 1.2) },
-  tuck_planche: { ...m([tuckIn, tuck, float(set(tuckBody, [10], 100))]), beats: holdBeats(1.3, 1.6) },
-  tuck_planche_pu: { ...m([tuck, tuckLow], 800), ...tempo(2, 1.2) },
-  adv_tuck_planche: { ...m([tuck, advTuck, float(advBody(26))]), beats: holdBeats(1.5, 1.6) },
+  plank: { ...m([sag, hollow, reachTo((t) => line(t, -5), ARM - 0.5, D_HANDS, 0, -1, 100, 150)]), beats: holdBeats(1.6, 2) },
+  scap_pu: { ...m([retract, protract]), beats: [{ hold: 0.3, dur: 1 }, { hold: 0.4, dur: 0.8 }], mode: 'cycle' },
+  planche_lean: { ...m([hollow, lean, tween(hollow, lean, 1.04)]), beats: [{ hold: 0.4, dur: 2 }, { dur: 1.5 }, { hold: 0.2 }] },
+  pp_pu: { x: 'hand', ...rep(lean, ppLow, (f) => tween(lean, ppLow, f), 2, 1.2) },
+  tuck_planche: { ...m([tuckIn, tuck, float(set(tuckBody, [10], 100))]), beats: holdBeats(1.8, 1.5) },
+  tuck_planche_pu: { x: 'hand', ...floatRep(tuckBody, tuck, -80, 2.2, 1.6) },
+  adv_tuck_planche: { ...m([tuck, advTuck, float(advBody(26))]), beats: holdBeats(2, 1.5) },
   straddle_planche: front([facing(STR + 8, 40), facing(84, 40), facing(80, 40, 2)]),
-  one_leg_planche: { ...m([advTuck, oneLeg, float(set(oneLeg, [7, 8], -86))]), beats: holdBeats(1.6, 1.6) },
-  full_planche: { ...m([advTuck, planche, float(fullBody(4))]), beats: holdBeats(1.8, 1.6) },
-  planche_pu: { ...m([planche, plancheLow], 800), ...tempo(2.2, 1.4) },
+  one_leg_planche: { ...m([advTuck, oneLeg, float(set(oneLeg, [7, 8], -86))]), beats: holdBeats(2, 1.5) },
+  full_planche: { ...m([advTuck, planche, float(fullBody(4))]), beats: holdBeats(2.5, 1.5) },
+  planche_pu: { x: 'hand', ...floatRep(fullBody(), planche, -82, 2.5, 1.8) },
   maltese: (() => {
-    const mv: Move = { ...front([maltese(96, 176), maltese(101)], [{ hold: 0.4, dur: 1.8 }, { hold: 0.6 }]), y: 'hand', at: [0, MAL.y] }
+    const mv: Move = { ...front([maltese(96, 176), maltese(101)], [{ hold: 0.4, dur: 1.5 }, { hold: 0.3 }]), y: 'hand', at: [0, MAL.y] }
     return { ...mv, props: parallettes(mv) }
   })(),
 }

@@ -3,8 +3,9 @@ import { blend, joints, LEN, type Beat, type Move, type Pose, type Stage } from 
 const D = 180 / Math.PI
 
 /**
- * A stretch on the breath: ease in through `path` to its last key, sink there on the exhale,
- * hold, release a little on the inhale (`release`, default a 30% blend back), sink again, then come out.
+ * A stretch on the breath: slide in through `path` to its last key, sink there on the exhale,
+ * release a little on the inhale (`release`, default a 15% blend back), sink again, then come out.
+ * Real time (motion-reference §1.4, §9): slide in about 3.5 s, each breath half-period 4.5 s.
  * `stages`: per `path` key (lift, turn, trunk); the release lerps them too.
  */
 export function breathe(path: Pose[], ms = 900, release?: Pose, stages: Partial<Stage>[] = []): Pick<Move, 'keys' | 'mode' | 'beats' | 'ms'> {
@@ -16,13 +17,15 @@ export function breathe(path: Pose[], ms = 900, release?: Pose, stages: Partial<
   const mid: Partial<Stage> = {}
   for (const k of ['lift', 'turn', 'trunk'] as const) if (sd[k] !== undefined || sb[k] !== undefined) {
     const d = sd[k] ?? (k === 'trunk' ? 1 : 0)
-    mid[k] = d + ((sb[k] ?? (k === 'trunk' ? 1 : 0)) - d) * 0.3
+    mid[k] = d + ((sb[k] ?? (k === 'trunk' ? 1 : 0)) - d) * 0.15
   }
-  const into: Beat[] = path.slice(0, -1).map((_, i) => ({ ...stages[i], hold: i ? 0 : 0.5, dur: 1.8 }))
+  const s = (sec: number) => (sec * 1000) / ms
+  const slide = s(n > 2 ? 2 : 3.5)
+  const into: Beat[] = path.slice(0, -1).map((_, i) => ({ ...stages[i], hold: i ? 0 : s(0.8), dur: slide }))
   return {
-    keys: [...path, release ?? blend(deep, before, 0.3), deep],
+    keys: [...path, release ?? blend(deep, before, 0.15), deep],
     mode: 'cycle', ms,
-    beats: [...into, { ...sd, hold: 1, dur: 1.1 }, { ...mid, hold: 0.2, dur: 1.8 }, { ...sd, hold: 1.2, dur: 2 }],
+    beats: [...into, { ...sd, hold: s(0.5), dur: s(4.5) }, { ...mid, hold: s(0.4), dur: s(4.5) }, { ...sd, hold: s(0.6), dur: s(2.5) }],
   }
 }
 
@@ -30,6 +33,21 @@ export function breathe(path: Pose[], ms = 900, release?: Pose, stages: Partial<
 export const rep = (a: Pose, b: Pose, go = 1, back = 1.8, holdA = 0.3, holdB = 0.4): Pick<Move, 'keys' | 'mode' | 'beats'> => ({
   keys: [a, b], mode: 'cycle', beats: [{ hold: holdA, dur: go, ease: 'io' }, { hold: holdB, dur: back, ease: 'io' }],
 })
+
+/** Minimum-jerk progress at time fraction u (motion-reference §1.1). */
+const mjp = (u: number) => u ** 3 * (10 - 15 * u + 6 * u * u)
+
+/**
+ * Rep along a pose family `f` (0 = start, 1 = end), like `rep`, with keys at minimum-jerk progress:
+ * speed is bell-shaped and contacts that `f` keeps exact hold between keys too.
+ */
+export const repPath = (f: (s: number) => Pose, go = 1, back = 1.8, holdA = 0.3, holdB = 0.4, n = 3): Pick<Move, 'keys' | 'mode' | 'beats'> => {
+  const s = Array.from({ length: n + 1 }, (_, i) => mjp(i / n))
+  const keys = [...s, ...s.slice(1, -1).reverse()].map(f)
+  const beats: Beat[] = keys.map((_, i) => ({ hold: i === 0 ? holdA : i === n ? holdB : 0, dur: (i < n ? go : back) / n }))
+  return { keys, mode: 'cycle', beats }
+}
+
 /** Controlled circle: accelerate from rest, constant speed, settle back to rest. */
 const circle = (n: number): Beat[] => Array.from({ length: n }, (_, i) => (i === 0 ? { hold: 0.4, dur: 2, ease: 'in' } : i === n - 1 ? { dur: 2, ease: 'out' } : { ease: 'lin' }))
 const wrap = (v: number) => ((((v + 180) % 360) + 360) % 360) - 180
@@ -130,24 +148,30 @@ const toeSit: Pose = [178, 30, 60, 30, 60, 62, -102, 62, -102]
 const seated = squat([-26, 10], 175, 175, [60, 90, 60, 90])
 const rocked = squat([-12, 26], 135, 145, [80, 90, 80, 90])
 
-// Overhead squat: stick locked over mid-foot (x 4).
-const ohsTop = put([180, 180, 180, 180, 180, 0, 0, 0, 0], [0, 81], { hand: [4, 183], farHand: [4, 183] }, { hand: 1, farHand: 1 })
-const ohsBottom = (() => {
-  const p = squat([-14, 22], 157, 165, [170, 170, 170, 170])
-  const [sx, sy] = where(p, [-14, 22], 'shoulder')
-  return put(p, [-14, 22], { hand: [4, sy + Math.sqrt(53.5 ** 2 - (4 - sx) ** 2)], farHand: [4, sy + Math.sqrt(53.5 ** 2 - (4 - sx) ** 2)] }, { hand: 1, farHand: 1 })
-})()
+// Overhead squat: stick locked over mid-foot (x 4); `s` from standing (0) to the bottom (1), hips and knees together.
+const ohs = (s: number): Pose => {
+  const hip: [number, number] = [-14 * s, 81 - 59 * s]
+  const p = put([180 - 23 * s, 180 - 10 * s, 180 - 10 * s, 180 - 10 * s, 180 - 10 * s, 0, 0, 0, 0, 180 - 15 * s, 180], hip, { foot: [0, H.ankle], farFoot: [0, H.ankle] })
+  const [sx, sy] = where(p, hip, 'shoulder')
+  const hy = sy + Math.sqrt(53.5 ** 2 - (4 - sx) ** 2)
+  return put(p, hip, { hand: [4, hy], farHand: [4, hy] }, { hand: 1, farHand: 1 })
+}
 
-// Cat-cow as a wave, one segment at a time: pelvis, mid back, head.
-const wave: Pose[] = [
-  quad(0, 112, 100, 140), quad(0, 128, 96, 95), quad(0, 135, 85, 30),
-  quad(0, 104, 88, 35), quad(0, 95, 112, 85), quad(0, 92, 125, 165),
-]
+// Cat-cow as a wave (motion-reference §9): one breath per 5 s cycle, pelvis first, then mid back,
+// head last, each segment trailing the one before by 0.3 s. Cat (rounded, head down) to cow (sway, head up).
+const WAVE = { n: 16, lag: 0.06 }
+const cat = [135, 85, 30]
+const cow = [94, 116, 165]
+const wave: Pose[] = Array.from({ length: WAVE.n }, (_, i) => {
+  const [t, c, h] = cat.map((v, j) => v + (cow[j] - v) * (1 - Math.cos(2 * Math.PI * (i / WAVE.n - j * WAVE.lag))) / 2)
+  return quad(0, t, c, h)
+})
 
 export const MOVES: Record<string, Move> = {
   // Rock the shoulders forward past the wrists and back, hands planted.
   wrist_prep: { keys: [quad(21, 110, 110, 95), quad(0, 109, 109, 100), quad(-17, 110, 110, 105)], ...kneePin, ms: 1100, beats: [{ hold: 0.5 }, {}, { hold: 0.6 }] },
-  deep_squat: { keys: [squat([-9, 19], 145, 155, [35, 90, 35, 90]), squat([-10, 16], 148, 160, [38, 95, 38, 95])], x: 'foot', ms: 1000, beats: [{ hold: 0.4, dur: 2.4 }, { hold: 0.8, dur: 1.8 }], mode: 'cycle' },
+  // Resting in the hole, breathing: sink a little on each exhale.
+  deep_squat: { keys: [squat([-9, 19], 145, 155, [35, 90, 35, 90]), squat([-10, 16], 148, 160, [38, 95, 38, 95])], x: 'foot', ms: 1000, beats: [{ hold: 0.4, dur: 4.2 }, { hold: 0.5, dur: 4.2 }], mode: 'cycle' },
   // Only the hip moves: knee up, out, back, down; the torso never leans.
   hip_cars: {
     keys: [
@@ -171,10 +195,9 @@ export const MOVES: Record<string, Move> = {
   // The trunk turns with the knees to square up over the front shin.
   pigeon_9090: { keys: knees9090, front: true, ms: 1000, beats: [{ turn: 40, hold: 0.8, dur: 1.3, ease: 'in' }, { dur: 1.3, ease: 'out' }, { turn: -40, hold: 0.8 }] },
   // Thread the needle: far hand slides under the chest, then opens to the ceiling; eyes follow it.
-  thoracic: { keys: [thread, quad(0, 107, 112, 170, [180, 180])], ...kneePin, ms: 1000, beats: [{ hold: 0.8, dur: 1.8 }, { hold: 1, dur: 1.8 }] },
+  thoracic: { keys: [thread, quad(0, 107, 112, 170, [180, 180])], ...kneePin, ms: 1000, beats: [{ hold: 0.8, dur: 2.5 }, { hold: 1.2, dur: 2.5 }] },
   spinal_waves: {
-    keys: wave, mode: 'cycle', ...kneePin, ms: 700,
-    beats: [{ ease: 'lin' }, { ease: 'out' }, { hold: 0.4, dur: 1.4, ease: 'in' }, { ease: 'lin' }, { ease: 'out' }, { hold: 0.4, dur: 1.4, ease: 'in' }],
+    keys: wave, mode: 'cycle', ...kneePin, ms: 5000 / WAVE.n,
   },
   // Hips drive up off the floor and turn square to a tall kneel, then lower with control.
   shinbox: {
@@ -193,5 +216,5 @@ export const MOVES: Record<string, Move> = {
     mode: 'cycle', x: 'foot', ms: 900,
     beats: [{ hold: 0.2, dur: 0.6, ease: 'snap' }, { dur: 1, ease: 'out' }, { hold: 0.6, dur: 1.4, ease: 'io' }, { dur: 1.3, ease: 'io' }, { hold: 0.5, dur: 0.8, ease: 'io' }],
   },
-  overhead_squat: { ...rep(ohsTop, ohsBottom, 2, 1.2, 0.4, 0.3), x: 'foot', ms: 1000 },
+  overhead_squat: { ...repPath(ohs, 2, 1.2, 0.4, 0.3), x: 'foot', ms: 1000 },
 }

@@ -1,4 +1,4 @@
-import { joints, LEN, type Beat, type Joint, type Move, type Pose, type Pt } from '../../core/figure'
+import { full, joints, LEN, type Beat, type Joint, type Move, type Pose, type Pt } from '../../core/figure'
 
 const D = 180 / Math.PI
 const wrap = (v: number) => ((((v + 180) % 360) + 360) % 360) - 180
@@ -58,6 +58,20 @@ export function plant(p: Pose, to: Partial<Record<Limb, number>>, floor: number,
     out = reach(p, at(drop), opts)
   }
   return out
+}
+
+/**
+ * A key a fraction f of the way from a to b with the named limbs planted on the floor (the lowest point of each
+ * key) at blended spots, so they stay put between keys the spline would otherwise let them drift from.
+ */
+export function tween(a: Pose, b: Pose, f: number, limbs: Limb[], opts: { front?: boolean; k?: Partial<Record<Limb, number>> } = {}): Pose {
+  const B = full(b)
+  const p = full(a).map((v, i) => v + (B[i] - v) * f) as Pose
+  const [ja, jb] = [joints(a, !!opts.front), joints(b, !!opts.front)]
+  const low = (j: ReturnType<typeof joints>) => Math.max(...Object.values(j).map((v) => v.y))
+  const to = Object.fromEntries(limbs.map((l) => [l, ja[l].x + (jb[l].x - ja[l].x) * f]))
+  const q = full(plant(p, to, low(ja) + (low(jb) - low(ja)) * f, opts))
+  return q.map((v, i) => v + 360 * Math.round((p[i]! - v) / 360)) as Pose
 }
 
 /** Where a joint sits in hip coordinates. */

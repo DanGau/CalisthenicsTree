@@ -1,5 +1,5 @@
-import { joints, place, type Beat, type Joint, type Move, type Pose } from '../../core/figure'
-import { plant, pos, reach, rot } from './legs'
+import { full, joints, LEN, place, type Beat, type Joint, type Move, type Pose } from '../../core/figure'
+import { plant, pos, reach, rot, tween } from './legs'
 
 // Rotations: forward rolls turn the figure by -360, backward ones by +360; the last key is the first turned once.
 
@@ -27,16 +27,11 @@ const palms = (p: Pose, dx: number, k = -1): Pose => {
 export const star = (t: number, a = 20, l = 30, nearArm?: number): Pose =>
   [t, nearArm ?? t - a, nearArm ?? t - a, t + a, t + a, t - 180 + l, t - 180 + l, t - 180 - l, t - 180 - l]
 
-// Cartwheel: at the quarter turns the arm spread puts one palm level with the foot still down.
-const cart = (one = false): Pose[] => {
-  const tuck = (t: number) => (one ? t - 170 : undefined)
-  return [star(180, 20, 12, tuck(180)), star(90, 57, 40, tuck(90)), star(0, 18, 48, tuck(0)), star(-90, 57, 40, tuck(-90)), star(-180, 20, 12, tuck(-180))]
-}
 
 const fwdRoll: Pose[] = [reachUp, crouch(118, 44), palms(ball(15), 8), ball(-90), ball(-170), squat(-205, -270), rot(reachUp, -360)]
 const backRoll: Pose[] = [stand, squat(165, 100), ears(255), palms(ears(335), -6, 1), rot(crouch(120, 36, 160), 360), rot(stand, 360)]
 
-const hs: Pose = [0, 0, 0, 0, 0, 180, 180, 180, 180, 0, 5]
+const hs: Pose = [0, 0, 0, 0, 0, -180, -180, -180, -180, 0, 5]
 // Handstand roll: arms bend, chin tucks late, the rounded back meets the floor.
 const hsBend: Pose = (() => { const p: Pose = [8, 0, 0, 0, 0, 185, 185, 185, 185, -10, -45]; const s = pos(p, 'shoulder'); return reach(p, { hand: [s[0] + 6, s[1] + 34], farHand: [s[0] + 6, s[1] + 34] }, { k: { hand: 1, farHand: 1 } }) })()
 const shoulderBall = (t: number): Pose => { const p = ball(t); p[1] = t - 95; p[2] = t - 95; return p }
@@ -86,18 +81,70 @@ const bfAir2: Pose = [88, 165, 165, -15, -15, -120, -120, -60, -60, 90, 70]
 const bfLand: Pose = plant([125, 120, 120, -50, -50, -75, -60, 0, 0, 135, 155], { farFoot: 0 }, 78)
 const bfRise: Pose = [172, 40, 50, -30, -20, 0, 0, -8, -8, 172, 176]
 
-/** Beats for a roll: tip in, roll at a steady speed through n keys, stand up, restart seamlessly. */
-const roll = (n: number, tip = 1): Beat[] => [
-  { hold: 0.4, dur: 1 }, { dur: tip, ease: 'in' },
-  ...Array.from({ length: n }, (_, i): Beat => ({ dur: 0.65, ease: i === n - 1 ? 'out' : 'lin' })),
-  { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 },
-]
-const wheel: Beat[] = [{ hold: 0.4, dur: 1, ease: 'in' }, { dur: 1, ease: 'lin' }, { dur: 1, ease: 'lin' }, { dur: 1.1, ease: 'out' }, { hold: 0.3, dur: 0.01 }]
-/** Beats for a tuck: dip, drive, two flight keys, open, land, stand. */
-const salto: Beat[] = [
-  { hold: 0.4, dur: 1 }, { hold: 0.1, dur: 0.5, ease: 'snap' }, { dur: 0.6, ease: 'out' }, { lift: 70, dur: 0.6, ease: 'lin' },
-  { lift: 62, dur: 0.6, ease: 'in' }, { lift: 12, dur: 0.3, ease: 'in' }, { dur: 1.2, ease: 'out' }, { hold: 0.3, dur: 0.01 },
-]
+// Timing below is in seconds: every move here uses ms 1000.
+
+/**
+ * Adds whole turns per channel so each limb turns less than about half a turn relative to the trunk between
+ * consecutive keys (the torso itself turns less than half a turn).
+ */
+export const unwrap = (keys: Pose[]): Pose[] =>
+  keys.reduce<Pose[]>((out, k) => {
+    const p = out[out.length - 1]
+    if (!p) return [k]
+    const a = full(p)
+    const q = full(k)
+    const t = q[0] + 360 * Math.round((a[0] - q[0]) / 360)
+    return [...out, q.map((v, i) => {
+      if (i === 0) return t
+      const want = a[i] + t - a[0]
+      return Math.abs(v - want) <= 220 ? v : v + 360 * Math.round((want - v) / 360)
+    }) as Pose]
+  }, [])
+
+/** Centre of mass height above the lowest body point (segment masses as fractions of the body). */
+const up = (p: Pose, front = false) => {
+  const b = joints(p, front)
+  const mid = (a: { y: number }, c: { y: number }) => (a.y + c.y) / 2
+  const com = 0.5 * mid(b.hip, b.shoulder) + 0.08 * b.head.y + 0.1 * (mid(b.hip, b.knee) + mid(b.hip, b.farKnee)) +
+    0.05 * (mid(b.knee, b.foot) + mid(b.farKnee, b.farFoot)) + 0.03 * (mid(b.shoulder, b.elbow) + mid(b.shoulder, b.farElbow)) +
+    0.02 * (mid(b.elbow, b.hand) + mid(b.farElbow, b.farHand))
+  return Math.max(...Object.values(b).map((v) => v.y), b.head.y + LEN.head) - com
+}
+
+/**
+ * Beats for a flight of T seconds through poses at fractions τ of it: lifts keep the centre of mass on the parabola
+ * of apex gT²/8 above the line from lift `from` (at τ 0, CoM as in the first pose) to `to` (at τ 1). Key takeoff at
+ * τ ≈ 0.12 and landing at ≈ 0.95, just off the floor, and leave eases to the spline: a key at lift 0 with speed
+ * would make the spline dip into the floor.
+ */
+export const air = (ks: [Pose, number][], T: number, o: { front?: boolean; from?: number; to?: number } = {}): Beat[] => {
+  const { front = false, from = 0, to = from } = o
+  const h = (981 * T * T) / 8
+  const h0 = up(ks[0][0], front)
+  return ks.map(([p, f], i) => ({ lift: Math.max(0, from + (to - from) * f + h0 + 4 * h * f * (1 - f) - up(p, front)), dur: ((ks[i + 1]?.[1] ?? 1) - f) * T }))
+}
+
+const SPREAD: [number, number][] = [[20, 12], [57, 40], [18, 48], [57, 40], [20, 12]]
+/**
+ * A wheel (front view) from upright through one turn: star keys every `step` degrees, spreads blended between the
+ * quarter turns, pivots per quarter. `time` s for the turn, held `rest` s upright at each end.
+ */
+export const wheel = (o: { spread?: [number, number][]; pivots?: Joint[]; time: number; rest?: number; step?: number; tuck?: boolean }): Pick<Move, 'keys' | 'beats' | 'travel' | 'mode' | 'front'> => {
+  const { spread = SPREAD, pivots = ['foot', 'hand', 'farHand', 'farFoot'], time, rest = 0.4, step = 15, tuck } = o
+  const n = 360 / step
+  const keys: Pose[] = []
+  const by: (Joint | number)[] = []
+  for (let i = 0; i <= n; i++) {
+    const q = Math.min(3, Math.floor((i * 4) / n))
+    const f = (i * 4) / n - q
+    const [a, l] = [0, 1].map((j) => spread[q][j] + (spread[q + 1][j] - spread[q][j]) * f)
+    const t = 180 - i * step
+    keys.push(star(t, a, l, tuck ? t - 170 : undefined))
+    by.push(i < n ? pivots[q] : 0)
+  }
+  const beats = keys.map((_, i): Beat => (i === 0 ? { hold: rest, dur: time / n } : i < n ? { dur: time / n } : { hold: rest, dur: 0.01 }))
+  return travelled({ keys, beats, mode: 'cycle', front: true, ms: 1000 }, by)
+}
 
 /** Adds travel: each transition keeps the named joint still on the floor; a number moves that far (rolling, flight). */
 export const travelled = (m: Move, by: (Joint | number)[]): Move => {
@@ -112,50 +159,119 @@ export const travelled = (m: Move, by: (Joint | number)[]): Move => {
   return { ...m, beats, travel: s }
 }
 
+type Limb = 'hand' | 'farHand' | 'foot' | 'farFoot'
+/**
+ * Like `travelled`, after splitting the transitions out of the keys listed in `mids` with a planted in-between key
+ * (the feet, or the limbs given with the index), so contacts hold while the body moves over them.
+ */
+export const planted = (m: Move, by: (Joint | number)[], mids: (number | [number, Limb[]])[]): Move => {
+  const at = new Map(mids.map((v) => (typeof v === 'number' ? [v, ['foot', 'farFoot'] as Limb[]] : v)))
+  const keys: Pose[] = []
+  const beats: Beat[] = []
+  const b2: (Joint | number)[] = []
+  m.keys.forEach((k, i) => {
+    const b = m.beats?.[i] ?? {}
+    const limbs = at.get(i)
+    if (!limbs) return void (keys.push(k), beats.push(b), b2.push(by[i]))
+    const d = (b.dur ?? 1) / 2
+    const half = typeof by[i] === 'number' ? (by[i] as number) / 2 : by[i]
+    keys.push(k, tween(k, m.keys[i + 1], 0.5, limbs, { front: m.front }))
+    beats.push({ ...b, dur: d, ease: b.ease === 'in' || b.ease === 'snap' ? b.ease : 'io' }, { dur: d, ease: b.ease === 'out' ? 'out' : 'io' })
+    b2.push(half, half)
+  })
+  return travelled({ ...m, keys, beats }, b2)
+}
+
+/** A roll: keys unwrapped, timed in seconds, ms 1000. */
+const rolled = (keys: Pose[], durs: number[], by: (Joint | number)[], mids: (number | [number, Limb[]])[] = []): Move =>
+  planted({
+    keys: unwrap(keys), mode: 'cycle', ms: 1000, flow: 0.05,
+    beats: durs.map((dur, i): Beat => (i === 0 ? { hold: 0.5, dur } : i === durs.length - 1 ? { hold: 0.4, dur: 0.01 } : { dur, ease: i === durs.length - 2 ? 'out' : 'io' })),
+  }, by, [0, durs.length - 2, ...mids])
+
+// Dive: leave the floor leaning forward, the body long and near level at the top, hands reaching for the floor.
+const launch: Pose = [150, 140, 150, 140, 150, -30, -30, -30, -30, 150, 150]
+const dive: Pose = [85, 85, 90, 85, 90, -95, -95, -95, -95, 85, 80]
+/** Landing contact out of a flip, turned r: knees just bending, arms forward. */
+const contact = (r: number): Pose => rot(plant([162, 110, 115, 110, 115, 0, 0, 0, 0, 165, 170], { foot: 12, farFoot: 12 }, 72), r)
+
+/** A standing salto: dip with the arms back, drive, flight of T s through the air poses, land, absorb, stand. */
+const salto = (sign: 1 | -1, airPoses: [Pose, number][], T: number, drift: number): Move => {
+  const r = 360 * sign
+  const keys = unwrap([reachUp, load, takeoff, ...airPoses.map((a) => a[0]), contact(r), absorb(r), rot(reachUp, r)])
+  const fly = air([[keys[2], 0.12], ...airPoses.map(([, f], i): [Pose, number] => [keys[3 + i], f]), [keys[3 + airPoses.length], 0.95]], T)
+  return planted({
+    keys, mode: 'cycle', ms: 1000, flow: 0.05,
+    beats: [{ hold: 0.5, dur: 0.45 }, { dur: 0.25 }, ...fly.slice(0, -1), { ...fly[fly.length - 1], dur: 0.3 }, { hold: 0.1, dur: 0.6 }, { hold: 0.4, dur: 0.01 }],
+  }, ['foot', 'foot', ...fly.slice(0, -1).map((b) => (drift * (b.dur ?? 0)) / T), 'foot', 'foot', 0], [0, keys.length - 2])
+}
+
+const rollBy: (Joint | number)[] = ['foot', 'hand', 40, 35, 30, 'foot', 0]
+const fwdDurs = [0.55, 0.25, 0.25, 0.25, 0.3, 0.45, 0]
+
+const bfAir = air([[bfTake, 0.12], [bfAir1, 0.4], [bfAir2, 0.75], [bfLand, 0.95]], 0.5)
+const kipAir = air([[kick, 0.12], [kipFly, 0.5], [kipLand, 0.95]], 0.5)
+
 export const MOVES: Record<string, Move> = {
-  fwd_roll: travelled({ keys: fwdRoll, mode: 'cycle', ms: 600, beats: roll(3), flow: 0.1 }, ['foot', 'hand', 40, 35, 30, 'foot', 0]),
-  back_roll: travelled({ keys: backRoll, mode: 'cycle', ms: 650, beats: roll(2, 0.8), flow: 0.1 }, ['foot', -30, -35, -30, 'foot', 0]),
-  shoulder_roll: travelled({ keys: [reachUp, crouch(118, 44), shoulderBall(15), shoulderBall(-90), shoulderBall(-170), squat(-205, -270), rot(reachUp, -360)], mode: 'cycle', ms: 600, beats: roll(3), flow: 0.1 }, ['foot', 'hand', 40, 35, 30, 'foot', 0]),
-  cartwheel: travelled({ keys: cart(), mode: 'cycle', front: true, ms: 650, beats: wheel }, ['foot', 'hand', 'farHand', 'farFoot', 0]),
-  back_ext_roll: travelled({
-    keys: [stand, squat(165, 100), ears(255), palms(ears(335), -6, 1), handsBack, snap, absorb(360), rot(stand, 360)], mode: 'cycle', ms: 600,
-    beats: [{ hold: 0.4, dur: 1 }, { dur: 0.7, ease: 'in' }, { dur: 0.6, ease: 'lin' }, { dur: 0.5, ease: 'snap' }, { hold: 0.15, dur: 0.5, ease: 'in' }, { lift: 10, dur: 0.4, ease: 'in' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  }, ['foot', -30, -35, 'hand', -20, -20, 'foot', 0]),
-  dive_roll: travelled({
-    keys: [reachUp, load, [50, 40, 40, 40, 40, -130, -130, -130, -130, 45, 40], palms(ball(15), 8), ball(-90), ball(-170), squat(-205, -270), rot(reachUp, -360)], mode: 'cycle', ms: 550, flow: 0.15,
-    beats: [{ hold: 0.4, dur: 1 }, { hold: 0.1, dur: 0.6, ease: 'out' }, { lift: 45, dur: 0.6, ease: 'in' }, { dur: 0.6, ease: 'lin' }, { dur: 0.6, ease: 'lin' }, { dur: 0.7, ease: 'out' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  }, ['foot', 45, 30, 40, 35, 30, 'foot', 0]),
-  roundoff: travelled({
-    keys: [star(180, 20, 12), star(90, 57, 40), star(0, 18, 10), star(-60, 25, 0), star(-180, 20, 0)], mode: 'cycle', front: true, ms: 550,
-    beats: [{ hold: 0.4, dur: 1, ease: 'in' }, { dur: 0.9, ease: 'lin' }, { dur: 0.6, ease: 'snap' }, { lift: 25, dur: 0.6, ease: 'in' }, { hold: 0.4, dur: 0.01 }],
-  }, ['foot', 'hand', 'farHand', 20, 0]),
+  fwd_roll: rolled(fwdRoll, fwdDurs, rollBy),
+  back_roll: rolled(backRoll, [0.5, 0.3, 0.3, 0.3, 0.45, 0], ['foot', -30, -35, -30, 'foot', 0]),
+  shoulder_roll: rolled([reachUp, crouch(118, 44), shoulderBall(15), shoulderBall(-90), shoulderBall(-170), squat(-205, -270), rot(reachUp, -360)], fwdDurs, rollBy),
+  cartwheel: wheel({ time: 1.2 }),
+  back_ext_roll: (() => {
+    const keys = unwrap([stand, squat(165, 100), ears(255), palms(ears(335), -6, 1), handsBack, snap, contact(360), absorb(360), rot(stand, 360)])
+    const fly = air([[keys[5], 0.12], [keys[6], 0.95]], 0.25)
+    return planted({
+      keys, mode: 'cycle', ms: 1000, flow: 0.05,
+      beats: [{ hold: 0.5, dur: 0.5 }, { dur: 0.3 }, { dur: 0.3 }, { dur: 0.25 }, { hold: 0.1, dur: 0.2 }, fly[0], { ...fly[1], dur: 0.25 }, { hold: 0.1, dur: 0.6 }, { hold: 0.4, dur: 0.01 }],
+    }, ['foot', -30, -35, 'hand', -20, -12, 'foot', 'foot', 0], [0, 7])
+  })(),
+  dive_roll: (() => {
+    const fly = air([[launch, 0.12], [dive, 0.5], [palms(ball(15), 8), 0.95]], 0.5)
+    return travelled({
+      keys: unwrap([reachUp, load, launch, dive, palms(ball(15), 8), ball(-90), ball(-170), squat(-205, -270), rot(reachUp, -360)]), mode: 'cycle', ms: 1000, flow: 0.05,
+      beats: [{ hold: 0.5, dur: 0.45 }, { dur: 0.25 }, fly[0], fly[1], { ...fly[2], dur: 0.25 }, { dur: 0.25 }, { dur: 0.3 }, { dur: 0.45, ease: 'out' }, { hold: 0.4, dur: 0.01 }],
+    }, ['foot', 'foot', 55, 55, 40, 35, 30, 'foot', 0])
+  })(),
+  roundoff: (() => {
+    const ks = [star(180, 20, 12), star(90, 57, 40), star(0, 18, 10), star(-60, 25, 0), star(-120, 22, 0), star(-180, 20, 0)]
+    const fly = air([[ks[3], 0.12], [ks[4], 0.5]], 0.3, { front: true })
+    return travelled({ keys: ks, mode: 'cycle', front: true, ms: 1000, beats: [{ hold: 0.5, dur: 0.4 }, { dur: 0.2 }, { dur: 0.15, ease: 'in' }, ...fly, { hold: 0.5, dur: 0.01 }] }, ['foot', 'hand', 'farHand', 10, 10, 0])
+  })(),
   kip_up: {
-    keys: [lie, rockBack, kick, kipFly, kipLand, squat(160), stand, squat(165), sitDown], mode: 'cycle', ms: 550, flow: 0.12,
-    beats: [{ hold: 0.4, dur: 1.1 }, { hold: 0.15, dur: 0.35, ease: 'snap' }, { dur: 0.45, ease: 'out' }, { lift: 32, dur: 0.45, ease: 'in' }, { dur: 0.5, ease: 'out' }, { dur: 1, ease: 'out' }, { hold: 0.8, dur: 1 }, { dur: 0.9, ease: 'in' }, { dur: 1, ease: 'out' }],
+    keys: [lie, rockBack, kick, kipFly, kipLand, squat(160), stand, squat(165), sitDown], mode: 'cycle', ms: 1000, flow: 0.05,
+    beats: [{ hold: 0.4, dur: 0.6 }, { hold: 0.1, dur: 0.2, ease: 'snap' }, ...kipAir.slice(0, 2), { ...kipAir[2], dur: 0.3 }, { dur: 0.55, ease: 'out' }, { hold: 0.5, dur: 0.55 }, { dur: 0.5, ease: 'in' }, { dur: 0.55, ease: 'out' }],
   },
-  one_hand_cart: travelled({ keys: cart(true), mode: 'cycle', front: true, ms: 650, beats: wheel }, ['foot', 'farHand', 'farHand', 'farFoot', 0]),
-  hs_roll: travelled({
-    keys: [reachUp, lungeDown, hs, hsBend, palms(ball(-40), 4, 1), ball(-90), ball(-170), squat(-205, -270), rot(reachUp, -360)], mode: 'cycle', ms: 650,
-    beats: [{ hold: 0.3, dur: 0.9 }, { dur: 0.8, ease: 'out' }, { hold: 1, dur: 1.4 }, { dur: 0.7, ease: 'in' }, { dur: 0.6, ease: 'lin' }, { dur: 0.6, ease: 'lin' }, { dur: 0.6, ease: 'out' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  }, ['foot', 'hand', 'hand', 'hand', 35, 30, 30, 'foot', 0]),
-  front_walkover: travelled({ keys: [reachUp, lungeDown, splitFwd, bridgeFwd, rot(reachUp, -360)], mode: 'cycle', ms: 750, beats: [{ hold: 0.4, dur: 1 }, { dur: 0.9, ease: 'out' }, { hold: 0.1, dur: 1.1 }, { hold: 0.2, dur: 1.3 }, { hold: 0.3, dur: 0.01 }] }, ['foot', 'hand', 'hand', 'foot', 0]),
-  back_walkover: travelled({ keys: [reachUp, leanBack, bridgeBack, splitBack, rot(reachUp, 360)], mode: 'cycle', ms: 750, beats: [{ hold: 0.4, dur: 1.2 }, { dur: 1.1, ease: 'in' }, { hold: 0.2, dur: 0.9, ease: 'out' }, { dur: 1.1 }, { hold: 0.3, dur: 0.01 }] }, ['foot', 'foot', 'hand', 'foot', 0]),
-  aerial: travelled({
-    keys: [star(180, 160, 4), star(170, 170, 14), star(90, 150, 50), star(0, 150, 50), star(-90, 150, 45), star(-180, 160, 8), star(-180, 160, 4)], mode: 'cycle', front: true, ms: 500, flow: 0.15,
-    beats: [{ hold: 0.3, dur: 1 }, { dur: 0.6, ease: 'out' }, { lift: 40, dur: 0.6, ease: 'lin' }, { lift: 55, dur: 0.6, ease: 'lin' }, { lift: 35, dur: 0.6, ease: 'in' }, { dur: 0.8, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  }, ['foot', 30, 40, 40, 30, 'farFoot', 0]),
-  front_handspring: travelled({
-    keys: [reachUp, lunge, reachDown, hurdle, hs, flyFwd, landArch, archAbsorb, rot(reachUp, -360)], mode: 'cycle', ms: 550, flow: 0.15,
-    beats: [{ hold: 0.4, dur: 0.8 }, { dur: 0.4, ease: 'in' }, { dur: 0.35, ease: 'lin' }, { dur: 0.4, ease: 'in' }, { dur: 0.45, ease: 'snap' }, { lift: 62, dur: 0.5, ease: 'in' }, { dur: 0.4, ease: 'out' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  }, [30, 'foot', 'foot', 'hand', 50, 40, 'foot', 'foot', 0]),
-  back_handspring: travelled({
-    keys: [reachUp, sit, throwBack, flyBack, handsBack, snap, absorb(360), rot(reachUp, 360)], mode: 'cycle', ms: 550, flow: 0.15,
-    beats: [{ hold: 0.4, dur: 0.9 }, { hold: 0.05, dur: 0.45, ease: 'snap' }, { dur: 0.45, ease: 'out' }, { lift: 60, dur: 0.45, ease: 'in' }, { dur: 0.35, ease: 'snap' }, { lift: 14, dur: 0.4, ease: 'in' }, { dur: 1, ease: 'out' }, { hold: 0.3, dur: 0.01 }],
-  }, ['foot', 'foot', -40, -40, 'hand', -30, 'foot', 0]),
+  one_hand_cart: wheel({ time: 1.3, tuck: true, pivots: ['foot', 'farHand', 'farHand', 'farFoot'] }),
+  hs_roll: rolled([reachUp, lungeDown, hs, hsBend, palms(ball(-40), 4, 1), ball(-90), ball(-170), squat(-205, -270), rot(reachUp, -360)], [0.6, 0.7, 0.6, 0.35, 0.3, 0.3, 0.3, 0.45, 0],
+    ['foot', 'hand', 'hand', 'hand', 35, 30, 30, 'foot', 0], [[1, ['hand', 'farHand']], [2, ['hand', 'farHand']]]),
+  front_walkover: planted({ keys: unwrap([reachUp, lungeDown, splitFwd, bridgeFwd, rot(reachUp, -360)]), mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 0.6 }, { dur: 0.8 }, { dur: 0.9 }, { hold: 0.2, dur: 0.9 }, { hold: 0.4, dur: 0.01 }] }, ['foot', 'hand', 'hand', 'foot', 0], [[1, ['hand', 'farHand']], [2, ['hand', 'farHand']], [3, ['foot']]]),
+  back_walkover: planted({ keys: unwrap([reachUp, leanBack, bridgeBack, splitBack, rot(reachUp, 360)]), mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 1 }, { dur: 0.7 }, { hold: 0.2, dur: 0.8 }, { dur: 0.8 }, { hold: 0.4, dur: 0.01 }] }, ['foot', 'foot', 'hand', 'foot', 0], [0, 1, [2, ['hand', 'farHand']]]),
+  aerial: (() => {
+    const ks = [star(180, 160, 4), star(170, 170, 14), star(90, 150, 50), star(0, 150, 50), star(-90, 150, 45), star(-180, 160, 8), star(-180, 160, 4)]
+    const fly = air([[ks[1], 0.12], [ks[2], 0.3], [ks[3], 0.52], [ks[4], 0.74], [ks[5], 0.95]], 0.5, { front: true })
+    return travelled({ keys: ks, mode: 'cycle', front: true, ms: 1000, flow: 0.05, beats: [{ hold: 0.5, dur: 0.35 }, ...fly.slice(0, -1), { ...fly[4], dur: 0.35 }, { hold: 0.4, dur: 0.01 }] }, ['foot', 30, 40, 40, 30, 'farFoot', 0])
+  })(),
+  front_handspring: (() => {
+    const keys = unwrap([reachUp, lunge, reachDown, hurdle, hs, flyFwd, landArch, archAbsorb, rot(reachUp, -360)])
+    const fly = air([[keys[4], 0.12], [keys[5], 0.5], [keys[6], 0.95]], 0.45)
+    return travelled({
+      keys, mode: 'cycle', ms: 1000, flow: 0.05,
+      beats: [{ hold: 0.5, dur: 0.35 }, { dur: 0.25 }, { dur: 0.25 }, { dur: 0.2 }, fly[0], fly[1], { ...fly[2], dur: 0.3 }, { dur: 0.6, ease: 'out' }, { hold: 0.4, dur: 0.01 }],
+    }, [30, 'foot', 'foot', 'hand', 50, 40, 'foot', 'foot', 0])
+  })(),
+  back_handspring: (() => {
+    const keys = unwrap([reachUp, sit, throwBack, flyBack, handsBack, snap, contact(360), absorb(360), rot(reachUp, 360)])
+    const fly = air([[keys[2], 0.12], [keys[3], 0.5]], 0.3)
+    const fly2 = air([[keys[5], 0.12], [keys[6], 0.95]], 0.25)
+    return planted({
+      keys, mode: 'cycle', ms: 1000, flow: 0.05,
+      beats: [{ hold: 0.5, dur: 0.35 }, { dur: 0.2 }, ...fly, { dur: 0.2 }, fly2[0], { ...fly2[1], dur: 0.25 }, { hold: 0.1, dur: 0.6 }, { hold: 0.4, dur: 0.01 }],
+    }, ['foot', 'foot', -40, -40, 'hand', -24, -6, 'foot', 0], [0, 7])
+  })(),
   butterfly_kick: {
-    keys: [bfRise, bfWind, bfTake, bfAir1, bfAir2, bfLand], mode: 'cycle', ms: 500, flow: 0.2,
-    beats: [{ hold: 0.3, dur: 1 }, { hold: 0.05, dur: 0.6, ease: 'snap' }, { dur: 0.45, ease: 'out' }, { lift: 62, dur: 0.45, ease: 'lin' }, { lift: 55, dur: 0.45, ease: 'in' }, { dur: 1, ease: 'out' }],
+    keys: [bfRise, bfWind, bfTake, bfAir1, bfAir2, bfLand], mode: 'cycle', ms: 1000, flow: 0.05,
+    beats: [{ hold: 0.4, dur: 0.5 }, { dur: 0.3 }, ...bfAir.slice(0, 3), { ...bfAir[3], dur: 0.6, ease: 'out' }],
   },
-  back_tuck: travelled({ keys: [reachUp, load, takeoff, ball(290), ball(410), opening(360), absorb(360), rot(reachUp, 360)], mode: 'cycle', ms: 450, flow: 0.15, beats: salto }, ['foot', 'foot', -10, -10, -10, -5, 'foot', 0]),
-  front_tuck: travelled({ keys: [reachUp, load, takeoff, ball(70), ball(-50), opening(-360), absorb(-360), rot(reachUp, -360)], mode: 'cycle', ms: 450, flow: 0.15, beats: salto }, ['foot', 'foot', 10, 10, 10, 5, 'foot', 0]),
+  back_tuck: salto(1, [[ball(240), 0.35], [ball(350), 0.55], [ball(450), 0.75], [opening(330), 0.88]], 0.65, -20),
+  front_tuck: salto(-1, [[ball(120), 0.35], [ball(10), 0.55], [ball(-90), 0.75], [opening(-330), 0.88]], 0.65, 20),
 }

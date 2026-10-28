@@ -1,6 +1,6 @@
 import { place, type Body, type Move, type Pose } from '../../core/figure'
-import { reach } from './legs'
-import { body, chestPt, grip, hold, rep } from './pull'
+import { pos, reach } from './legs'
+import { body, chestPt, grip, hold, pinned, rep } from './pull'
 
 /** Root of f in [lo, hi] by bisection (f must change sign). */
 export const solve = (lo: number, hi: number, f: (x: number) => number) => {
@@ -47,7 +47,16 @@ const rowMove = (t0: number, prop: 'bar' | 'rings', top: Arms = (p) => p, bottom
     const h: [number, number] = [H.x - hip.x, H.y - hip.y]
     return reach(p, { hand: h, farHand: h }, { k: { hand: -1, farHand: -1 } })
   }
-  return { ...m, ...rep(...unwrap([bottom(at(0)), bottom(at(0.4)), top(at(0.75)), top(at(1))]), { rise: 0.9, lower: 1.5 }), props: [{ t: prop, x: H.x, y: H.y }] }
+  // Re-aim between keys too: the far arm only when both hands hold the bar.
+  const [a, b] = [pos(bottom(at(0)), 'hand'), pos(bottom(at(0)), 'farHand')]
+  const both = Math.hypot(a[0] - b[0], a[1] - b[1]) < 1
+  const fix = (p: Pose): Pose => {
+    const hip = place(m, p).hip
+    const h: [number, number] = [H.x - hip.x, H.y - hip.y]
+    return reach(p, both ? { hand: h, farHand: h } : { hand: h }, { k: { hand: -1, farHand: -1 } })
+  }
+  const move = { ...m, ...rep(...unwrap([bottom(at(0)), bottom(at(0.4)), top(at(0.75)), top(at(1))]), { rise: 1, lower: 1.7 }), props: [{ t: prop, x: H.x, y: H.y }] }
+  return pinned(move, fix)
 }
 const oneArm: Arms = (p) => [p[0], p[1], p[2], 90, 90, ...p.slice(5)] as Pose
 // Archer: the far arm stays straight, reaching to its ring.
@@ -85,16 +94,16 @@ const chinOver = grip(chinBody, chestPt(chinBody, 1, 15), -1, true)
 export const MOVES: Record<string, Move> = {
   incline_row: rowMove(-122, 'bar'),
   row: rowMove(-104, 'rings'),
-  feet_up_row: { ...feetUpBase, ...rep(fuBottom, null, [fuTop], { rise: 0.9, lower: 1.5 }), props: [{ t: 'rings', x: 0, y: -110 }, { t: 'box', x: heel.x - 30, w: 50, h: -heel.y }] },
+  feet_up_row: { ...feetUpBase, ...rep(fuBottom, null, [fuTop], { rise: 1, lower: 1.7 }), props: [{ t: 'rings', x: 0, y: -110 }, { t: 'box', x: heel.x - 30, w: 50, h: -heel.y }] },
   archer_row: rowMove(-104, 'rings', straightFar),
   tuck_fl: lhold(tuck),
   oa_row: rowMove(-104, 'rings', oneArm, oneArm, 1000),
   adv_tuck_fl: lhold(advTuck),
-  tuck_fl_row: { ...pin, ...rep(tuck, null, [leverRow(tuck)], { rise: 0.9, lower: 1.5 }), ms: 900 },
-  oneleg_fl: { ...lever([L([90, 90, 180, 90]), L([180, 90, 90, 90])], 1000), beats: [{ hold: 0.8, dur: 1.5 }, { hold: 0.8 }] },
-  ice_cream: { ...lever([chinOver, fl], 1000), mode: 'cycle', beats: [{ hold: 0.3, dur: 1.8 }, { hold: 0.6, dur: 1.1 }] },
+  tuck_fl_row: { ...pin, ...rep(tuck, null, [leverRow(tuck)], { rise: 1.5, lower: 2.2, top: 0.3, bottom: 0.3 }), ms: 1000 },
+  oneleg_fl: { ...lever([L([90, 90, 180, 90]), L([180, 90, 90, 90])], 1000), beats: [{ hold: 1.2, dur: 2 }, { hold: 1.2 }] },
+  ice_cream: { ...lever([chinOver, fl], 1000), mode: 'cycle', beats: [{ hold: 0.3, dur: 2.4 }, { hold: 0.6, dur: 1.6 }] },
   straddle_fl: lhold(L([82, 82, 98, 98])),
   full_fl: lhold(fl),
-  fl_raise: { ...lever([inverted, fl], 1000), mode: 'cycle', beats: [{ hold: 0.3, dur: 1.8 }, { hold: 0.6, dur: 1.2 }] },
-  fl_pullup: { ...pin, ...rep(fl, null, [leverRow(fl)], { rise: 1, lower: 1.6 }), ms: 1000 },
+  fl_raise: { ...lever([inverted, fl], 1000), mode: 'cycle', beats: [{ hold: 0.3, dur: 2.5 }, { hold: 0.6, dur: 1.7 }] },
+  fl_pullup: { ...pin, ...rep(fl, null, [leverRow(fl)], { rise: 1.6, lower: 2.4, top: 0.3, bottom: 0.3 }), ms: 1000 },
 }

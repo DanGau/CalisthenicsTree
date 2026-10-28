@@ -1,5 +1,5 @@
 import type { Move, Pose } from '../../core/figure'
-import { H, KNEEL, ang, put, rep } from './mobility'
+import { H, KNEEL, ang, put, repPath } from './mobility'
 
 /**
  * Supine with the shoulders on the floor at world x 0 and the hip h up: the torso runs from the
@@ -24,10 +24,19 @@ const thrust = (h: number): Pose => {
   return put([t, 0, 0, 0, 0, 0, 0, 135, 100, t, -130], [hx, h], { foot: [84, H.ankle], hand: [-40, 37], farHand: [-40, 37] }, { hand: 1, farHand: 1 })
 }
 
-// Single-leg RDL: stance foot at x 0, soft knee, rear leg in line with the flat back.
-const rdlTop: Pose = [180, 0, 0, 0, 0, 0, 0, -8, -8]
-const rdl = (t: number, c: number, head: number, far: [number, number], farArm: [number, number] = [0, 0]): Pose =>
-  put([t, 0, 0, ...farArm, 0, 0, ...far, c, head], [-14, 75], { foot: [0, H.ankle] })
+// Single-leg RDL: stance foot at x 0, rear leg in line with the flat back.
+const rdl = (t: number, c: number, head: number, far: [number, number], farArm: [number, number] = [0, 0], hip: [number, number] = [-14, 75]): Pose =>
+  put([t, 0, 0, ...farArm, 0, 0, ...far, c, head], hip, { foot: [0, H.ankle] })
+/**
+ * Hinge path (motion-reference §8), `s` 0 standing to 1 at the bottom: the knee softens 15-20° in the
+ * first third and then stays put; the hips travel back while the trunk tips and the rear leg rises with it.
+ */
+const hinge = (s: number): Pose => {
+  const k = Math.min(1, s / 0.3)
+  const k2 = k * (2 - k)
+  const lean = 87 * s
+  return rdl(180 - lean, 180 - lean, 180 - lean + 3 * s, [-8 - 79 * s, -8 - 79 * s], [0, 0], [-14 * Math.sin((s * Math.PI) / 2), 81 - 6 * k2])
+}
 
 // Nordic: knees at x 0, heels anchored; the body leans from the knee as one straight piece, hands crossed on the chest.
 const lean = (d: number): Pose => {
@@ -41,6 +50,11 @@ const catchAt = (d: number): Pose => {
   return put([T, -90, 0, -90, 0, -d, KNEEL, -d, KNEEL, T, T - 10], hip, { hand: [sx + 4, H.hand], farHand: [sx + 4, H.hand] })
 }
 const nordicPin = { x: 'knee' as const, at: [0, 0] as [number, number] }
+/** Lower to `d` at a steady speed (keys every third), pause, curl back up. */
+const nordic = (d: number, down: number, up: number): Move => ({
+  keys: [lean(0), lean(d / 3), lean((2 * d) / 3), lean(d)], ...nordicPin, mode: 'cycle', ms: 1000,
+  beats: [{ hold: 0.4, dur: down / 3 }, { dur: down / 3 }, { dur: down / 3 }, { hold: 0.3, dur: up }],
+})
 
 // Back extension: hips on the bench edge, legs anchored behind; torso from hanging to in line with the legs.
 const ghd = { t: 'box', x: -70, w: 66, h: 70 } as const
@@ -48,31 +62,31 @@ const ext = (t: number, c: number, head: number): Pose => [t, c - 172, c - 20, c
 
 export const MOVES: Record<string, Move> = {
   // Drive up fast, squeeze at the top, lower slowly.
-  glute_bridge: { ...rep(supine(H.lie, FEET), supine(29, FEET), 0.8, 1.5, 0.3, 0.6), ...supPin },
-  sl_bridge: { ...rep(supine(H.lie, FEET, [125, 125]), supine(29, FEET, [TOP_THIGH, TOP_THIGH]), 0.8, 1.6, 0.3, 0.6), ...supPin },
+  glute_bridge: { ...repPath((s) => supine(H.lie + (29 - H.lie) * s, FEET), 0.8, 1.5, 0.3, 0.6), ...supPin },
+  sl_bridge: { ...repPath((s) => supine(H.lie + (29 - H.lie) * s, FEET, [125 + (TOP_THIGH - 125) * s, 125 + (TOP_THIGH - 125) * s]), 0.8, 1.6, 0.3, 0.6), ...supPin },
   // Bridge on straight legs, then curl the heels in under the knees; hips stay up. Slide out slowly.
-  slider_curl: { ...rep(supine(25, [117, H.ankle]), supine(29, FEET), 1, 1.8, 0.3, 0.4), ...supPin },
-  sl_hip_thrust: { ...rep(thrust(15), thrust(43), 0.8, 1.6, 0.3, 0.6), x: 'foot', at: [84, 0], props: [{ t: 'box', x: -45, w: 50, h: 33 }] },
+  slider_curl: { ...repPath((s) => supine(25 + 4 * s, [117 - 40 * s, H.ankle]), 1, 1.8, 0.3, 0.4), ...supPin },
+  sl_hip_thrust: { ...repPath((s) => thrust(15 + 28 * s), 0.8, 1.6, 0.3, 0.6), x: 'foot', at: [84, 0], props: [{ t: 'box', x: -45, w: 50, h: 33 }] },
   // Hinge down slowly, the rear leg rising as a counterweight; drive the hip forward to stand.
-  sl_rdl: { ...rep(rdlTop, rdl(93, 93, 96, [-87, -87]), 1.9, 1.1, 0.4, 0.3), x: 'foot', ms: 1000 },
+  sl_rdl: { ...repPath(hinge, 1.9, 1.1, 0.4, 0.3), x: 'foot', ms: 1000 },
   // Hips open: the pelvis turns about the stance leg, chest to the side, free arm to the ceiling, rear knee bends out. Slow both ways.
   airplane: {
-    keys: [rdl(93, 93, 96, [-87, -87]), rdl(96, 102, 140, [-98, -150], [178, 178])],
+    keys: [hinge(1), rdl(96, 102, 140, [-98, -150], [178, 178])],
     beats: [{ hold: 0.4, dur: 1.6 }, { turn: 65, hold: 0.8, dur: 1.4 }],
     mode: 'cycle', x: 'foot', ms: 1000,
   },
-  // Slow lowering that speeds up as the lever lengthens, then a fast catch; push back up.
+  // Near-constant speed to the break point, then a fall caught on the hands; push back up.
   nordic_neg: {
-    keys: [lean(0), lean(40), lean(68), catchAt(75)], ...nordicPin, mode: 'cycle', ms: 1000,
-    beats: [{ hold: 0.4, dur: 2.2, ease: 'in' }, { dur: 1.1, ease: 'lin' }, { dur: 0.35, ease: 'in' }, { hold: 0.6, dur: 1.2, ease: 'io' }],
+    keys: [lean(0), lean(18), lean(36), lean(52), lean(66), catchAt(75)], ...nordicPin, mode: 'cycle', ms: 1000,
+    beats: [{ hold: 0.4, dur: 1 }, { dur: 0.9 }, { dur: 0.9 }, { dur: 0.45 }, { dur: 0.2 }, { hold: 0.6, dur: 1.4 }],
   },
   // Lower to the pause, hold, then lower and catch.
   nordic_pause: {
-    keys: [lean(0), lean(45), lean(47), catchAt(75)], ...nordicPin, mode: 'cycle', ms: 1000,
-    beats: [{ hold: 0.4, dur: 2, ease: 'io' }, { hold: 1.4, dur: 0.4, ease: 'lin' }, { dur: 0.7, ease: 'in' }, { hold: 0.6, dur: 1.2, ease: 'io' }],
+    keys: [lean(0), lean(22), lean(45), lean(47), lean(62), catchAt(75)], ...nordicPin, mode: 'cycle', ms: 1000,
+    beats: [{ hold: 0.4, dur: 1.1 }, { dur: 1.1 }, { hold: 1.4, dur: 0.5 }, { dur: 0.5 }, { dur: 0.25 }, { hold: 0.6, dur: 1.4 }],
   },
-  // Lower under control, curl back up with the hamstrings.
-  nordic: { ...rep(lean(0), lean(66), 2.6, 1.8, 0.4, 0.2), ...nordicPin, ms: 1000 },
-  nordic_strict: { ...rep(lean(0), lean(80), 3, 2.2, 0.4, 0.3), ...nordicPin, ms: 1000 },
-  back_ext: { ...rep(ext(8, -2, -8), ext(90, 90, 92), 1, 1.6, 0.3, 0.6), x: 'hip', y: 'hip', at: [0, -80], props: [ghd] },
+  // Lower at a steady 3-5 s under control, curl back up with the hamstrings.
+  nordic: nordic(66, 3.6, 1.8),
+  nordic_strict: nordic(80, 4.5, 2.2),
+  back_ext: { ...repPath((s) => ext(8 + 82 * s, -2 + 92 * s, -8 + 100 * s), 1, 1.6, 0.3, 0.6), x: 'hip', y: 'hip', at: [0, -80], props: [ghd] },
 }

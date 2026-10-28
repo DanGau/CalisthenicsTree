@@ -1,6 +1,6 @@
-import { joints, type Beat, type Move, type Pose } from '../../core/figure'
-import { holdBeats, plant, pos, reach, rot } from './legs'
-import { ball, star, travelled } from './tumble'
+import { full, joints, type Beat, type Move, type Pose } from '../../core/figure'
+import { plant, pos, reach, rot } from './legs'
+import { ball, wheel } from './tumble'
 
 /** Lowest point of the head and trunk, in hip coordinates. */
 const base = (p: Pose, front = false) => {
@@ -123,23 +123,37 @@ const swipeUp: Pose = [235, 315, 315, 290, 290, 75, 65, 125, 115, 260, 290]
 
 const steady = (n: number, d = 1): Beat[] => Array.from({ length: n }, () => ({ dur: d, ease: 'lin' }))
 
+// Timing below is in seconds (ms 1000).
+
+/**
+ * A freeze: hit it from `entry` in 0.4 s, overshoot 2° along the way in and settle, hold two beats easing to
+ * `breath`, come back down.
+ */
+const freeze = (entry: Pose, f: Pose, breath: Pose): Pick<Move, 'keys' | 'beats' | 'mode' | 'ms'> => {
+  const [E, F] = [full(entry), full(f)]
+  const over = F.map((v, i) => v + Math.sign(v - E[i]) * Math.min(2, Math.abs(v - E[i]) * 0.05)) as Pose
+  return { keys: [entry, over, f, breath], mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 0.4 }, { dur: 0.25 }, { dur: 1.2 }, { hold: 0.3, dur: 0.7 }] }
+}
+/** A balance held between two keys, swaying at the real ≈0.3 Hz rhythm (1.5 s each way). */
+const sway = (half = 1.5): Pick<Move, 'beats' | 'ms'> => ({ ms: 1000, beats: [{ hold: 0.3, dur: half }, { hold: 0.3 }] })
+
 export const MOVES: Record<string, Move> = {
-  ginga: { keys: [ginga('far'), gingaBase, ginga('near'), gingaBase], mode: 'cycle', ms: 550, flow: 0.12, beats: [{ hold: 0.15, dur: 1 }, { dur: 1 }, { hold: 0.15, dur: 1 }, { dur: 1 }] },
-  cocorinha: { keys: [ginga('far'), squatGuard], mode: 'cycle', ms: 800, flow: 0.1, beats: [{ hold: 0.2, dur: 0.6, ease: 'in' }, { hold: 0.4, dur: 1 }] },
-  negativa: { keys: [ginga('far'), negativa], mode: 'cycle', ms: 900, flow: 0.1, beats: [{ hold: 0.2, dur: 0.9, ease: 'in' }, { hold: 0.6, dur: 1.3 }] },
-  baby_freeze: { keys: [babyIn, baby(0), baby(4)], ms: 900, beats: [{ hold: 0.4, dur: 1.2 }, { dur: 0.8, ease: 'out' }, { hold: 1.4, dur: 0.8 }] },
-  qdr: { keys: [qdr([150, 20, 155, 30]), qdr([-80, -80, -70, -70])], ms: 1100, beats: holdBeats(1.2, 1.2) },
-  au: travelled({ keys: [star(180, 30, 25), star(90, 57, 45), star(0, 25, 60), star(-90, 57, 45), star(-180, 30, 25)], mode: 'cycle', front: true, ms: 900, beats: [{ hold: 0.4, dur: 1, ease: 'in' }, { dur: 1, ease: 'lin' }, { dur: 1, ease: 'lin' }, { dur: 1.1, ease: 'out' }, { hold: 0.3, dur: 0.01 }] }, ['foot', 'hand', 'farHand', 'farFoot', 0]),
-  chair_freeze: { keys: [chair(-50), chair(-55)], ms: 1100, beats: holdBeats(1.2, 1.4) },
+  ginga: { keys: [ginga('far'), gingaBase, ginga('near'), gingaBase], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.1, dur: 0.5 }, { dur: 0.5 }, { hold: 0.1, dur: 0.5 }, { dur: 0.5 }] },
+  cocorinha: { keys: [ginga('far'), squatGuard], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.45 }, { hold: 0.5, dur: 0.7 }] },
+  negativa: { keys: [ginga('far'), negativa], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.6 }, { hold: 0.8, dur: 0.9 }] },
+  baby_freeze: freeze(babyIn, baby(0), baby(3)),
+  qdr: { keys: [qdr([150, 20, 155, 30]), qdr([-80, -80, -70, -70])], ...sway(1.2) },
+  au: wheel({ spread: [[30, 25], [57, 45], [25, 60], [57, 45], [30, 25]], time: 1.8 }),
+  chair_freeze: { keys: [chair(-50), chair(-53)], ...sway() },
   back_spin: {
-    keys: [spinSit, spinWind, spinTuck(0), spinTuck(14), spinTuck(0), spinTuck(14), spinOpen], mode: 'cycle', ms: 500, flow: 0.2,
-    beats: [{ hold: 0.3, dur: 0.9 }, { turn: 30, dur: 0.4, ease: 'snap' }, ...[120, 240, 360, 480].map((turn): Beat => ({ turn, dur: 0.45, ease: 'lin' })), { turn: 560, dur: 1.2, ease: 'out' }],
+    keys: [spinSit, spinWind, spinTuck(0), spinTuck(14), spinTuck(0), spinTuck(14), spinOpen], mode: 'cycle', ms: 1000, flow: 0.05,
+    beats: [{ hold: 0.3, dur: 0.45 }, { turn: 30, dur: 0.2, ease: 'snap' }, ...[120, 240, 360, 480].map((turn): Beat => ({ turn, dur: 0.22, ease: 'lin' })), { turn: 560, dur: 0.6, ease: 'out' }],
   },
-  macaco: { keys: [macSit, macReach, macOver, macLand], mode: 'cycle', ms: 650, flow: 0.12, beats: [{ hold: 0.3, dur: 1 }, { dur: 0.5, ease: 'snap' }, { dur: 0.6, ease: 'in' }, { hold: 0.2, dur: 1.2 }] },
-  turtle_freeze: { keys: [turtle(-6), turtle(6)], ms: 800, beats: [{ hold: 0.2, dur: 1.2 }, { hold: 0.2, dur: 1.2 }] },
-  windmill: { keys: [mill(0), mill(90), mill(180), mill(270)], mode: 'cycle', front: true, x: 'shoulder', y: 'shoulder', at: [0, -18], ms: 340, flow: 0.2, beats: steady(4) },
-  swipe: { keys: [swipeDown, swipeUp, rot(swipeDown, 360)], mode: 'cycle', ms: 650, flow: 0.2, beats: [{ hold: 0.4, dur: 0.45, ease: 'snap' }, { lift: 22, dur: 0.5, ease: 'in' }, { hold: 0.2, dur: 0.01 }] },
-  airchair: { keys: [airIn, airchair(140), airchair(146)], ms: 900, beats: [{ hold: 0.4, dur: 1.3 }, { dur: 0.8, ease: 'out' }, { hold: 1.4, dur: 0.8 }] },
-  flare: { keys: [flare(0), flare(38), flare(0), flare(-38)], mode: 'cycle', front: true, ms: 280, flow: 0.22, beats: [0.7, 1, 0.7, 1].map((trunk): Beat => ({ trunk, ease: 'lin' })) },
-  hollowback: { keys: [hollow(0), hollow(15)], ms: 1100, beats: holdBeats(1.4, 1.2) },
+  macaco: { keys: [macSit, macReach, macOver, macLand], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.6 }, { dur: 0.3, ease: 'snap' }, { dur: 0.4 }, { hold: 0.3, dur: 0.8 }] },
+  turtle_freeze: { keys: [turtle(-6), turtle(6)], ms: 1000, beats: [{ hold: 0.2, dur: 1 }, { hold: 0.2, dur: 1 }] },
+  windmill: { keys: [mill(0), mill(90), mill(180), mill(270)], mode: 'cycle', front: true, x: 'shoulder', y: 'shoulder', at: [0, -18], ms: 1000, flow: 0.08, beats: steady(4, 0.2) },
+  swipe: { keys: [swipeDown, swipeUp, rot(swipeDown, 360)], mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 0.3 }, { lift: 22, dur: 0.35 }, { hold: 0.3, dur: 0.01 }] },
+  airchair: freeze(airIn, airchair(140), airchair(144)),
+  flare: { keys: [flare(0), flare(38), flare(0), flare(-38)], mode: 'cycle', front: true, ms: 1000, flow: 0.08, beats: [0.7, 1, 0.7, 1].map((trunk): Beat => ({ trunk, dur: 0.2, ease: 'lin' })) },
+  hollowback: { keys: [hollow(0), hollow(12)], ...sway() },
 }

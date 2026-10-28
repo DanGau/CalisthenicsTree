@@ -1,7 +1,7 @@
 import type { Move, Pose } from '../../core/figure'
 import { pos, reach } from './legs'
 import { solve, yOf } from './frontlever'
-import { body, chestPt, fgrip, fHang, fSettle, grip, hold, oa, rep, sMid } from './pull'
+import { body, chestPt, fgrip, fHang, fSettle, grip, hold, oa, pinned, rep, sMid } from './pull'
 
 const BAR = -210
 const frontHang = (keys: Pose[], props: Move['props'], x = 28, ms = 1400): Move => ({ keys, front: true, x: 'hand', y: 'hand', at: [x, BAR], props, ms })
@@ -82,7 +82,8 @@ const crossLow: Pose = [180, 100, 100, -100, -100, 0, 0, 0, 0, 180, 180, 1]
 const crossRings = [{ t: 'rings', x: -71, y: BAR }, { t: 'rings', x: 71, y: BAR }] as const
 
 const ringProps: Move['props'] = [{ t: 'rings', x: -28, y: BAR }, { t: 'rings', x: 28, y: BAR }]
-const breathe: Move['beats'] = [{ hold: 1, dur: 1.4 }, { hold: 1 }]
+// Hang wobble ≈0.5 Hz.
+const breathe: Move['beats'] = [{ hold: 0.3, dur: 1 }, { hold: 0.3 }]
 const pushup = { mode: 'cycle' as const, keys: [pu(0, 0), pu(-100, 4)], beats: [{ hold: 0.3, dur: 1.7 }, { hold: 0.15, dur: 1 }] }
 
 export const MOVES: Record<string, Move> = {
@@ -90,11 +91,11 @@ export const MOVES: Record<string, Move> = {
   towel_hang: { ...frontHang([tHang, tSqueeze], [{ t: 'bar', x: 0, y: BAR - 56 }, { t: 'rings', x: -17, y: BAR }, { t: 'rings', x: 17, y: BAR }], 17), beats: breathe },
   rope_legs: rope(climb, [{ hold: 0.2, dur: 0.8 }, { hold: 0.1, dur: 0.9, ease: 'snap' }, { dur: 0.5, ease: 'snap' }, { dur: 0.5, ease: 'snap' }, { dur: 0.7 }], ['hand', 'foot', 'foot', 'hand', 'hand']),
   false_grip: { ...sideRings([fgLoose, fgHang], 1000), beats: [{ hold: 0.6, dur: 1, ease: 'out' }, { hold: 1.2 }] },
-  fingertip_pu: { ...pushup, x: 'hand', ms: 900 },
+  fingertip_pu: pinned({ ...pushup, x: 'hand', ms: 900 }, (p) => pu(p[1], p[2])),
   rope_legless: rope([legless(-52, -22, 22), legless(-22, 8, 30), legless(-22, -52, 22), legless(8, -22, 30)], [{ dur: 1 }, { dur: 0.5, ease: 'snap' }, { dur: 1 }, { dur: 0.5, ease: 'snap' }], ['hand', 'hand', 'farHand', 'farHand']),
-  false_grip_pullup: { ...sideRings([]), ...rep(fgLoose, fgHang, [sMid, fgTop]) },
+  false_grip_pullup: { ...sideRings([], 1000), ...rep(fgLoose, fgHang, [sMid, fgTop], { rise: 1.2 }) },
   oa_hang: { ...frontHang([oneArm(192, [6, 6, 8, 4], 3), oneArm(190, [4, 2, 8, 6], -3)], [{ t: 'bar', x: 0, y: BAR }], 3), beats: breathe },
   ring_lsit: { ...sideRings([], 1000, -120), ...hold(lsit(4, 78), lsit(5, 90), lsit(6, 93)) },
-  cross_assist: { ...frontHang([crossLow, cross], [...crossRings, { t: 'box', x: -25, w: 50, h: 73 }], 71, 1100), beats: [{ hold: 0.6, dur: 1.6 }, { hold: 1.2 }] },
-  iron_cross: { ...frontHang([[180, 86, 86, -86, -86, 2, -2, -2, 2, 180, 180, 1], cross, [180, 90, 90, -90, -90, -2, 2, 2, -2, 180, 180, -4]], [...crossRings], 71, 1100), beats: [{ hold: 0.2, dur: 1, ease: 'out' }, { hold: 0.8, dur: 1.3 }, { hold: 1 }] },
+  cross_assist: { ...frontHang([crossLow, cross], [...crossRings, { t: 'box', x: -25, w: 50, h: 73 }], 71, 1100), beats: [{ hold: 0.6, dur: 2 }, { hold: 1.2 }] },
+  iron_cross: { ...frontHang([], [...crossRings], 71, 1000), ...hold([180, 100, 100, -100, -100, 2, -2, -2, 2, 180, 180, 2], cross, [180, 89, 89, -89, -89, -2, 2, 2, -2, 180, 181, -4]) },
 }

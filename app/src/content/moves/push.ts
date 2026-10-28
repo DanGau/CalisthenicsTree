@@ -36,18 +36,54 @@ export const set = (p: Pose, idx: number[], v: number): Pose => {
   return o
 }
 
-/** Strength rep from the top key: slow lowering, a brief pause, a strong rise, a breath at the top. */
-export const tempo = (down = 1.8, up = 1, top = 0.4, low = 0.15): Pick<Move, 'mode' | 'beats'> => ({
-  mode: 'cycle', beats: [{ hold: top, dur: down }, { hold: low, dur: up }],
+/** Two-key strength rep from the top key, in seconds (ms 1000): lowering, a brief pause, a strong rise, a breath at the top. */
+export const tempo = (down = 1.6, up = 0.95, top = 0.3, low = 0.15): Pick<Move, 'mode' | 'beats' | 'ms'> => ({
+  mode: 'cycle', ms: 1000, beats: [{ hold: top, dur: down }, { hold: low, dur: up }],
 })
 
-/** Hold: [entry, hold, sway] bounced. Settle into the hold, then small balance corrections. */
-export const holdBeats = (enter = 1.3, sway = 1.4): Beat[] => [{ hold: 0.5, dur: enter, ease: 'io' }, { dur: sway, ease: 'io' }, { hold: 0.2 }]
+/**
+ * Strength rep through mid keys, in seconds (ms 1000). `mid(f, up)` is the pose f of the way down, on the way
+ * down or up. Lowering accelerates and brakes near the bottom; rising is slowest just off the bottom
+ * (the sticking point), then speeds up and settles into the lockout.
+ */
+export function rep(top: Pose, low: Pose, mid: (f: number, up: boolean) => Pose, down = 1.6, up = 0.95, hold = [0.3, 0.15]): Pick<Move, 'keys' | 'mode' | 'beats' | 'ms'> {
+  return {
+    keys: [top, mid(0.25, false), mid(0.7, false), low, mid(0.8, true), mid(0.35, true)], mode: 'cycle', ms: 1000,
+    beats: [{ hold: hold[0], dur: 0.4 * down }, { dur: 0.35 * down }, { dur: 0.25 * down }, { hold: hold[1], dur: 0.38 * up }, { dur: 0.32 * up }, { dur: 0.3 * up }],
+  }
+}
+
+/** Hold: [entry, hold, sway] bounced, in seconds (ms 1000). Settle in, then sway or breathe with period 2 × `sway`. */
+export const holdBeats = (enter = 1.3, sway = 1.5): Beat[] => [{ hold: 0.5, dur: enter, ease: 'io' }, { dur: sway, ease: 'io' }, { hold: 0.25 }]
 
 /** Copy of p with deltas added at the given indices (chest and head made explicit first). */
 export const nudge = (p: Pose, d: Record<number, number>): Pose => {
   const o = [...full(p)] as Pose
   for (const [i, v] of Object.entries(d)) o[+i] = o[+i]! + v
+  return o
+}
+
+const wrapTo = (v: number, to: number) => v + Math.round((to - v) / 360) * 360
+/**
+ * Pose f of the way from a to b (plus deltas d) with the hands kept where both keys plant them relative to
+ * the toes: the blended body turns about the toes until the shoulders are the blended distance from the
+ * hands, then the arms re-aim. Mid keys made this way keep hands and feet planted along the spline.
+ */
+export function tween(a: Pose, b: Pose, f: number, d: Record<number, number> = {}, which: 'both' | 'near' = 'both'): Pose {
+  const q = nudge(blend(a, b, f, 'lin'), d)
+  const [ja, jb] = [joints(a), joints(b)]
+  const hand = { x: ja.hand.x - ja.toe.x, y: ja.hand.y - ja.toe.y }
+  const r = dist(ja.shoulder, ja.hand) + (dist(jb.shoulder, jb.hand) - dist(ja.shoulder, ja.hand)) * f
+  const turn = (v: number) => { const o = [...q] as Pose; for (const i of [0, 5, 6, 7, 8, 9, 10]) o[i] = o[i]! + v; return o }
+  const err = (v: number) => { const j = joints(turn(v)); return dist(j.shoulder, { x: j.toe.x + hand.x, y: j.toe.y + hand.y }) - r }
+  const v = Math.abs(err(0)) < 1e-6 ? 0 : solve(err, 0, Math.sign(err(25)) !== Math.sign(err(0)) ? 25 : -25)
+  const p = turn(v)
+  const j = joints(p)
+  const to = { x: j.toe.x + hand.x, y: j.toe.y + hand.y }
+  const [k1, k2] = [-1, 1].map((k) => armsTo(p, to, k, which))
+  const off = (o: Pose) => Math.abs(wrapTo(o[1], q[1]) - q[1]) + Math.abs(wrapTo(o[2], q[2]) - q[2])
+  const o = off(k1) < off(k2) ? k1 : k2
+  for (const i of which === 'near' ? [1, 2] : [1, 2, 3, 4]) o[i] = wrapTo(o[i]!, q[i]!)
   return o
 }
 
@@ -230,11 +266,11 @@ function archer(span: number, f: number): { pose: Pose; trunk: number } {
   // The bent elbow points out, away from the body.
   return { pose: joints(k1, true).elbow.x < joints(k2, true).elbow.x ? k1 : k2, trunk }
 }
-/** Archer rep: top, halfway, bottom, halfway; the halfway keys keep the hands planted through the blend. */
+/** Archer rep with rep() timing; the mid keys keep the hands planted along the spline. */
 const archerMove = (span: number, down: number, up: number, o: Partial<Move> = {}): Move => {
-  const ks = [0, 0.5, 1, 0.5].map((f) => archer(span, f))
-  const beats: Beat[] = [{ hold: 0.4, dur: down / 2 }, { dur: down / 2 }, { hold: 0.15, dur: up / 2 }, { dur: up / 2 }]
-  return { keys: ks.map((k) => k.pose), front: true, x: 'hand', mode: 'cycle', ms: 800, beats: beats.map((b, i) => ({ ...b, trunk: ks[i].trunk })), ...o }
+  const r = rep(archer(span, 0).pose, archer(span, 1).pose, (f) => archer(span, f).pose, down, up)
+  const trunks = [0, 0.25, 0.7, 1, 0.8, 0.35].map((f) => archer(span, f).trunk)
+  return { ...r, front: true, x: 'hand', beats: r.beats!.map((b, i) => ({ ...b, trunk: trunks[i] })), ...o }
 }
 
 // Clap: toes stay down, the chest pops up, hands meet under the chest.
@@ -280,31 +316,56 @@ const ringsAndBlocks = (m: Move): Prop[] => {
   ]
 }
 
-const half = (a: Pose, b: Pose, t: number) => blend(a, b, t, 'lin')
-/** Explosive push-up, feet fixed: lower, drive off the floor into `air`, catch on straight arms, absorb. */
-const plyo = (air: Pose): Move => ({
-  keys: [top, bottom, air, top, half(top, bottom, 0.45)], mode: 'cycle', x: 'foot', at: [footX(top), 0], ms: 700,
-  beats: [{ hold: 0.4, dur: 1.4 }, { hold: 0.05, dur: 0.5, ease: 'snap' }, { dur: 0.4, ease: 'in' }, { dur: 0.35, ease: 'out' }, { dur: 0.8 }],
+const ramp = (v: number, a: number, b: number) => Math.min(1, Math.max(0, (v - a) / (b - a)))
+/**
+ * Push-up rep between pushup() keys, hands and toes planted. The shoulder blades stay protracted
+ * (upper back rounded) until late in the descent and protract again only in the last part of the rise.
+ */
+const pushRep = (top: Pose, low: Pose, down = 1.5, up = 0.9, after: (p: Pose) => Pose = (p) => p) => {
+  const bend = full(top)[9] - full(top)[0] - (full(low)[9] - full(low)[0])
+  const shape = (f: number, rise: boolean) => {
+    const want = rise ? 1 - ramp(f, 0, 0.25) : 1 - ramp(f, 0.55, 1)
+    const d = bend * (want - (1 - f))
+    return after(tween(top, low, f, { 9: d, 10: d }))
+  }
+  return rep(after(top), after(low), shape, down, up)
+}
+
+/**
+ * Explosive push-up, feet fixed: a quick lowering, no pause (stretch-shortening), a 0.25 s drive to straight
+ * arms, flight to `air` and back on a parabola, catch on straight arms, absorb, settle back to the top.
+ * Flight `t` seconds: the chest rises g·t²/8.
+ */
+const plyo = (air: Pose, t = 0.4): Move => ({
+  keys: [top, tween(top, bottom, 0.55), bottom, top, air, top, tween(top, bottom, 0.4)], mode: 'cycle', x: 'foot', at: [footX(top), 0], ms: 1000,
+  beats: [{ hold: 0.4, dur: 0.3 }, { dur: 0.25 }, { hold: 0.04, dur: 0.25 }, { dur: t / 2, ease: 'out' }, { dur: t / 2, ease: 'in' }, { dur: 0.22 }, { hold: 0.1, dur: 0.8 }],
 })
 
+/** Aztec: lift h above the floor; flight time 2·√(2h/g). */
+const AZ = 50
+const azT = 2 * Math.sqrt((2 * AZ) / 981)
+const aztec: Move = {
+  keys: [top, tween(top, bottom, 0.5), top, aztecAir, top, tween(top, bottom, 0.4)], mode: 'cycle', ms: 1000,
+  beats: [{ hold: 0.4, dur: 0.45 }, { hold: 0.04, dur: 0.22 }, { dur: azT / 2, ease: 'out' }, { lift: AZ, dur: azT / 2, ease: 'in' }, { dur: 0.25 }, { hold: 0.1, dur: 0.8 }],
+}
+
+const wallMid = (f: number) => tween(wallTop, wallBottom, f)
+
 export const MOVES: Record<string, Move> = {
-  wall_pu: { keys: [wallTop, wallBottom], x: 'hand', props: [{ t: 'wall', x: 4 }], ...tempo(1.6), ms: 800 },
-  incline_pu: withProps({ keys: [incTop, incBottom], x: 'hand', ...tempo(), ms: 800 }, handBox),
-  pushup: { keys: [top, bottom], x: 'hand', ...tempo(), ms: 800 },
-  diamond_pu: { keys: [diaTop, diaBottom], x: 'hand', ...tempo(), ms: 800 },
-  hindu_pu: { keys: [hPike, hDive, hCobra], x: 'hand', mode: 'cycle', ms: 900, beats: [{ hold: 0.3, dur: 1.4 }, { dur: 0.9, ease: 'out' }, { hold: 0.5, dur: 1.4 }] },
-  decline_pu: withProps({ keys: [decTop, decBottom], x: 'hand', ...tempo(), ms: 800 }, toeBox),
+  wall_pu: { x: 'hand', props: [{ t: 'wall', x: 4 }], ...rep(wallTop, wallBottom, wallMid, 1.4, 0.9) },
+  incline_pu: withProps({ x: 'hand', ...pushRep(incTop, incBottom) }, handBox),
+  pushup: { x: 'hand', ...pushRep(top, bottom) },
+  diamond_pu: { x: 'hand', ...pushRep(diaTop, diaBottom, 1.6, 1) },
+  hindu_pu: { keys: [hPike, hDive, hCobra], x: 'hand', mode: 'cycle', ms: 1000, beats: [{ hold: 0.3, dur: 1.2 }, { dur: 0.9 }, { hold: 0.6, dur: 1.4 }] },
+  decline_pu: withProps({ x: 'hand', ...pushRep(decTop, decBottom, 1.6, 1) }, toeBox),
   archer_pu: archerMove(84, 2, 1.2),
   clap_pu: plyo(clapAir),
-  ring_pu: { ...rto([ringTop, ringBottom], 800), ...tempo() },
-  oap_incline: withProps({ keys: [oneArm(incTop), oneArm(incBottom)], x: 'hand', ...tempo(2, 1.3), ms: 800 }, handBox),
-  bb_clap: plyo(bbAir),
-  rto_pu: { ...rto([rtoTop, rtoBottom], 800), ...tempo(2.2, 1.3) },
-  one_arm_pu: { keys: [oneArm(top, false), oneArm(bottom, false)], x: 'hand', ...tempo(2, 1.4), ms: 800 },
-  aztec_pu: {
-    keys: [top, half(top, bottom, 0.55), aztecAir, top, half(top, bottom, 0.4)], mode: 'cycle', ms: 700,
-    beats: [{ hold: 0.4, dur: 1.1 }, { hold: 0.05, dur: 0.55, ease: 'out' }, { lift: 55, dur: 0.5, ease: 'in' }, { dur: 0.35, ease: 'out' }, { dur: 0.8 }],
-  },
+  ring_pu: { ...rto([], 1000), ...pushRep(ringTop, ringBottom, 1.6, 1) },
+  oap_incline: withProps({ x: 'hand', ...pushRep(incTop, incBottom, 2, 1.3, (p) => oneArm(p)) }, handBox),
+  bb_clap: plyo(bbAir, 0.5),
+  rto_pu: { ...rto([], 1000), ...pushRep(rtoTop, rtoBottom, 2.2, 1.3) },
+  one_arm_pu: { x: 'hand', ...pushRep(top, bottom, 2, 1.4, (p) => oneArm(p, false)) },
+  aztec_pu: aztec,
   ring_archer: { ...ringArcher, props: ringsAndBlocks(ringArcher) },
-  oapu_tight: { keys: [oneArm(top), oneArm(bottom)], x: 'hand', ...tempo(2.4, 1.5), ms: 800 },
+  oapu_tight: { x: 'hand', ...pushRep(top, bottom, 2.4, 1.5, (p) => oneArm(p)) },
 }

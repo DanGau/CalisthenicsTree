@@ -1,13 +1,13 @@
 import { place, type Move, type Pose } from '../../core/figure'
 import { solve } from './frontlever'
 import { pos, reach, rot } from './legs'
-import { body, fgrip, grip, rep } from './pull'
+import { body, fgrip, grip, hold, rep } from './pull'
 
 
 // On the back, head to the left. Low back flat (torso -92), the chest curls up off the floor in the hollow.
 const table: Pose = [-90, 180, 180, 180, 180, 180, 90, 180, 90, -90, -96]
-const bugL: Pose = [-90, -100, -100, 180, 180, 180, 90, 98, 98, -90, -96]
-const bugR: Pose = [-90, 180, 180, -100, -100, 98, 98, 180, 90, -90, -96]
+const bugL: Pose = [-90, 260, 260, 180, 180, 180, 90, 98, 98, -90, -96]
+const bugR: Pose = [-90, 180, 180, 260, 260, 98, 98, 180, 90, -90, -96]
 // Hollow: ribs down, shoulders and legs just off the floor, arms by the ears.
 const hollow = (lift = 0): Pose => [-93, -104 - lift, -104 - lift, -104 - lift, -104 - lift, 100 + lift, 100 + lift, 100 + lift, 100 + lift, -112 - lift, -122 - lift]
 // Arch (face down, head right): glutes squeeze the legs up, chest lifts, neck long.
@@ -70,22 +70,22 @@ const wiper = (side: number): Pose => fgrip(body(180 - side * 0.15, 180, 180, [1
 const hb = (hold: number, ...durs: number[]): Move['beats'] => durs.map((d, i) => ({ hold: i === 0 || i === durs.length - 1 ? hold : 0, dur: d }))
 
 export const MOVES: Record<string, Move> = {
-  dead_bug: { keys: [table, bugL, table, bugR], mode: 'cycle', ms: 900, beats: [{ hold: 0.2, dur: 1.2 }, { hold: 0.3, dur: 1.2 }, { hold: 0.2, dur: 1.2 }, { hold: 0.3, dur: 1.2 }] },
-  hollow_hold: { keys: [hollow(), hollow(3)], ms: 1000, beats: hb(1, 1.4, 1) },
-  arch_hold: { keys: [arch(0), arch(12)], ms: 1000, beats: [{ hold: 0.4, dur: 1.2, ease: 'out' }, { hold: 1 }] },
+  dead_bug: { keys: [table, bugL, table, bugR], mode: 'cycle', ms: 1000, beats: [{ hold: 0.2, dur: 1.5 }, { hold: 0.3, dur: 1 }, { hold: 0.2, dur: 1.5 }, { hold: 0.3, dur: 1 }] },
+  hollow_hold: { keys: [hollow(), hollow(2)], ms: 1000, beats: hb(0.3, 2, 2) },
+  arch_hold: { ...hold(arch(0), arch(12), arch(14)), ms: 1000 },
   hollow_rock: { keys: [rot(hollow(), -14), rot(hollow(), 14)], ms: 700, beats: [{ hold: 0.05, dur: 1 }, { hold: 0.05 }] },
-  knee_raise: { ...rep(hang, null, [kneeUp], { rise: 1, lower: 1.6 }), ...hangPin, ms: 900 },
-  rollout_knee: { ...rep(kneel(-5, 115), null, [kneel(-62, 100)], { rise: 1.8, lower: 1.1, top: 0.3 }), x: 'knee', ms: 1000 },
-  tuck_lsit: { keys: [feetDown, tuck], ...supportPin, ms: 1000, beats: [{ hold: 0.4, dur: 0.9, ease: 'out' }, { hold: 1.4 }] },
-  leg_raise: { ...rep(hang, null, [legsUp], { rise: 1.1, lower: 1.8 }), ...hangPin, ms: 900 },
+  knee_raise: { ...rep(hang, null, [kneeUp], { rise: 1, lower: 1.6 }), ...hangPin, ms: 1000 },
+  rollout_knee: { ...rep(kneel(-5, 115), null, [kneel(-62, 100)], { rise: 2, lower: 1.3, top: 0.3 }), x: 'knee', ms: 1000 },
+  tuck_lsit: { ...hold(feetDown, tuck, support([142, 18, 142, 18], 177)), ...supportPin, ms: 1000 },
+  leg_raise: { ...rep(hang, null, [legsUp], { rise: 1.2, lower: 1.9 }), ...hangPin, ms: 1000 },
   tuck_dragon: { keys: [dragon(10, true), dragon(-72, true)], mode: 'cycle', ...dragonPin, ms: 1000, beats: [{ hold: 0.3, dur: 2 }, { hold: 0.3, dur: 1.3 }] },
-  lsit: { keys: [tuck, ell], ...supportPin, ms: 1000, beats: [{ hold: 0.4, dur: 0.9, ease: 'out' }, { hold: 1.4 }] },
-  ttb: { ...rep(hang, null, [legsUp, ttbTop], { rise: 1.1, lower: 1.8, top: 0.25 }), ...hangPin, ms: 900 },
+  lsit: { ...hold(tuck, ell, support([92, 92, 92, 92], 177)), ...supportPin, ms: 1000 },
+  ttb: { ...rep(hang, null, [legsUp, ttbTop], { rise: 1.3, lower: 2 }), ...hangPin, ms: 1000 },
   dragon_flag: { keys: [dragon(10), dragon(-78)], mode: 'cycle', ...dragonPin, ms: 1000, beats: [{ hold: 0.3, dur: 2.2 }, { hold: 0.3, dur: 1.4 }] },
-  lsit_30: { keys: [ell, support([93, 93, 93, 93], 177)], ...supportPin, ms: 1000, beats: hb(1.4, 1.6, 1) },
+  lsit_30: { keys: [ell, support([93, 93, 93, 93], 177)], ...supportPin, ms: 1000, beats: hb(0.3, 2, 2) },
   wipers: { keys: [wiper(-75), wiper(0), wiper(75)], front: true, ...hangPin, at: [28, -210], ms: 1000, beats: [{ hold: 0.3, dur: 0.8, trunk: 0.4, ease: 'in' }, { dur: 0.8, trunk: 0.4, ease: 'out' }, { hold: 0.3, trunk: 0.4 }] },
-  standing_rollout: { ...rep(stand(28, 0), null, [stand(flatT, flatT - 180)], { rise: 2, lower: 1.3, top: 0.3 }), x: 'foot', ms: 1000 },
-  vsit: { keys: [vs(196, 92, 8), vs(204, 130, 12)], ms: 1000, beats: [{ hold: 0.3, dur: 1.2, ease: 'out' }, { hold: 1.2 }] },
-  v120: { keys: [vs(206, 132, 12), vs(216, 170, 16)], ms: 1000, beats: [{ hold: 0.3, dur: 1.2, ease: 'out' }, { hold: 1.2 }] },
-  manna: { keys: [vs(216, 170, 16), vs(240, 200, 20)], ms: 1000, beats: [{ hold: 0.3, dur: 1.5, ease: 'out' }, { hold: 1.2 }] },
+  standing_rollout: { ...rep(stand(28, 0), null, [stand(flatT, flatT - 180)], { rise: 2.5, lower: 1.6, top: 0.3 }), x: 'foot', ms: 1000 },
+  vsit: { ...hold(vs(196, 92, 8), vs(204, 130, 12), vs(205, 132, 12)), ms: 1000 },
+  v120: { ...hold(vs(206, 132, 12), vs(216, 170, 16), vs(217, 172, 16)), ms: 1000 },
+  manna: { ...hold(vs(216, 170, 16), vs(240, 200, 20), vs(241, 202, 20)), ms: 1000 },
 }

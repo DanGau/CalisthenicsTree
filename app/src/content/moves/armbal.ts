@@ -1,5 +1,5 @@
-import { joints, LEN, type Move, type Pose, type Pt } from '../../core/figure'
-import { balance, holdBeats, set, solve } from './push'
+import { blend, joints, LEN, type Move, type Pose, type Pt } from '../../core/figure'
+import { armsTo, balance, holdBeats, set, solve } from './push'
 
 const D2R = Math.PI / 180
 const dir = (deg: number, len: number): Pt => ({ x: Math.sin(deg * D2R) * len, y: Math.cos(deg * D2R) * len })
@@ -119,22 +119,29 @@ const scorpion = balance((t): Pose => [t, 22, -90, 22, -90, t - 95, t + 5, t - 8
 // Crow to handstand: hips rise over the hands, arms straighten, knees leave the arms, then the legs extend.
 const crowTuck = balance((t) => [t, -12, -12, -12, -12, t - 60, t - 200, t - 60, t - 200, t - 10, t - 30], -30, 40)
 
-/** Balance hold: [entry, hold, small correction], bounced. */
-const bal = (entry: Pose, hold: Pose, sway: Pose, o: Partial<Move> = {}): Move => ({ keys: [entry, hold, sway], x: 'hand', beats: holdBeats(1.4, 1.5), ...o })
+/** Balance hold, seconds: [entry, hold, small correction], bounced; one sway ≈1.5 s each way. */
+const bal = (entry: Pose, hold: Pose, sway: Pose, o: Partial<Move> = {}): Move => ({ keys: [entry, hold, sway], x: 'hand', ms: 1000, beats: holdBeats(1.5, 1.5), ...o })
+/** Elbow lever entry: the hips rise so the knees pass over the floor, then the legs straighten back as the body tips level. */
+const leverMid = [levered(74, [35, -145]), levered(74, [-35, -145])]
+/** One-arm lever: the free hand lifts straight off the floor before it reaches forward. */
+const oaMid = [[0.3, 4, 14], [0.7, 50, 32]].map(([f, x, y]) => {
+  const h = joints(elbowLever).hand
+  return armsTo(set(set(blend(elbowLever, oaLever, f, 'lin'), [3], elbowLever[3]), [4], elbowLever[4]), { x: h.x + x, y: h.y - y }, 1, 'far')
+})
 /** Small correction: fingers press and the hips settle a touch. */
 const nod = (p: Pose, d = 3): Pose => set(set(p, [0], p[0] + d), [9], (p[9] ?? p[0]) + d)
 
 export const MOVES: Record<string, Move> = {
   frog_stand: bal(frogIn, frog, nod(frog)),
   crow: bal(crowIn, crow, nod(crow)),
-  side_crow: bal(sideCrowIn, sideCrow, nod(sideCrow, -3), { front: true, beats: holdBeats(1.4, 1.5).map((b, i) => ({ ...b, trunk: i ? SC.on : SC.in })) }),
+  side_crow: bal(sideCrowIn, sideCrow, nod(sideCrow, -3), { front: true, beats: holdBeats(1.5, 1.5).map((b, i) => ({ ...b, trunk: i ? SC.on : SC.in })) }),
   crane: bal(crow, crane, nod(crane)),
-  tripod_hs: { keys: [tripodTuck, tripod], x: 'hand', ms: 900, beats: [{ hold: 0.5, dur: 1.8 }, { hold: 0.9 }] },
+  tripod_hs: { keys: [tripodTuck, tripod], x: 'hand', ms: 1000, beats: [{ hold: 0.5, dur: 2 }, { hold: 1 }] },
   flying_pigeon: bal(pigeonIn, pigeon, nod(pigeon)),
-  elbow_lever: bal(leverTuck, elbowLever, nod(elbowLever, 2)),
-  forearm_stand: { keys: [faIn, forearm], x: 'elbow', flow: 0.12, ms: 800, beats: [{ hold: 0.5, dur: 1.1, ease: 'out' }, { hold: 1 }] },
+  elbow_lever: { ...bal(leverTuck, elbowLever, nod(elbowLever, 2)), keys: [leverTuck, ...leverMid, elbowLever, nod(elbowLever, 2)], beats: [{ hold: 0.5, dur: 0.6 }, { dur: 0.5 }, { dur: 0.8 }, { dur: 1.5 }, { hold: 0.25 }] },
+  forearm_stand: { keys: [faIn, forearm], x: 'elbow', ms: 1000, beats: [{ hold: 0.5, dur: 1.1, ease: 'out' }, { hold: 1 }] },
   grasshopper: bal(grasshopperIn, grasshopper, nod(grasshopper, -3), { front: true }),
-  oa_elbow_lever: bal(elbowLever, oaLever, nod(oaLever, 2)),
-  crow_to_hs: { keys: [crow, crowTuck, HS], x: 'hand', ms: 900, beats: [{ hold: 0.5, dur: 1.3 }, { dur: 1.5, ease: 'out' }, { hold: 0.8 }] },
-  scorpion: { keys: [forearm, scorpion], x: 'elbow', ms: 900, beats: [{ hold: 0.5, dur: 2 }, { hold: 1 }] },
+  oa_elbow_lever: { ...bal(elbowLever, oaLever, nod(oaLever, 2)), keys: [elbowLever, ...oaMid, oaLever, nod(oaLever, 2)], beats: [{ hold: 0.5, dur: 0.4 }, { dur: 0.4 }, { dur: 0.5 }, { dur: 1.5 }, { hold: 0.25 }] },
+  crow_to_hs: { keys: [crow, crowTuck, HS], x: 'hand', ms: 1000, beats: [{ hold: 0.5, dur: 1.3 }, { dur: 1.5, ease: 'out' }, { hold: 0.8 }] },
+  scorpion: { keys: [forearm, scorpion], x: 'elbow', ms: 1000, beats: [{ hold: 0.5, dur: 2 }, { hold: 1 }] },
 }

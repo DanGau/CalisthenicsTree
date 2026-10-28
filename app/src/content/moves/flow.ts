@@ -16,10 +16,35 @@ const crab = (s: number, nearHand = true): Pose =>
 
 const duck = (s: number): Pose => plant([138, 90, 90, 90, 90, 0, 0, 0, 0, 150, 170], { foot: 16 + s, farFoot: 16 - s }, 30)
 
-// Gaits as a tracking camera sees them: planted limbs slide back, the swinging diagonal lifts and reaches forward.
-const bearWalk = [bear(10), raise(bear(0), ['farHand', 'foot']), bear(-10), raise(bear(0), ['hand', 'farFoot'])]
-const crabWalk = [crab(10), raise(crab(0), ['farHand', 'foot'], { farHand: 1 }), crab(-10), raise(crab(0), ['hand', 'farFoot'], { hand: 1 })]
-const duckWalk = [duck(14), raise(duck(0), ['farFoot']), duck(-14), raise(duck(0), ['foot'])]
+type Gait = {
+  body: Pose; base: Partial<Record<Limb, number>>; floor: number; phase: Partial<Record<Limb, number>>
+  duty: number; stride: number; time: number; lift?: number; bob?: number; k?: Partial<Record<Limb, number>>
+}
+/**
+ * A gait as a tracking camera sees it, timed in seconds (ms 1000): each limb stands for `duty` of the cycle
+ * starting at its `phase`, sliding back `stride` under the steadily moving hips, then swings forward in an arc
+ * `lift` high. The hips bob `bob` twice a cycle. Travel per cycle is stride / duty.
+ */
+const gait = (g: Gait): Pick<Move, 'keys' | 'beats' | 'travel' | 'mode' | 'ms'> => {
+  const n = 16
+  const keys = Array.from({ length: n }, (_, i): Pose => {
+    const f = i / n
+    const x: Partial<Record<Limb, number>> = {}
+    const up: [Limb, number][] = []
+    for (const [l, o] of Object.entries(g.phase) as [Limb, number][]) {
+      const u = (f - o + 1) % 1
+      const w = (u - g.duty) / (1 - g.duty)
+      x[l] = g.base[l]! + g.stride * (u < g.duty ? 0.5 - u / g.duty : w - 0.5)
+      if (u >= g.duty) up.push([l, (g.lift ?? 8) * Math.sin(Math.PI * w)])
+    }
+    const p = plant(g.body, x, g.floor - (g.bob ?? 2) * Math.cos(4 * Math.PI * f), { k: g.k })
+    return up.length ? reach(p, Object.fromEntries(up.map(([l, h]) => { const [px, py] = pos(p, l); return [l, [px, py - h]] })), { k: g.k }) : p
+  })
+  const travel = g.stride / g.duty
+  return { keys, mode: 'cycle', ms: 1000, travel, beats: keys.map((_, i): Beat => ({ shift: (travel * i) / n, dur: g.time / n })) }
+}
+/** Opposite hand and foot step together. */
+const DIAG = { hand: 0, farFoot: 0, farHand: 0.5, foot: 0.5 }
 
 // Ape: hands reach far ahead, the feet hop up between them with the hips low, the hands reach again.
 const apeReach: Pose = plant([112, 0, 0, 0, 0, 0, 0, 0, 0, 122, 150], { hand: 74, farHand: 68, foot: 10, farFoot: 10 }, 32)
@@ -49,18 +74,18 @@ const monkeyOver: Pose = plant([105, 0, 0, 0, 0, -150, -110, -175, -135], { hand
 
 // Scorpion: from beast the far leg lifts and curls over toward the far side, eyes on the foot.
 const scorpion: Pose = (() => { const p = bear(0); p[7] = -150; p[8] = 110; p[10] = 140; return p })()
+/** The far knee lifts first, clear of the floor, before the leg curls over. */
+const scorpionLift: Pose = (() => { const p = bear(0); p[8] = p[7] - 100; p[7] -= 25; p[10] = 125; return p })()
 
 // Crab reach: hips drive up, chest opens, the far arm sweeps overhead.
 const crabReach: Pose = plant([-62, 0, 0, -165, -175, 0, 0, 0, 0, -45, -20], { hand: -56, foot: 36, farFoot: 36 }, 66, { k: { hand: 1 } })
 
-/** Four-key gait moving `travel` per loop: the hips advance steadily, so planted limbs stay put on the ground. */
-const gait = (travel: number): Pick<Move, 'beats' | 'travel'> => ({ travel, beats: [0, 1, 2, 3].map((i): Beat => ({ shift: (travel * i) / 4, ease: 'lin' })) })
 const reachHold: Beat[] = [{ hold: 0.3, dur: 1.3 }, { hold: 0.9, dur: 1.3 }]
 
 export const MOVES: Record<string, Move> = {
-  bear_crawl: { keys: bearWalk, mode: 'cycle', ms: 330, ...gait(40) },
-  crab_walk: { keys: crabWalk, mode: 'cycle', ms: 360, ...gait(40) },
-  duck_walk: { keys: duckWalk, mode: 'cycle', ms: 330, ...gait(56) },
+  bear_crawl: gait({ body: bear(0), base: { hand: 46, farHand: 46, foot: -34, farFoot: -34 }, floor: 50, phase: DIAG, duty: 0.65, stride: 30, time: 1.2 }),
+  crab_walk: gait({ body: crab(0), base: { hand: -50, farHand: -50, foot: 40, farFoot: 40 }, floor: 50, phase: DIAG, duty: 0.65, stride: 26, time: 1.4, bob: 3, k: { hand: 1, farHand: 1 } }),
+  duck_walk: gait({ body: duck(0), base: { foot: 16, farFoot: 16 }, floor: 30, phase: { foot: 0, farFoot: 0.5 }, duty: 0.62, stride: 30, time: 1.2, lift: 10, bob: 1.5 }),
   ape_walk: {
     keys: [apeReach, apeHop, apeLand, apeRaise], mode: 'cycle', ms: 500, flow: 0.1, travel: 52,
     beats: [{ hold: 0.1, dur: 0.6, ease: 'snap' }, { shift: 34, dur: 0.6, ease: 'in' }, { shift: 48, hold: 0.25, dur: 0.4 }, { shift: 48, dur: 0.4, ease: 'out' }],
@@ -74,7 +99,7 @@ export const MOVES: Record<string, Move> = {
     keys: [bear(10), bear(-10), kick, crab(0), frogLow, lizard(1)], mode: 'cycle', ms: 650, flow: 0.1,
     beats: [{ dur: 0.8 }, { dur: 0.6, ease: 'snap' }, { dur: 0.9 }, { dur: 1.1 }, { dur: 1 }, { hold: 0.2, dur: 1 }],
   },
-  scorpion_reach: { keys: [bear(0), scorpion], ms: 900, beats: reachHold },
+  scorpion_reach: { keys: [bear(0), scorpionLift, scorpion], ms: 1000, beats: [{ hold: 0.4, dur: 0.6 }, { dur: 0.7 }, { hold: 1 }] },
   crab_reach: { keys: [crab(0), crabReach], ms: 900, beats: reachHold },
   ground_improv: {
     keys: [bear(10), apeSquat, kick, crab(0), duck(14), lizard(-1)], mode: 'cycle', ms: 750, flow: 0.1,

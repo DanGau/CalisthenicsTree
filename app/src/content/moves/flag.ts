@@ -1,6 +1,7 @@
 import { joints, LEN, place, type Move, type Pose } from '../../core/figure'
 import { solve } from './frontlever'
 import { reach } from './legs'
+import { hold } from './pull'
 
 // Front view on a pole at x = 0. Human flag: torso -90 (shoulders toward the pole), near arm up
 // at 225 and far arm down at -45 both land 88 left of the shoulders, so the hands stack on the pole.
@@ -13,7 +14,7 @@ const straddle: Pose = [-90, 225, 225, -45, -45, 115, 115, 65, 65]
 const vertical: Pose = [0, 200.6, 200.6, -78.9, -78.9, 180, 180, 180, 180]
 const droop = (p: Pose, d = 1): Pose => [p[0] - 4 * d, p[1], p[2], p[3], p[4], p[5] - 6 * d, p[6] - 6 * d, p[7] - 6 * d, p[8] - 6 * d]
 /** Settle from a droop into the flag, then squeeze the hips a touch higher and back. */
-const flagHold = (p: Pose): Move => ({ ...flag([droop(p), p, droop(p, -0.4)], 1000), beats: [{ hold: 0.2, dur: 1, ease: 'out' }, { hold: 0.8, dur: 1.3 }, { hold: 1 }] })
+const flagHold = (p: Pose): Move => ({ ...flag([], 1000), ...hold(droop(p), p, droop(p, -0.4)) })
 // Clutch flag: pole 35 toward the head from the hips. Top hand high on it; bottom upper arm runs along the
 // trunk so the elbow jams into the hip, forearm hooked down to the pole, so the body lies across it on that arm.
 const clutch = (legs: [number, number, number, number]): Pose => {
@@ -67,17 +68,17 @@ const hang: Pose = [180, 165, 165, 195, 195, 0, 0, 0, 0]
 const oblique = (d: number): Pose => [180 - 28 * d, 165, 165, 195, 195, 180 - 55 * d, -20 * d, 180 - 60 * d, -25 * d, 180 - 6 * d, 180]
 
 export const MOVES: Record<string, Move> = {
-  side_plank: { keys: [armDown(sp(plankT)), sp(plankT)], front: true, ms: 1000, beats: [{ hold: 0.6, dur: 1.2 }, { hold: 1.2 }] },
+  side_plank: { keys: [armDown(sp(plankT)), sp(plankT)], front: true, ms: 1000, beats: [{ hold: 0.6, dur: 1.5 }, { hold: 2 }] },
   copen_short: { ...cp, keys: [cs(false), cs(true)], props: [bench(cs(true), false)], ms: 1000, beats: [{ hold: 0.3, dur: 1, ease: 'out' }, { hold: 1, dur: 1.6 }], mode: 'cycle' },
   copen_long: { ...cp, keys: [cl(false), cl(true)], props: [bench(cl(true), true)], ms: 1000, beats: [{ hold: 0.3, dur: 1, ease: 'out' }, { hold: 1, dur: 1.6 }], mode: 'cycle' },
-  vertical_flag: { ...flag([[3, 200.6, 200.6, -78.9, -78.9, 177, 177, 183, 183], vertical], 1000, -120), beats: [{ hold: 0.6, dur: 1.4 }, { hold: 1.2 }] },
+  vertical_flag: { ...flag([[3, 200.6, 200.6, -78.9, -78.9, 177, 177, 183, 183], vertical], 1000, -120), beats: [{ hold: 0.3, dur: 1.5 }, { hold: 0.3 }] },
   oblique_raise: {
-    keys: [hang, oblique(1), hang, oblique(-1)], mode: 'cycle', front: true, x: 'hand', y: 'hand', at: [26, -210], props: [{ t: 'bar', x: 0, y: -210 }], ms: 900,
+    keys: [hang, oblique(1), hang, oblique(-1)], mode: 'cycle', front: true, x: 'hand', y: 'hand', at: [26, -210], props: [{ t: 'bar', x: 0, y: -210 }], ms: 1000,
     beats: [{ hold: 0.3, dur: 1 }, { hold: 0.3, dur: 1.5, trunk: 0.7 }, { hold: 0.3, dur: 1 }, { hold: 0.3, dur: 1.5, trunk: 0.7 }],
   },
   tuck_flag: flagHold(tuck),
-  clutch_flag: { ...flag([clutch([110, -100, 110, -100]), clutch([90, 90, 90, 90]), clutch([92, 92, 92, 92])], 1000, -150), beats: [{ hold: 0.6, dur: 1.4 }, { hold: 0.8, dur: 1.3 }, { hold: 1 }] },
+  clutch_flag: { ...flag([], 1000, -150), ...hold(clutch([110, -100, 110, -100]), clutch([90, 90, 90, 90]), clutch([92, 92, 92, 92])) },
   straddle_flag: flagHold(straddle),
   full_flag: flagHold(full),
-  flag_raise: { ...flag([vertical, full], 1000), mode: 'cycle', beats: [{ hold: 0.4, dur: 1.8 }, { hold: 0.6, dur: 1.2 }] },
+  flag_raise: { ...flag([vertical, full], 1000), mode: 'cycle', beats: [{ hold: 0.4, dur: 2.5 }, { hold: 0.6, dur: 1.7 }] },
 }
