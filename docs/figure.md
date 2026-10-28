@@ -43,6 +43,15 @@ Motion must read as a person moving mass, not a puppet between poses. `beats` (o
 - `flow`: 0.1-0.25 on swings, jumps, throws, kicks and rolls so forearms, shins and head trail the body. Leave it 0 when hands or feet are planted (contacts would slide).
 - Add anticipation and follow-through as keys: dip before a jump, absorb after a landing, swing back before a kip.
 
+## Mocap
+
+Some moves come from real capture (`src/content/mocap/<id>.ts`, rows built by `clip()`), generated offline by `app/tools/mocap/` (not shipped; clips cached in git-ignored `app/.mocap-cache/`). Sources and licenses: [mocap-sources.md](mocap-sources.md).
+
+- `npm run -s mocap -- sheet <clip> [from] [to] [step] [--tilt d]`: contact sheet of the raw skeleton with frame numbers, plus spin/straddle/height stats, to find a range in a long clip.
+- `npm run -s mocap -- build <clip> <from> <to> <id> [--mode cycle|bounce] [--pin hip|foot] [--yaw d] [--view d] [--tilt d] [--mirror] [--tol deg]`: forward kinematics, per-segment direction fit to our `solid` Pose and Stage (scaled to `LEN`, unwrapped), keys at stops and wherever the spline strays past `tol`, real timing in `dur`/`hold`. Writes the module and `screenshots/mocap-<id>.png`: raw, per-frame fit, keyed, and the current move.
+- Wire a result into its branch file only when it reads better than the hand-made move. Live: `back_tuck` (CMU 88_01).
+- Credit: "Some motion derived from the CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu), created with funding from NSF EIA-0196217." Shown on the moves review page; each module's header names subject, trial and frames.
+
 ## Rules
 
 - Tests require one move per skill and nothing sinking below the floor.

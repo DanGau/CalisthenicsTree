@@ -4,6 +4,6 @@
     "lib": ["ES2023", "DOM"],
     "types": ["node"]
   },
-  "include": ["src", "eye", "*.ts"],
+  "include": ["src", "eye", "tools", "*.ts"],
   "exclude": []
 }

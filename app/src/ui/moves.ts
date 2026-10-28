@@ -13,6 +13,7 @@ export function moves(root: HTMLElement, branch?: string) {
       return `<section><h2>${esc(s.name)} <small>${s.id}</small></h2>
         <div class="strip">${m ? `${live(s.id, m)}${m.keys.map((k, i) => still(m, k, m.beats?.[i])).join('')}` : '<p>missing</p>'}</div></section>`
     }).join('')}
+    <p><small>Some motion derived from the CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu), created with funding from NSF EIA-0196217.</small></p>
   </div>`)
   root.replaceChildren(screen)
   animate(screen, MOVES)

@@ -1,5 +1,6 @@
 import { full, joints, LEN, place, type Beat, type Body, type Joint, type Move, type Pose, type Stage } from '../../core/figure'
 import { plant, pos, reach, rot, tween } from './legs'
+import { backTuck } from '../mocap/back_tuck'
 
 // Rotations: forward rolls turn the figure by -360, backward ones by +360; the last key is the first turned once.
 
@@ -281,6 +282,6 @@ export const MOVES: Record<string, Move> = {
     keys: [bfRise, bfWind, bfTake, bfAir1, bfAir2, bfLand], mode: 'cycle', ms: 1000, flow: 0.05,
     beats: [{ hold: 0.4, dur: 0.5 }, { dur: 0.3 }, ...bfAir.slice(0, 3), { ...bfAir[3], dur: 0.6, ease: 'out' }],
   },
-  back_tuck: salto(1, [[ball(240), 0.35], [ball(350), 0.55], [ball(450), 0.75], [opening(330), 0.88]], 0.65, -20),
+  back_tuck: backTuck,
   front_tuck: salto(-1, [[ball(120), 0.35], [ball(10), 0.55], [ball(-90), 0.75], [opening(-330), 0.88]], 0.65, 20),
 }

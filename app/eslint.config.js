@@ -13,7 +13,7 @@ export default tseslint.config(
   { ignores: ['dist', 'node_modules', 'screenshots'] },
   ...tseslint.configs.recommended,
   layer('core', '\./', 'core/ imports only core/. Pass data in instead.'),
-  layer('content', '\./|\.\./core/|\.\./\.\./core/','content/ imports only content/ and core/.'),
+  layer('content', '\./|\.\./(core|mocap)/|\.\./\.\./core/','content/ imports only content/ and core/.'),
   layer('ui', '\./|\.\./(core|content)/', 'ui/ imports only ui/, content/ and core/.'),
   {
     files: ['src/core/**/*.ts'],
