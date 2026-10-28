@@ -1,6 +1,6 @@
 # Animated figure
 
-Each skill has a looping cartoon in `app/src/content/moves/<branch>.ts`, keyed by skill id. Engine: `src/core/figure.ts` (pure) and `src/ui/figure.ts` (SVG).
+Each skill has a looping cartoon in `app/src/content/moves/<branch>.ts`, keyed by skill id. Engine: `src/core/figure.ts` (pure) and `src/ui/figure.ts` (SVG). Real-body timing and kinematics: [motion-reference.md](motion-reference.md).
 
 ## Pose
 
