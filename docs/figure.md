@@ -28,7 +28,8 @@ Each skill has a looping cartoon in `app/src/content/moves/<branch>.ts`, keyed b
 Motion must read as a person moving mass, not a puppet between poses. `beats` (one per key) and `flow` do this:
 
 - `dur`: relative length of the transition to the next key. Strength reps: lowering 1.5-2, rising 1 (controlled eccentric, strong concentric). Explosive moves: load 1, drive 0.4-0.6.
-- `ease`: `io` default; `snap` for explosive drives (jump, kip, clap, muscle-up pull); `out` rising into an apex or settling into a hold; `in` falling, dropping into a catch; `lin` for steady gaits and crawls (`cycle`).
+- Interpolation: keys are points on one smooth path per joint (monotone cubic spline), so motion flows through intermediate keys and stops only on holds and where a joint reverses. Add keys to shape a path; don't expect each key to be a stop.
+- `ease`: a speed hint at the segment ends: `in` starts from rest and arrives fast (falling, dropping into a catch); `out` leaves fast and arrives at rest (rising to an apex, settling); `snap` leaves very fast (explosive drives). `io` and `lin` leave it to the spline.
 - `hold`: pause on a key. Default 0.3 only at a bounce's turnarounds. Short pause at the top/bottom of reps; none mid-flight.
 - Move-level `climb`: height gained per loop (rope climbs); the view follows up.
 - `shift`: forward offset within a loop (broad jump distance, pushing off a wall). Move-level `travel`: distance per loop for gaits, runs, crawls, walks; the view follows the figure and the floor marks slide past, so the loop is seamless.

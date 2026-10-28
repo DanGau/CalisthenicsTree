@@ -201,37 +201,69 @@ export function sequence(m: Move): Frame[] {
 export const loopMs = (m: Move) => sequence(m).reduce((s, f) => s + (f.hold + f.dur) * (m.ms ?? 900), 0)
 
 /** Pose and stage at `ms` into the move; `travel` accumulates across loops. */
+const ANGLES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14]
+const vec = (f: Frame) => [...full(f.pose), f.lift, f.shift, f.turn, f.trunk, f.legs, f.arms]
+
+/**
+ * Speed (per ms) a segment's ease asks for at its start and end, as a multiple of its average speed.
+ * `null` leaves it to the spline. Holds and reversals always stop.
+ */
+const ENDS: Record<Ease, [number | null, number | null]> = {
+  io: [null, null], lin: [null, null], in: [0, 2], out: [2, 0], snap: [3, 0],
+}
+
+/**
+ * Pose and stage at `ms` into the move. Keys are points on a smooth path through time (monotone
+ * cubic Hermite per channel), so motion flows through keys instead of stopping at each one; it
+ * stops only on holds and where a joint reverses. Distal channels trail by `flow`; `travel` and
+ * `climb` accumulate across loops.
+ */
 export function at(m: Move, ms: number): Stage & { pose: Pose } {
   const seq = sequence(m)
   if (seq.length === 1) return seq[0]
   const step = m.ms ?? 900
+  const n = seq.length
+  const P = seq.map(vec)
+  // One loop's offset: whole turns, travel and climb, so the path continues seamlessly.
+  const W = P[0].map((v, j) => {
+    if (j === 13) return m.travel ?? 0
+    if (j === 12) return m.climb ?? 0
+    return ANGLES.includes(j) ? Math.round((P[n - 1][j] - v) / 360) * 360 : 0
+  })
+  const pt = (i: number) => (i < 0 ? P[n + i].map((v, j) => v - W[j]) : i >= n ? P[i - n].map((v, j) => v + W[j]) : P[i])
+  const T = seq.map((f) => f.dur * step)
   const total = loopMs(m)
-  const loop = Math.floor(Math.max(0, ms) / total)
-  let t = Math.max(0, ms) % total
-  const span = (i: number) => (seq[i].hold + seq[i].dur) * step
-  let i = 0
-  for (; t >= span(i); i++) t -= span(i)
-  const f = seq[i]
-  const local = Math.max(0, (t - f.hold * step) / (f.dur * step))
-  const from = full(f.pose)
-  const wrap = i === seq.length - 1
-  const nf = seq[(i + 1) % seq.length]
-  const next = full(nf.pose)
-  // Wrapping to the first key: drop whole turns so a roll keeps rolling instead of unwinding.
-  const to = wrap ? (next.map((v, j) => v + Math.round((from[j] - v) / 360) * 360) as Pose) : next
-  const e = EASE[f.ease](local)
-  const lerp = (a: number, b: number) => a + (b - a) * e
-  const travel = m.travel ?? 0
-  const turnTo = wrap ? nf.turn + Math.round((f.turn - nf.turn) / 360) * 360 : nf.turn
-  return {
-    pose: blend(from, to, local, f.ease, m.flow ?? 0),
-    lift: loop * (m.climb ?? 0) + lerp(f.lift, nf.lift + (wrap ? m.climb ?? 0 : 0)),
-    shift: loop * travel + lerp(f.shift, nf.shift + (wrap ? travel : 0)),
-    turn: lerp(f.turn, turnTo),
-    trunk: lerp(f.trunk, nf.trunk),
-    legs: lerp(f.legs, nf.legs),
-    arms: lerp(f.arms, nf.arms),
+  // Speed at each key: a hold or a reversal stops it; an ease asks for its own; otherwise a harmonic mean keeps it monotone.
+  const speed = (i: number, j: number) => {
+    const k = (i + n) % n
+    if (seq[k].hold > 0) return 0
+    const prev = (k - 1 + n) % n
+    const dIn = (pt(i)[j] - pt(i - 1)[j]) / T[prev]
+    const dOut = (pt(i + 1)[j] - pt(i)[j]) / T[k]
+    const asked = [ENDS[seq[prev].ease][1], ENDS[seq[k].ease][0]].filter((v): v is number => v !== null)
+    if (asked.length) {
+      const want = asked.reduce((a, v) => a + v, 0) / asked.length
+      return want * (asked.length === 2 ? (dIn + dOut) / 2 : ENDS[seq[k].ease][0] !== null ? dOut : dIn)
+    }
+    return dIn * dOut <= 0 ? 0 : (2 * dIn * dOut) / (dIn + dOut)
   }
+  const value = (j: number, g: number) => {
+    const loop = Math.floor(g / total)
+    let t = g - loop * total
+    let i = 0
+    for (; t >= (seq[i].hold * step + T[i]) && i < n - 1; i++) t -= seq[i].hold * step + T[i]
+    const a = pt(i)[j]
+    const b = pt(i + 1)[j]
+    const u = Math.min(1, Math.max(0, (t - seq[i].hold * step) / T[i]))
+    const [m0, m1] = [speed(i, j) * T[i], speed(i + 1, j) * T[i]]
+    const u2 = u * u
+    const u3 = u2 * u
+    return loop * W[j] + (2 * u3 - 3 * u2 + 1) * a + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * b + (u3 - u2) * m1
+  }
+  const g = Math.max(0, ms)
+  const lag = (m.flow ?? 0) * step
+  const v = P[0].map((_, j) => value(j, Math.max(0, g - (j < 12 ? LAG[j] * lag : 0))))
+  return { pose: v.slice(0, 12) as Pose, lift: v[12], shift: v[13], turn: v[14], trunk: v[15], legs: v[16], arms: v[17] }
 }
 
 /** Lowest joint of a pose as placed; a value above 0 means it sinks into the floor. */
