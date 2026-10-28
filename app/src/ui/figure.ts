@@ -82,6 +82,48 @@ function head(b: Body, front: boolean, s: number, back = false) {
   return neck + skull + nose + hair + dot(face(6, 2), 1.6, 'eye')
 }
 
+/** A 3D body: every part drawn back to front by depth, limbs shaded darker when behind the trunk. */
+function solidBody(b: Body) {
+  const z = (...ps: Pt[]) => ps.reduce((a, p) => a + (p.z ?? 0), 0) / ps.length
+  const mid = z(b.hip, b.shoulder)
+  const shade = (...ps: Pt[]) => (z(...ps) < mid - 2 ? 'f' : 'n')
+  const parts: [number, string][] = []
+  const part = (svg: string, ...ps: Pt[]) => parts.push([z(...ps), svg])
+  const armOf = (s: Pt, e: Pt, h: Pt) => {
+    const c = shade(s, e, h)
+    part(limb(s, e, 10, 8, c), s, e)
+    part(limb(e, h, 8, 6, c) + dot(h, 4.5, c), e, h)
+  }
+  const legOf = (hp: Pt, k: Pt, a: Pt, heel: Pt, toe: Pt) => {
+    const c = shade(hp, k, a)
+    part(limb(hp, k, 15, 10, c) + limb(hp, mix(hp, k, 0.45), 17, 15, `${c} shorts`), hp, k)
+    part(limb(k, a, 10, 7, c) + limb(heel, toe, 7, 5, `${c} shoe`), k, a)
+  }
+  // Trunk: a spine capsule plus shoulder and hip girdles, so it reads wide from the front, deep from the side.
+  part(limb(b.hip, b.waist, 21, 19, 'skin') + limb(b.waist, b.shoulder, 19, 22, 'skin') + limb(b.nearShoulder, b.farShoulder, 13, 13, 'skin')
+    + limb(b.nearHip, b.farHip, 19, 19, 'shorts') + limb(b.hip, mix(b.hip, b.waist, 0.45), 22, 20, 'shorts'), b.hip, b.shoulder)
+  armOf(b.nearShoulder, b.elbow, b.hand)
+  armOf(b.farShoulder, b.farElbow, b.farHand)
+  legOf(b.nearHip, b.knee, b.foot, b.heel, b.toe)
+  legOf(b.farHip, b.farKnee, b.farFoot, b.farHeel, b.farToe)
+  // Head: profile eye when side-on, two eyes facing the viewer, hair only from behind.
+  const fx = b.face.x - b.head.x
+  const fy = b.face.y - b.head.y
+  const fz = (b.face.z ?? 0) - (b.head.z ?? 0)
+  const across = { x: b.nearShoulder.x - b.farShoulder.x, y: b.nearShoulder.y - b.farShoulder.y }
+  const al = Math.hypot(across.x, across.y) || 1
+  const at = (d: number, side: number) => ({ x: b.head.x + fx * d + (across.x / al) * side, y: b.head.y + fy * d + (across.y / al) * side })
+  const features = fz < -0.6 ? dot(b.head, LEN.head - 1, 'hair')
+    : fz > 0.6 ? dot(at(3, 4), 1.6, 'eye') + dot(at(3, -4), 1.6, 'eye')
+    : dot(at(7, 0), 1.6, 'eye') + limb(at(9, 0), at(12.5, 0), 3.5, 2.5, 'skin')
+  // Hair: a disc set back from the face, mostly hidden by the skull, so a cap shows at the back and top.
+  const up = { x: b.head.x - b.shoulder.x, y: b.head.y - b.shoulder.y }
+  const ul = Math.hypot(up.x, up.y) || 1
+  const hair = dot({ x: b.head.x - fx * 2.5 + (up.x / ul) * 1.5, y: b.head.y - fy * 2.5 + (up.y / ul) * 1.5 }, LEN.head + 0.5, 'hair')
+  part(limb(b.shoulder, mix(b.shoulder, b.head, 0.35), 10, 9, 'skin') + hair + dot(b.head, LEN.head, 'skin') + features, b.head)
+  return parts.sort((a, c) => a[0] - c[0]).map((p) => p[1]).join('')
+}
+
 function body(b: Body, front: boolean, s = 1, back = false) {
   const far = arm(b.farShoulder, b.farElbow, b.farHand, 'f') + leg(b.farHip, b.farKnee, b.farFoot, b.farHeel, b.farToe, 'f')
   const near = leg(b.nearHip, b.knee, b.foot, b.heel, b.toe, 'n') + arm(b.nearShoulder, b.elbow, b.hand, 'n')
@@ -130,7 +172,7 @@ function floor(cam: number) {
 function scene(m: Move, pose: Pose, st: Partial<Stage> = {}) {
   const cam = m.travel ? (st.shift ?? 0) : 0
   const up = m.climb ? (st.lift ?? 0) : 0
-  const world = `${(m.props ?? []).map((p) => prop(p, !!m.front, up)).join('')}${m.floor === false ? '' : floor(cam)}<g class="fig">${body(place(m, pose, st), !!m.front, Math.cos(((st.turn ?? 0) * Math.PI) / 180) < 0 ? -1 : 1, m.back)}</g>`
+  const world = `${(m.props ?? []).map((p) => prop(p, !!m.front, up)).join('')}${m.floor === false ? '' : floor(cam)}<g class="fig">${m.solid ? solidBody(place(m, pose, st)) : body(place(m, pose, st), !!m.front, Math.cos(((st.turn ?? 0) * Math.PI) / 180) < 0 ? -1 : 1, m.back)}</g>`
   return cam || up ? `<g transform="translate(${f(-cam)} ${f(up)})">${world}</g>` : world
 }
 

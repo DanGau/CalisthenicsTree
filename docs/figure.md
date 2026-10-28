@@ -34,6 +34,7 @@ Motion must read as a person moving mass, not a puppet between poses. `beats` (o
 - Move-level `climb`: height gained per loop (rope climbs); the view follows up.
 - `shift`: forward offset within a loop (broad jump distance, pushing off a wall). Move-level `travel`: distance per loop for gaits, runs, crawls, walks; the view follows the figure and the floor marks slide past, so the loop is seamless.
 - `turn`: degrees about the vertical axis; 180 is mirrored. Animate 0 → 180 to roll over or turn round (bridge rotation, turning back to the box).
+- `solid: true`: a true 3D body, for anything that twists, straddles or turns (flare, windmill, back spin, straddles, archer, maltese, 90/90, rotations). Sagittal angles as usual, plus per-key `armOut`/`farArmOut`/`legOut`/`farLegOut` (degrees each limb swings out to its side), `roll` (about the body's forward axis) and `turn` (a real rotation about the vertical: 0 side, 90 facing the viewer, 180 facing left). Parts are drawn by depth and shaded darker behind the trunk; the face shows profile, front or back. Prefer this over `front`, `trunk`/`legs`/`arms` foreshortening and squashed turns.
 - `back: true` (with `front`): seen from behind, no face.
 - `trunk`: trunk length scale to foreshorten a trunk pointing at the viewer in front view (pancake, wipers, flare).
 - Loops must restart honestly: no teleports. Climb back onto the box, walk back, or travel.

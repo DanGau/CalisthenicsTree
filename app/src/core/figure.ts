@@ -40,6 +40,8 @@ export type Move = {
   at?: [number, number]
   props?: Prop[]
   front?: boolean
+  /** True 3D: limbs swing out (`armOut`..), the body rolls and turns, drawn by depth. */
+  solid?: boolean
   /** With `front`: seen from behind (no face). */
   back?: boolean
   /** Toes pointed all loop (kneeling, prone, tops of the feet on the floor); 'near' or 'far' for one foot. */
@@ -71,10 +73,15 @@ export type Ease = 'io' | 'in' | 'out' | 'snap' | 'lin'
  * transitions (default: 0.3 at the turnaround keys of a bounce, else 0). `dur`: length of the
  * transition to the next key in transitions (default 1). `ease`: how that transition moves.
  */
-export type Stage = { lift: number; shift: number; turn: number; trunk: number; legs: number; arms: number }
+export type Stage = {
+  lift: number; shift: number; turn: number; trunk: number; legs: number; arms: number
+  /** `solid` moves only: roll about the body's forward axis, and each limb's swing out to its side (abduction). */
+  roll: number; armOut: number; farArmOut: number; legOut: number; farLegOut: number
+}
 export type Beat = Partial<Stage> & { hold?: number; dur?: number; ease?: Ease }
-const STAGE: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1 }
-const stage = (b: Beat): Stage => ({ lift: b.lift ?? 0, shift: b.shift ?? 0, turn: b.turn ?? 0, trunk: b.trunk ?? 1, legs: b.legs ?? 1, arms: b.arms ?? 1 })
+const STAGE: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0 }
+const KEYS = Object.keys(STAGE) as (keyof Stage)[]
+const stage = (b: Beat): Stage => ({ ...STAGE, ...Object.fromEntries(KEYS.filter((k) => b[k] !== undefined).map((k) => [k, b[k]])) })
 
 const EASE: Record<Ease, (t: number) => number> = {
   io: (t) => t * t * (3 - 2 * t),
@@ -90,8 +97,10 @@ export const LEN = { waist: 22, chest: 24, neck: 18, head: 11, upper: 29, fore: 
 /** Half widths of the front-view shoulder and hip girdles. */
 const GIRDLE = { shoulder: 17, hip: 10 }
 
-export type Pt = { x: number; y: number }
-export type Body = Record<Joint, Pt> & { waist: Pt; nearShoulder: Pt; nearHip: Pt; farShoulder: Pt; farHip: Pt; farElbow: Pt; farKnee: Pt; toe: Pt; farToe: Pt; heel: Pt; farHeel: Pt }
+/** `z` (solid moves) points toward the viewer. */
+export type Pt = { x: number; y: number; z?: number }
+/** `face` is a point just in front of the head centre: which way the figure looks. */
+export type Body = Record<Joint, Pt> & { face: Pt; waist: Pt; nearShoulder: Pt; nearHip: Pt; farShoulder: Pt; farHip: Pt; farElbow: Pt; farKnee: Pt; toe: Pt; farToe: Pt; heel: Pt; farHeel: Pt }
 
 const dir = (deg: number, len: number): Pt => {
   const r = (deg * Math.PI) / 180
@@ -132,7 +141,7 @@ export function joints(p: Pose, front = false, point: Move['point'] = false, tru
   const sole = (f: Pt, s: number, len: number, pt: boolean) => add(add(f, dir(s, LEN.sole)), dir(pt ? s + 15 : footAngle(s), front ? 0 : len))
   const [pn, pf] = [point === true || point === 'near', point === true || point === 'far']
   return {
-    hip, waist, shoulder: sh, head: add(shoulder, dir(h, LEN.neck)),
+    hip, waist, shoulder: sh, head: add(shoulder, dir(h, LEN.neck)), face: add(add(shoulder, dir(h, LEN.neck)), dir(c - 90, 1)),
     elbow, hand: add(elbow, dir(nf, LEN.fore * arms)), farElbow, farHand: add(farElbow, dir(ff, LEN.fore * arms)),
     knee, farKnee, foot, farFoot,
     toe: sole(foot, ns, LEN.foot, pn), farToe: sole(farFoot, fs, LEN.foot, pf),
@@ -143,9 +152,61 @@ export function joints(p: Pose, front = false, point: Move['point'] = false, tru
 
 const POINTS = ['hip', 'waist', 'shoulder', 'elbow', 'hand', 'farElbow', 'farHand', 'knee', 'farKnee', 'foot', 'farFoot', 'toe', 'farToe', 'heel', 'farHeel'] as const
 
+type V3 = [number, number, number]
+const rad = (d: number) => (d * Math.PI) / 180
+/** Unit direction of a segment at sagittal angle `a`, swung `out` degrees toward side `s` (+1 near, toward the viewer at turn 0). */
+const dir3 = (a: number, out: number, s: number, len: number): V3 =>
+  [Math.sin(rad(a)) * Math.cos(rad(out)) * len, Math.cos(rad(a)) * Math.cos(rad(out)) * len, s * Math.sin(rad(out)) * len]
+const add3 = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+
+/**
+ * A true 3D body: sagittal angles from the pose, limbs swung out by `armOut`..`farLegOut`, the whole body
+ * rolled about its forward axis by `roll`, then turned about the vertical by `turn` (90 faces the viewer).
+ * Projected orthographically; `z` keeps depth for drawing order.
+ */
+export function solid(p: Pose, st: Stage, point: Move['point'] = false): Body {
+  const [t, nu, nf, fu, ff, nt, ns, ft, fs, c, h, sc] = full(p)
+  const hip: V3 = [0, 0, 0]
+  const waist = dir3(t, 0, 0, LEN.waist * st.trunk)
+  const shoulder = add3(add3(waist, dir3(c, 0, 0, LEN.chest * st.trunk)), dir3(c, 0, 0, sc))
+  const nS = add3(shoulder, [0, 0, GIRDLE.shoulder])
+  const fS = add3(shoulder, [0, 0, -GIRDLE.shoulder])
+  const nH: V3 = [0, 0, GIRDLE.hip]
+  const fH: V3 = [0, 0, -GIRDLE.hip]
+  const limb = (root: V3, a: number, b: number, out: number, s: number, l1: number, l2: number) => {
+    const mid = add3(root, dir3(a, out, s, l1))
+    return [mid, add3(mid, dir3(b, out, s, l2))]
+  }
+  const [elbow, hand] = limb(nS, nu, nf, st.armOut, 1, LEN.upper * st.arms, LEN.fore * st.arms)
+  const [farElbow, farHand] = limb(fS, fu, ff, st.farArmOut, -1, LEN.upper * st.arms, LEN.fore * st.arms)
+  const [knee, foot] = limb(nH, nt, ns, st.legOut, 1, LEN.thigh * st.legs, LEN.shin * st.legs)
+  const [farKnee, farFoot] = limb(fH, ft, fs, st.farLegOut, -1, LEN.thigh * st.legs, LEN.shin * st.legs)
+  const sole = (f: V3, sh: number, out: number, s: number, len: number, pt: boolean) =>
+    add3(add3(f, dir3(sh, out, s, LEN.sole)), dir3(pt ? sh + 15 : footAngle(sh), out, s, len))
+  const [pn, pf] = [point === true || point === 'near', point === true || point === 'far']
+  const head = add3(shoulder, dir3(h, 0, 0, LEN.neck))
+  // Facing: the chest's forward normal, carried through the same rotations as the joints.
+  const face = add3(head, dir3(c - 90, 0, 0, 1))
+  const pts: Record<string, V3> = {
+    hip, waist, shoulder, head, face, elbow, hand, farElbow, farHand, knee, farKnee, foot, farFoot,
+    toe: sole(foot, ns, st.legOut, 1, LEN.foot, pn), farToe: sole(farFoot, fs, st.farLegOut, -1, LEN.foot, pf),
+    heel: sole(foot, ns, st.legOut, 1, -4, pn), farHeel: sole(farFoot, fs, st.farLegOut, -1, -4, pf),
+    nearShoulder: nS, nearHip: nH, farShoulder: fS, farHip: fH,
+  }
+  const [cr, sr, cy, sy] = [Math.cos(rad(st.roll)), Math.sin(rad(st.roll)), Math.cos(rad(st.turn)), Math.sin(rad(st.turn))]
+  const out = {} as Body
+  for (const [k, [x, y, z]] of Object.entries(pts)) {
+    const [y1, z1] = [y * cr - z * sr, y * sr + z * cr]
+    out[k as keyof Body] = { x: x * cy - z1 * sy, y: y1, z: x * sy + z1 * cy }
+  }
+  return out
+}
+
 /** Joints placed in the scene per the move's pins. */
 export function place(m: Move, p: Pose, st: Partial<Stage> = {}): Body {
-  const { lift, shift, turn, trunk, legs, arms } = { ...STAGE, ...st }
+  const full3 = { ...STAGE, ...st }
+  const { lift, shift, turn, trunk, legs, arms } = full3
+  if (m.solid) return pin(m, solid(p, full3, m.point), lift, shift)
   const raw = joints(p, m.front, m.point, trunk, legs, arms)
   // Turning about the vertical axis squeezes x about the hip; past 90 the figure faces the other way.
   // A floor of 0.3 width keeps the body readable mid-turn; it flips sides at 90 like a cartoon turn.
@@ -153,13 +214,17 @@ export function place(m: Move, p: Pose, st: Partial<Stage> = {}): Body {
   const k = (c < 0 ? -1 : 1) * (0.3 + 0.7 * Math.abs(c))
   const b = {} as Body
   for (const [n, v] of Object.entries(raw)) b[n as keyof Body] = { x: v.x * k, y: v.y }
+  return pin(m, b, lift, shift)
+}
+
+function pin(m: Move, b: Body, lift: number, shift: number): Body {
   const [ax, ay] = m.at ?? [0, 0]
   const xj = b[m.x ?? 'hip']
   const lowest = Math.max(...POINTS.map((k) => b[k].y), b.head.y + LEN.head)
   const dy = ((m.y ?? 'floor') === 'floor' ? ay - lowest : ay - b[m.y as Joint].y) - lift
   const dx = ax - xj.x + shift
   const out = {} as Body
-  for (const [k, v] of Object.entries(b)) out[k as keyof Body] = { x: v.x + dx, y: v.y + dy }
+  for (const [k, v] of Object.entries(b)) out[k as keyof Body] = { x: v.x + dx, y: v.y + dy, z: v.z }
   return out
 }
 
@@ -202,8 +267,8 @@ export function sequence(m: Move): Frame[] {
 export const loopMs = (m: Move) => sequence(m).reduce((s, f) => s + (f.hold + f.dur) * (m.ms ?? 900), 0)
 
 /** Pose and stage at `ms` into the move; `travel` accumulates across loops. */
-const ANGLES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14]
-const vec = (f: Frame) => [...full(f.pose), f.lift, f.shift, f.turn, f.trunk, f.legs, f.arms]
+const vec = (f: Frame) => [...full(f.pose), ...KEYS.map((k) => f[k])]
+const ANGLES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...(['turn', 'roll', 'armOut', 'farArmOut', 'legOut', 'farLegOut'] as const).map((k) => 12 + KEYS.indexOf(k))]
 
 /**
  * Speed (per ms) a segment's ease asks for at its start and end, as a multiple of its average speed.
@@ -227,8 +292,8 @@ export function at(m: Move, ms: number): Stage & { pose: Pose } {
   const P = seq.map(vec)
   // One loop's offset: whole turns, travel and climb, so the path continues seamlessly.
   const W = P[0].map((v, j) => {
-    if (j === 13) return m.travel ?? 0
-    if (j === 12) return m.climb ?? 0
+    if (j === 12 + KEYS.indexOf('shift')) return m.travel ?? 0
+    if (j === 12 + KEYS.indexOf('lift')) return m.climb ?? 0
     return ANGLES.includes(j) ? Math.round((P[n - 1][j] - v) / 360) * 360 : 0
   })
   const pt = (i: number) => (i < 0 ? P[n + i].map((v, j) => v - W[j]) : i >= n ? P[i - n].map((v, j) => v + W[j]) : P[i])
@@ -264,7 +329,7 @@ export function at(m: Move, ms: number): Stage & { pose: Pose } {
   const g = Math.max(0, ms)
   const lag = (m.flow ?? 0) * step
   const v = P[0].map((_, j) => value(j, Math.max(0, g - (j < 12 ? LAG[j] * lag : 0))))
-  return { pose: v.slice(0, 12) as Pose, lift: v[12], shift: v[13], turn: v[14], trunk: v[15], legs: v[16], arms: v[17] }
+  return { pose: v.slice(0, 12) as Pose, ...(Object.fromEntries(KEYS.map((k, i) => [k, v[12 + i]])) as Stage) }
 }
 
 /** Lowest joint of a pose as placed; a value above 0 means it sinks into the floor. */
