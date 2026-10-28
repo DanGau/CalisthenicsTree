@@ -1,5 +1,6 @@
 import type { Beat, Joint, Move, Pose } from '../../core/figure'
 import { plant, pos, reach } from './legs'
+import { wheel } from './tumble'
 
 type Limb = 'hand' | 'farHand' | 'foot' | 'farFoot'
 /** Lifts the given limb ends h off the floor mid-step (k: elbow and knee bend sides). */
@@ -68,10 +69,6 @@ const lizardWalk = [lizard(1), raise(lizardAt(46, 46, -24, -24), ['farHand', 'fa
 const frogLow: Pose = plant([125, 0, 0, 0, 0, 0, 0, 0, 0, 140, 165], { hand: 50, farHand: 50, foot: 22, farFoot: 22 }, 24)
 const frogHigh: Pose = plant([35, 0, 0, 0, 0, -20, -20, -20, -20, 30, 40], { hand: 60, farHand: 60 }, 75)
 
-// Side monkey (front view): squat, hands plant to the right, hips turn up and over, land low on the right.
-const monkeySquat: Pose = plant([180, 15, 5, -15, -5, 0, 0, 0, 0], { foot: -26, farFoot: 26 }, 34, { front: true, k: { foot: -1, farFoot: 1 } })
-const monkeyOver: Pose = plant([105, 0, 0, 0, 0, -150, -110, -175, -135], { hand: 64, farHand: 34 }, 44, { front: true, k: { hand: 1, farHand: 1 } })
-
 // Scorpion: from beast the far leg lifts and curls over toward the far side, eyes on the foot.
 const scorpion: Pose = (() => { const p = bear(0); p[7] = -150; p[8] = 110; p[10] = 140; return p })()
 /** The far knee lifts first, clear of the floor, before the leg curls over. */
@@ -94,7 +91,8 @@ export const MOVES: Record<string, Move> = {
   lizard: { keys: lizardWalk, mode: 'cycle', ms: 420, travel: 112, beats: [{ hold: 0.15, dur: 1, ease: 'in' }, { shift: 28, dur: 1, ease: 'out' }, { shift: 56, hold: 0.15, dur: 1, ease: 'in' }, { shift: 84, dur: 1, ease: 'out' }] },
   frogger: { keys: [frogLow, frogHigh], mode: 'cycle', ms: 650, beats: [{ hold: 0.35, dur: 0.6, ease: 'snap' }, { hold: 0.2, dur: 1.1 }] },
   underswitch: { keys: [bear(0), kick, crab(0, false), crab(0)], ms: 650, flow: 0.1, beats: [{ dur: 0.8 }, { dur: 0.7 }, { dur: 0.6, ease: 'out' }, { hold: 0.4 }] },
-  side_monkey: { keys: [monkeySquat, monkeyOver, monkeySquat], mode: 'cycle', front: true, ms: 650, flow: 0.12, beats: [{ hold: 0.3, dur: 0.55, ease: 'snap' }, { dur: 0.7, ease: 'in' }, { hold: 0.2, dur: 0.01 }] },
+  // Side monkey: a low wheel, knees tucked, hips up over the hands and down beyond them.
+  side_monkey: wheel({ spread: [[110, 30], [80, 35], [40, 30], [80, 35], [110, 30]], knee: 70, time: 0.8, rest: 0.3 }),
   flow_linked: {
     keys: [bear(10), bear(-10), kick, crab(0), frogLow, lizard(1)], mode: 'cycle', ms: 650, flow: 0.1,
     beats: [{ dur: 0.8 }, { dur: 0.6, ease: 'snap' }, { dur: 0.9 }, { dur: 1.1 }, { dur: 1 }, { hold: 0.2, dur: 1 }],

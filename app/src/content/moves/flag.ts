@@ -1,84 +1,90 @@
-import { joints, LEN, place, type Move, type Pose } from '../../core/figure'
-import { solve } from './frontlever'
-import { reach } from './legs'
-import { hold } from './pull'
+import { place, type Body, type Move, type Pose, type Stage } from '../../core/figure'
+import { add3, b3, body, fit, grip3, hold, onBar, rep, type V3, p3, pinned3, reach3, solid3, twoHands3, type K3 } from './pull'
 
-// Front view on a pole at x = 0. Human flag: torso -90 (shoulders toward the pole), near arm up
-// at 225 and far arm down at -45 both land 88 left of the shoulders, so the hands stack on the pole.
-const flag = (keys: Pose[], ms = 1300, y = -150): Move => ({ keys, front: true, x: 'hand', y: 'hand', at: [0, y], props: [{ t: 'pole', x: 0 }], ms })
-const full: Pose = [-90, 225, 225, -45, -45, 90, 90, 90, 90]
-const tuck: Pose = [-90, 225, 225, -45, -45, 110, -100, 110, -100]
-const straddle: Pose = [-90, 225, 225, -45, -45, 115, 115, 65, 65]
-// Vertical flag: body upside down beside the pole, hands stacked (near on top).
-// Near hand 19 out and level with the hips; far hand 61 below, both 36 from the body line.
-const vertical: Pose = [0, 200.6, 200.6, -78.9, -78.9, 180, 180, 180, 180]
-const droop = (p: Pose, d = 1): Pose => [p[0] - 4 * d, p[1], p[2], p[3], p[4], p[5] - 6 * d, p[6] - 6 * d, p[7] - 6 * d, p[8] - 6 * d]
-/** Settle from a droop into the flag, then squeeze the hips a touch higher and back. */
-const flagHold = (p: Pose): Move => ({ ...flag([], 1000), ...hold(droop(p), p, droop(p, -0.4)) })
-// Clutch flag: pole 35 toward the head from the hips. Top hand high on it; bottom upper arm runs along the
-// trunk so the elbow jams into the hip, forearm hooked down to the pole, so the body lies across it on that arm.
-const clutch = (legs: [number, number, number, number]): Pose => {
-  const p = reach([-90, 180, 180, 96, 0, ...legs, -90, -90], { hand: [-34, -62] }, { front: true, k: { hand: 1 } })
-  const e = joints(p, true).farElbow
-  p[4] = Math.asin(Math.max(-1, (-34 - e.x) / LEN.fore)) * 180 / Math.PI
-  return p
-}
-
-// Side plank (front view): far forearm flat under the shoulder, body one straight line solved so the far foot lands level with it.
-const sp = (t: number): Pose => [t, 180, 180, 0, -90, t + 180, t + 180, t + 180, t + 180, t, t]
-const front: Move = { keys: [], front: true }
-const plankT = solve(-130, -60, (t) => place(front, sp(t)).farFoot.y + 5 - place(front, sp(t)).farElbow.y)
-const armDown = (p: Pose): Pose => p.map((v, i) => (i === 1 || i === 2 ? p[0] + 180 : v)) as Pose
-// Copenhagen: the top (near) leg rests on a bench, forearm flat on the floor. Down: the hips sag toward the floor,
-// the shoulder rolls over the elbow, the bottom leg bends, foot just off the floor short of the bench. Up: one straight line,
-// bottom leg squeezed up to the bench.
-const cp: Move = { keys: [], front: true, x: 'farHand', y: 'farHand', at: [0, place({ keys: [], front: true }, sp(-83)).farHand.y] }
-const copen = (t: number, lifted: boolean): Pose => {
-  const p = sp(t)
-  if (lifted) return p
-  const top = place(cp, p)
-  const foot = [top.foot.x - top.farElbow.x, top.foot.y - top.farElbow.y]
-  // Torso sags 24°; the upper arm leans so the straight top leg still reaches the bench.
-  const at = (u: number) => {
-    const q = [...p] as Pose
-    q[0] = q[9] = q[10] = t - 24
-    q[3] = u
-    const b = joints(q, true)
-    const dx = foot[0] + b.farElbow.x - b.nearHip.x, dy = foot[1] + b.farElbow.y - b.nearHip.y
-    const l = Math.atan2(dx, dy) * 180 / Math.PI
-    q[5] = q[6] = l
-    return { q, err: Math.hypot(dx, dy) - LEN.thigh - LEN.shin }
+// Pole flags, solid, chest 30 off facing the viewer. Built standing (z = near side), then rolled 90 so the near side
+// is up: the body lies level, head to the pole. Both straight arms swing out 157, a "<" whose hands stack 76 apart on
+// the pole (top hand pulls, bottom hand pushes).
+const CAM = 60
+type Legs = [number, number, number, number]
+const stand = (legs: Legs): Pose => [180, 0, 0, 0, 0, ...legs, 180, 180]
+/** `out`: legs straddle; `lift`: both legs swing toward the near side (up when level). */
+const flagK = (legs: Legs, roll = 90, out = 0, lift = 0): K3 => ({ p: stand(legs), s: { roll, armOut: 157, farArmOut: 157, legOut: out + lift, farLegOut: out - lift } })
+const pole = (m: { keys: K3[]; beats: Move['beats']; mode?: Move['mode'] }, ref: K3, y = -150): Move =>
+  pinned3({ ...solid3(m, CAM), x: 'hand', y: 'hand', at: [0, y], props: [{ t: 'pole', x: 0 }], ms: 1000 }, twoHands3(ref))
+const TUCK: Legs = [125, -15, 125, -15]
+const LINE: Legs = [0, 0, 0, 0]
+/** Settle from a droop (body tipped, hips sagging) into the flag, then squeeze the feet a touch higher. */
+const flagHold = (legs: Legs, out = 0): Move => pole(hold(flagK(legs, 82, out, -10), flagK(legs, 90, out), flagK(legs, 90, out, 3)), flagK(LINE))
+/** Flag raise path, solved from the flag down to vertical so each arm keeps one shape: the body rolls about the hands. */
+const raise = (() => {
+  const b = flagK(LINE)
+  const hb = p3(b, 'hand')
+  const ha: V3 = [10, -4, -28]
+  const out: K3[] = [b]
+  for (const f of [0.25, 0.5, 0.75, 1]) {
+    const h: V3 = [hb[0] + (ha[0] - hb[0]) * f, hb[1] + (ha[1] - hb[1]) * f, hb[2] + (ha[2] - hb[2]) * f]
+    const prev = out[out.length - 1]
+    out.push(reach3({ p: prev.p, s: { ...prev.s, roll: 90 + 90 * f } }, { hand: h, farHand: add3(h, [0, 76, 0]) }))
   }
-  const q = at(solve(-60, 60, (u) => at(u).err)).q
-  const b = joints(q, true)
-  const floor = b.farElbow.y + 5
-  return reach(q, { farFoot: [b.foot.x - 55, floor - 14] }, { front: true, k: { farFoot: 1 } })
+  return out.reverse()
+})()
+// Vertical flag: rolled upside down, legs up, the pole just in front of the top (near) shoulder; top hand by the
+// hips, the bottom arm reaches across to it past the head.
+const vertical = (roll = 180): K3 => reach3({ p: raise[0].p, s: { ...raise[0].s, roll } }, { hand: [10, -4, -28], farHand: [10, 72, -28] })
+// Clutch flag: the bottom (far) elbow jams into the hip, forearm forward to the pole in front of the waist; the
+// straight top arm reaches down across the chest to it. The body lies level across the pole on that arm.
+const clutch = (legs: Legs, roll = 90): K3 => {
+  const k: K3 = { p: [180, 0, 0, 0, 90, ...legs, 180, 180], s: { roll } }
+  return reach3(k, { hand: add3(p3(k, 'farHand'), [0, -72, 0]) }, ['hand'])
 }
-/** A bench from the near knee (short) or ankle (long) to past the foot. */
-const bench = (p: Pose, long: boolean) => {
-  const b = place(cp, p)
-  const x0 = (long ? b.foot.x : b.knee.x) - 16
-  return { t: 'box' as const, x: x0, w: b.foot.x + 14 - x0, h: -(long ? b.foot.y : b.knee.y) - 5 }
-}
-const cs = (lifted: boolean) => copen(-82, lifted)
-const cl = (lifted: boolean) => copen(-84, lifted)
 
-const hang: Pose = [180, 165, 165, 195, 195, 0, 0, 0, 0]
-// Oblique raise: the pelvis swings out and up as the trunk side-bends, knees drawn high toward one elbow.
-const oblique = (d: number): Pose => [180 - 28 * d, 165, 165, 195, 195, 180 - 55 * d, -20 * d, 180 - 60 * d, -25 * d, 180 - 6 * d, 180]
+// Side plank, solid, chest 20 off facing the viewer: standing pose rolled onto the far side, turned to lie along x.
+// The fit sets the roll and the bottom (far) arm: elbow under the shoulder on the floor, forearm flat ahead of it,
+// and `rest` (feet, or the top knee or ankle on a bench) where it belongs.
+type Rest = (b: Body, floor: number) => number[]
+const plank = (legs: Legs, s: Partial<Stage>, rest: Rest): K3 => fit({ p: [180, 8, 8, 0, 110, ...legs, 180, 180], s: { roll: 72, farArmOut: 34, ...s, turn: 90 } }, ['roll', 3, 4, 'farArmOut', 'farForeOut'], (q) => {
+  const b = b3(q)
+  const floor = b.farHand.y + 4
+  return [3 * (b.farElbow.y + 5 - floor), b.farHand.x - b.farElbow.x - 22, b.farHand.z! - b.farElbow.z!, (b.farElbow.x - b.farShoulder.x) * 0.5, (b.farElbow.z! - b.farShoulder.z!) * 0.5, ...rest(b, floor)]
+})
+const feet: Rest = (b, floor) => [Math.max(b.farToe.y, b.farHeel.y) - floor]
+// Hips sag: the legs swing up from the trunk (toward the near side), the trunk rolls lower.
+const sag = (d: number): Partial<Stage> => ({ legOut: d, farLegOut: -d })
+// Copenhagen: the top (near) knee (short) or ankle (long) rests on a bench. Up: one straight line, bottom
+// leg squeezed up to the bench. Down: hips sag, the bottom leg drops and bends, foot just off the floor.
+const copen = (long: boolean, lifted: boolean, bench = 34): K3 => {
+  const legs: Legs = [0, long ? 0 : -90, lifted ? 0 : 45, lifted ? 0 : -60]
+  return plank(legs, { roll: 86, ...(lifted ? { legOut: 0, farLegOut: -4 } : { legOut: 8, farLegOut: long ? 10 : 2 }) }, (b, floor) => [2 * (rest(b, long) - (floor - bench))])
+}
+const rest = (b: Body, long: boolean) => (long ? b.foot.y + 4 : b.knee.y + 6)
+const copenMove = (long: boolean): Move => {
+  const k = copen(long, true)
+  const b = b3(k)
+  const h = b.farHand.y + 4 - rest(b, long)
+  const p = place({ ...side, keys: [], view: 0 }, k.p, k.s)
+  const [x0, x1] = long ? [p.foot.x, p.toe.x] : [p.knee.x, p.foot.x]
+  return {
+    ...side, ...solid3({ keys: [copen(long, false, h), k], beats: [{ hold: 0.3, dur: 1, ease: 'out' }, { hold: 1, dur: 1.6 }] }, SIDE), mode: 'cycle',
+    props: [{ t: 'box', x: Math.min(x0, x1) - 14, w: Math.abs(x1 - x0) + 28, h }],
+  }
+}
+const SIDE = -20
+const side: Move = { keys: [], solid: true, x: 'farHand', y: 'farHand', at: [0, -4], ms: 1000 }
+
+// Oblique raise, solid, seen 70 off the side: from a hang the knees drive up and across to one side, the pelvis
+// tipping up that side, then the other.
+const hang = grip3(body(180, 180, 180, [0, 0, 0, 0], 180, -3), {}, [0, -51, 28], [0, -51, -28])
+const oblique = (d: number): K3 => grip3(body(186, 180, 180, [120, 20, 120, 20], 180, -4), { legOut: 38 * d, farLegOut: -38 * d, roll: 8 * d }, [0, -51, 28], [0, -51, -28])
 
 export const MOVES: Record<string, Move> = {
-  side_plank: { keys: [armDown(sp(plankT)), sp(plankT)], front: true, ms: 1000, beats: [{ hold: 0.6, dur: 1.5 }, { hold: 2 }] },
-  copen_short: { ...cp, keys: [cs(false), cs(true)], props: [bench(cs(true), false)], ms: 1000, beats: [{ hold: 0.3, dur: 1, ease: 'out' }, { hold: 1, dur: 1.6 }], mode: 'cycle' },
-  copen_long: { ...cp, keys: [cl(false), cl(true)], props: [bench(cl(true), true)], ms: 1000, beats: [{ hold: 0.3, dur: 1, ease: 'out' }, { hold: 1, dur: 1.6 }], mode: 'cycle' },
-  vertical_flag: { ...flag([[3, 200.6, 200.6, -78.9, -78.9, 177, 177, 183, 183], vertical], 1000, -120), beats: [{ hold: 0.3, dur: 1.5 }, { hold: 0.3 }] },
-  oblique_raise: {
-    keys: [hang, oblique(1), hang, oblique(-1)], mode: 'cycle', front: true, x: 'hand', y: 'hand', at: [26, -210], props: [{ t: 'bar', x: 0, y: -210 }], ms: 1000,
-    beats: [{ hold: 0.3, dur: 1 }, { hold: 0.3, dur: 1.5, trunk: 0.7 }, { hold: 0.3, dur: 1 }, { hold: 0.3, dur: 1.5, trunk: 0.7 }],
-  },
-  tuck_flag: flagHold(tuck),
-  clutch_flag: { ...flag([], 1000, -150), ...hold(clutch([110, -100, 110, -100]), clutch([90, 90, 90, 90]), clutch([92, 92, 92, 92])) },
-  straddle_flag: flagHold(straddle),
-  full_flag: flagHold(full),
-  flag_raise: { ...flag([vertical, full], 1000), mode: 'cycle', beats: [{ hold: 0.4, dur: 2.5 }, { hold: 0.6, dur: 1.7 }] },
+  side_plank: { ...side, ...solid3({ keys: [plank(LINE, sag(14), feet), plank(LINE, {}, feet)], beats: [{ hold: 0.6, dur: 1.5 }, { hold: 2 }] }, SIDE) },
+  copen_short: copenMove(false),
+  copen_long: copenMove(true),
+  vertical_flag: pole(hold(vertical(174), vertical(), vertical(182)), vertical(), -120),
+  oblique_raise: onBar({ keys: [hang, oblique(1), hang, oblique(-1)], mode: 'cycle', beats: [{ hold: 0.3, dur: 1 }, { hold: 0.3, dur: 1.5 }, { hold: 0.3, dur: 1 }, { hold: 0.3, dur: 1.5 }] }, { view: 70 }),
+  tuck_flag: flagHold(TUCK),
+  clutch_flag: pole(hold(clutch(TUCK, 80), clutch(LINE), clutch(LINE, 93)), clutch(LINE)),
+  straddle_flag: flagHold(LINE, 32),
+  full_flag: flagHold(LINE),
+  flag_raise: pole({ ...rep(raise[0], null, raise.slice(1), { rise: 2.5, lower: 1.7, top: 0.6, bottom: 0.4 }) }, flagK(LINE)),
 }

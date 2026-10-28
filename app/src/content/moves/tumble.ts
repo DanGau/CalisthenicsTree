@@ -1,4 +1,4 @@
-import { full, joints, LEN, place, type Beat, type Joint, type Move, type Pose } from '../../core/figure'
+import { full, joints, LEN, place, type Beat, type Body, type Joint, type Move, type Pose, type Stage } from '../../core/figure'
 import { plant, pos, reach, rot, tween } from './legs'
 
 // Rotations: forward rolls turn the figure by -360, backward ones by +360; the last key is the first turned once.
@@ -23,9 +23,14 @@ const palms = (p: Pose, dx: number, k = -1): Pose => {
   return reach(p, { hand: [b.shoulder.x + dx, floor], farHand: [b.shoulder.x + dx, floor] }, { k: { hand: k, farHand: k } })
 }
 
-/** Front-view star at torso angle t: arms spread a from the line of the body, legs spread l. */
-export const star = (t: number, a = 20, l = 30, nearArm?: number): Pose =>
-  [t, nearArm ?? t - a, nearArm ?? t - a, t + a, t + a, t - 180 + l, t - 180 + l, t - 180 - l, t - 180 - l]
+/** Wheels face the viewer (turn 90, travelling along x); the camera swings this far back so the body reads three-quarter front. */
+export const FACE = -25
+/**
+ * Star (solid) rolled r degrees sideways from upright: arms spread a from the line of the body, legs spread l;
+ * `tuck` keeps the near arm in at the side; `knee` bends the knees.
+ */
+export const star = (r: number, a = 20, l = 30, tuck = false, turn = 90, knee = 0): [Pose, Beat] =>
+  [[180, 0, 0, 0, 0, knee, -knee, knee, -knee], { turn, roll: r, armOut: tuck ? 10 : 180 - a, farArmOut: 180 - a, legOut: l, farLegOut: l }]
 
 
 const fwdRoll: Pose[] = [reachUp, crouch(118, 44), palms(ball(15), 8), ball(-90), ball(-170), squat(-205, -270), rot(reachUp, -360)]
@@ -102,8 +107,8 @@ export const unwrap = (keys: Pose[]): Pose[] =>
   }, [])
 
 /** Centre of mass height above the lowest body point (segment masses as fractions of the body). */
-const up = (p: Pose, front = false) => {
-  const b = joints(p, front)
+const up = (p: Pose, front = false, st?: Partial<Stage>) => {
+  const b: Body = st ? place({ keys: [p], solid: true, view: FACE }, p, st) : joints(p, front)
   const mid = (a: { y: number }, c: { y: number }) => (a.y + c.y) / 2
   const com = 0.5 * mid(b.hip, b.shoulder) + 0.08 * b.head.y + 0.1 * (mid(b.hip, b.knee) + mid(b.hip, b.farKnee)) +
     0.05 * (mid(b.knee, b.foot) + mid(b.farKnee, b.farFoot)) + 0.03 * (mid(b.shoulder, b.elbow) + mid(b.shoulder, b.farElbow)) +
@@ -117,11 +122,11 @@ const up = (p: Pose, front = false) => {
  * τ ≈ 0.12 and landing at ≈ 0.95, just off the floor, and leave eases to the spline: a key at lift 0 with speed
  * would make the spline dip into the floor.
  */
-export const air = (ks: [Pose, number][], T: number, o: { front?: boolean; from?: number; to?: number } = {}): Beat[] => {
+export const air = (ks: [Pose, number, Partial<Stage>?][], T: number, o: { front?: boolean; from?: number; to?: number } = {}): Beat[] => {
   const { front = false, from = 0, to = from } = o
   const h = (981 * T * T) / 8
-  const h0 = up(ks[0][0], front)
-  return ks.map(([p, f], i) => ({ lift: Math.max(0, from + (to - from) * f + h0 + 4 * h * f * (1 - f) - up(p, front)), dur: ((ks[i + 1]?.[1] ?? 1) - f) * T }))
+  const h0 = up(ks[0][0], front, ks[0][2])
+  return ks.map(([p, f, st], i) => ({ ...st, lift: Math.max(0, from + (to - from) * f + h0 + 4 * h * f * (1 - f) - up(p, front, st)), dur: ((ks[i + 1]?.[1] ?? 1) - f) * T }))
 }
 
 const SPREAD: [number, number][] = [[20, 12], [57, 40], [18, 48], [57, 40], [20, 12]]
@@ -129,27 +134,27 @@ const SPREAD: [number, number][] = [[20, 12], [57, 40], [18, 48], [57, 40], [20,
  * A wheel (front view) from upright through one turn: star keys every `step` degrees, spreads blended between the
  * quarter turns, pivots per quarter. `time` s for the turn, held `rest` s upright at each end.
  */
-export const wheel = (o: { spread?: [number, number][]; pivots?: Joint[]; time: number; rest?: number; step?: number; tuck?: boolean }): Pick<Move, 'keys' | 'beats' | 'travel' | 'mode' | 'front'> => {
-  const { spread = SPREAD, pivots = ['foot', 'hand', 'farHand', 'farFoot'], time, rest = 0.4, step = 15, tuck } = o
+export const wheel = (o: { spread?: [number, number][]; pivots?: Joint[]; time: number; rest?: number; step?: number; tuck?: boolean; knee?: number }): Pick<Move, 'keys' | 'beats' | 'travel' | 'mode' | 'solid' | 'view'> => {
+  const { spread = SPREAD, pivots = ['foot', 'farHand', 'hand', 'farFoot'], time, rest = 0.4, step = 15, tuck, knee = 0 } = o
   const n = 360 / step
-  const keys: Pose[] = []
+  const ks: [Pose, Beat][] = []
   const by: (Joint | number)[] = []
   for (let i = 0; i <= n; i++) {
     const q = Math.min(3, Math.floor((i * 4) / n))
     const f = (i * 4) / n - q
     const [a, l] = [0, 1].map((j) => spread[q][j] + (spread[q + 1][j] - spread[q][j]) * f)
-    const t = 180 - i * step
-    keys.push(star(t, a, l, tuck ? t - 170 : undefined))
+    ks.push(star(i * step, a, l, tuck, 90, knee))
     by.push(i < n ? pivots[q] : 0)
   }
-  const beats = keys.map((_, i): Beat => (i === 0 ? { hold: rest, dur: time / n } : i < n ? { dur: time / n } : { hold: rest, dur: 0.01 }))
-  return travelled({ keys, beats, mode: 'cycle', front: true, ms: 1000 }, by)
+  const beats = ks.map(([, st], i): Beat => ({ ...st, ...(i === 0 ? { hold: rest, dur: time / n } : i < n ? { dur: time / n } : { hold: rest, dur: 0.01 }) }))
+  return travelled({ keys: ks.map((k) => k[0]), beats, mode: 'cycle', solid: true, view: FACE, ms: 1000 }, by)
 }
 
 /** Adds travel: each transition keeps the named joint still on the floor; a number moves that far (rolling, flight). */
 export const travelled = (m: Move, by: (Joint | number)[]): Move => {
   const n = m.keys.length
-  const x = (i: number, j: Joint) => place(m, m.keys[i % n], { ...m.beats?.[i % n], shift: 0 })[j].x
+  // World x: without the camera's view and tilt.
+  const x = (i: number, j: Joint) => place({ ...m, view: 0, tilt: 0 }, m.keys[i % n], { ...m.beats?.[i % n], shift: 0 })[j].x
   let s = 0
   const beats = by.map((b, i): Beat => {
     const shift = s
@@ -233,9 +238,13 @@ export const MOVES: Record<string, Move> = {
     }, ['foot', 'foot', 55, 55, 40, 35, 30, 'foot', 0])
   })(),
   roundoff: (() => {
-    const ks = [star(180, 20, 12), star(90, 57, 40), star(0, 18, 10), star(-60, 25, 0), star(-120, 22, 0), star(-180, 20, 0)]
-    const fly = air([[ks[3], 0.12], [ks[4], 0.5]], 0.3, { front: true })
-    return travelled({ keys: ks, mode: 'cycle', front: true, ms: 1000, beats: [{ hold: 0.5, dur: 0.4 }, { dur: 0.2 }, { dur: 0.15, ease: 'in' }, ...fly, { hold: 0.5, dur: 0.01 }] }, ['foot', 'hand', 'farHand', 10, 10, 0])
+    // Enters side-on running right, turns to face the viewer on the hands, snaps down facing back the way it came.
+    const ks = [star(0, 20, 12, false, 0), star(90, 57, 40, false, 90), star(135, 38, 25, false, 90), star(180, 18, 10, false, 90), star(210, 22, 5, false, 92), star(240, 25, 0, false, 95), star(300, 22, 0, false, 165), star(360, 20, 0, false, 180)]
+    const fly = air([[ks[5][0], 0.12, ks[5][1]], [ks[6][0], 0.5, ks[6][1]]], 0.3)
+    return travelled({
+      keys: ks.map((k) => k[0]), mode: 'cycle', solid: true, ms: 1000,
+      beats: [{ ...ks[0][1], hold: 0.5, dur: 0.4 }, { ...ks[1][1], dur: 0.1 }, { ...ks[2][1], dur: 0.1 }, { ...ks[3][1], dur: 0.08 }, { ...ks[4][1], dur: 0.07, ease: 'in' }, ...fly, { ...ks[7][1], hold: 0.4, dur: 0.5 }],
+    }, ['foot', 'farHand', 'farHand', 'hand', 'hand', 10, 10, 0])
   })(),
   kip_up: {
     keys: [lie, rockBack, kick, kipFly, kipLand, squat(160), stand, squat(165), sitDown], mode: 'cycle', ms: 1000, flow: 0.05,
@@ -247,9 +256,9 @@ export const MOVES: Record<string, Move> = {
   front_walkover: planted({ keys: unwrap([reachUp, lungeDown, splitFwd, bridgeFwd, rot(reachUp, -360)]), mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 0.6 }, { dur: 0.8 }, { dur: 0.9 }, { hold: 0.2, dur: 0.9 }, { hold: 0.4, dur: 0.01 }] }, ['foot', 'hand', 'hand', 'foot', 0], [[1, ['hand', 'farHand']], [2, ['hand', 'farHand']], [3, ['foot']]]),
   back_walkover: planted({ keys: unwrap([reachUp, leanBack, bridgeBack, splitBack, rot(reachUp, 360)]), mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 1 }, { dur: 0.7 }, { hold: 0.2, dur: 0.8 }, { dur: 0.8 }, { hold: 0.4, dur: 0.01 }] }, ['foot', 'foot', 'hand', 'foot', 0], [0, 1, [2, ['hand', 'farHand']]]),
   aerial: (() => {
-    const ks = [star(180, 160, 4), star(170, 170, 14), star(90, 150, 50), star(0, 150, 50), star(-90, 150, 45), star(-180, 160, 8), star(-180, 160, 4)]
-    const fly = air([[ks[1], 0.12], [ks[2], 0.3], [ks[3], 0.52], [ks[4], 0.74], [ks[5], 0.95]], 0.5, { front: true })
-    return travelled({ keys: ks, mode: 'cycle', front: true, ms: 1000, flow: 0.05, beats: [{ hold: 0.5, dur: 0.35 }, ...fly.slice(0, -1), { ...fly[4], dur: 0.35 }, { hold: 0.4, dur: 0.01 }] }, ['foot', 30, 40, 40, 30, 'farFoot', 0])
+    const ks = [star(0, 160, 4), star(10, 170, 14), star(90, 150, 50), star(180, 150, 50), star(270, 150, 45), star(360, 160, 8), star(360, 160, 4)]
+    const fly = air(([1, 2, 3, 4, 5] as const).map((i, j): [Pose, number, Beat] => [ks[i][0], [0.12, 0.3, 0.52, 0.74, 0.95][j], ks[i][1]]), 0.5)
+    return travelled({ keys: ks.map((k) => k[0]), mode: 'cycle', solid: true, view: FACE, ms: 1000, flow: 0.05, beats: [{ ...ks[0][1], hold: 0.5, dur: 0.35 }, ...fly.slice(0, -1), { ...fly[4], dur: 0.35 }, { ...ks[6][1], hold: 0.4, dur: 0.01 }] }, ['foot', 30, 40, 40, 30, 'farFoot', 0])
   })(),
   front_handspring: (() => {
     const keys = unwrap([reachUp, lunge, reachDown, hurdle, hs, flyFwd, landArch, archAbsorb, rot(reachUp, -360)])

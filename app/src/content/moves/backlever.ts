@@ -1,5 +1,5 @@
 import { place, type Move, type Pose } from '../../core/figure'
-import { solve } from './frontlever'
+import { solve, straddleHold } from './frontlever'
 import { hold } from './pull'
 
 // Rings side view. Back lever: face down, torso 90, legs -90, arms just behind vertical.
@@ -32,7 +32,7 @@ export const MOVES: Record<string, Move> = {
   german_hang: { ...hangOn([[530, 180, 180, 180, 180, 338, 338, 338, 338], german], 1000), beats: slow([0.5, 0.5], [4]) },
   tuck_bl: blHold(bl(60, -90)),
   adv_tuck_bl: blHold(bl(0, -90)),
-  straddle_bl: blHold(bl(-84, -84, -96, -96)),
+  straddle_bl: straddleHold(bl(-90, -90), true),
   full_bl: blHold(bl(-90, -90)),
   bl_pullout: { ...hangOn([bl(-90, -90), [0, 180, 180, 180, 180, -180, -180, -180, -180]], 1000), mode: 'cycle', beats: [{ hold: 0.6, dur: 1.8 }, { hold: 0.3, dur: 2.5 }] },
 }

@@ -51,7 +51,7 @@ const FEET: ('foot' | 'farFoot')[] = ['foot', 'farFoot']
 type Spot = number | { j: Joint; x: number } | { j: Joint; at: P2 }
 const spot = (p: Pose, s: Spot, turn = 0): Beat => {
   if (typeof s === 'number') return { shift: s }
-  const b = place({ keys: [p] }, p, { turn })[s.j]
+  const b = place({ keys: [p], solid: true }, p, { turn })[s.j]
   return 'x' in s ? { shift: s.x - b.x } : { lift: b.y - s.at[1], shift: s.at[0] - b.x }
 }
 type Key = [Pose, Spot, Beat?]
@@ -257,7 +257,8 @@ const boxJump = keyed([
   [boxLand, 0, { lift: BOX, hold: 0.1, dur: 0.6 }], [boxStand, 0, { lift: BOX, hold: 0.4, dur: 0.6 }], [stepDown, 0, { dur: 0.6 }],
 ])
 
-export const MOVES: Record<string, Move> = {
+// All solid, so turning round to walk back is a real turn.
+const SIDE: Record<string, Move> = {
   drop_land: { ...drop, mode: 'cycle', props: [dropBox], ms: 1000 },
   broad_jump: { ...broad, mode: 'cycle', ms: 1000, flow: 0.05 },
   precision: { ...precision, mode: 'cycle', ms: 1000, flow: 0.05 },
@@ -281,3 +282,4 @@ export const MOVES: Record<string, Move> = {
   kong_pre: { ...kongPre, ms: 1000, flow: 0.05 },
   wall_flip: { ...wallFlip, mode: 'cycle', props: [{ t: 'wall', x: faceX(flipPlant) }], ms: 1000, flow: 0.05 },
 }
+export const MOVES: Record<string, Move> = Object.fromEntries(Object.entries(SIDE).map(([k, m]) => [k, { ...m, solid: true }]))

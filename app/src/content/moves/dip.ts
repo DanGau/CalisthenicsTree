@@ -1,6 +1,5 @@
-import { blend, full, joints, LEN, place, type Move, type Pose, type Pt } from '../../core/figure'
-import { reach } from './legs'
-import { armsTo, holdBeats, nudge, rep } from './push'
+import { blend, full, joints, LEN, type Move, type Pose, type Pt } from '../../core/figure'
+import { armsTo, world, fit3, holdBeats, type Key3, nudge, off, rep, rep3 } from './push'
 
 const Y = -130
 const bars = { t: 'bars', x: 0, y: Y } as const
@@ -39,19 +38,20 @@ const straightForearm: Pose = [162, -18, 90, -18, 90, -18, -18, -18, -18, 160, 1
 const lTop: Pose = [182, -6, -6, -6, -6, 90, 90, 90, 90, 176, 178, -5]
 const lLow = grip([168, 0, 0, 0, 0, 90, 90, 90, 90, 160, 170], { x: 8, y: 22 })
 
-// Bulgarian, front view: rings wide of the shoulders; the chest sinks between them, elbows bent out and down.
-const B = { out: 22, drop: 44 }
-const bulgarian = (drop: number): Pose => {
-  const p: Pose = [180, 0, 0, 0, 0, -2, -2, 2, 2, 180, 180, drop ? 2 : -5]
-  const b = joints(p, true)
-  const s = Math.sign(b.nearShoulder.x - b.shoulder.x)
-  const y = b.nearShoulder.y + Math.sqrt((LEN.upper + LEN.fore - 0.3) ** 2 - B.out ** 2) - drop
-  const to = { hand: [b.nearShoulder.x + s * B.out, y] as [number, number], farHand: [b.farShoulder.x - s * B.out, y] as [number, number] }
-  const [a, c] = [reach(p, to, { front: true, k: { hand: 1, farHand: -1 } }), reach(p, to, { front: true, k: { hand: -1, farHand: 1 } })]
-  return s * joints(a, true).elbow.x > s * joints(c, true).elbow.x ? a : c
+// Bulgarian, solid: rings wide of the shoulders; the chest sinks between them below the rings, elbows back and out.
+const B = { w: 40, low: -8, lean: 12, cam: 30 }
+function bulgarian(f: number, prev?: Key3): Key3 {
+  const t = 180 - B.lean * f
+  const top = Math.sqrt((LEN.upper + LEN.fore - 0.5) ** 2 - (B.w - 17) ** 2)
+  const build = ([nu, nf, fu, ff, ao, fo]: number[]): Key3 =>
+    ({ p: [t, nu, nf, fu, ff, 8, -45, 14, -50, t - 4 * f, t + 6 * f, -5 + 7 * f], st: { armOut: ao, farArmOut: fo } })
+  const v0 = prev ? [...(prev.p.slice(1, 5) as number[]), prev.st.armOut!, prev.st.farArmOut!] : [0, 0, 0, 0, 25, 25]
+  return fit3(build, v0, (b) => [
+    ...off(b.farHand, b.hand, [0, 0, -2 * B.w]),
+    ...off(b.shoulder, b.hand, [6 * f, -(top + (B.low - top) * f), -B.w]),
+  ])
 }
-// Mid keys keep the hands on the rings along the spline.
-const bulgarianM: Move = { front: true, x: 'hip', y: 'hand', at: [0, Y], ...rep(bulgarian(0), bulgarian(B.drop), (f) => bulgarian(B.drop * f), 2, 1.2) }
+const bulgarianM: Move = rep3((f, _, prev) => bulgarian(f, prev), 2, 1.2, B.cam, { x: 'hand', y: 'hand', at: [0, Y] })
 
 /** Dip rep, seconds: shoulders and elbows bend together; the shoulders depress again only at the end of the press-out. */
 const dip = (top: Pose, low: Pose, props: Move['props'], down = 1.7, up = 1): Move => {
@@ -76,6 +76,6 @@ export const MOVES: Record<string, Move> = {
   ring_dip: dip(support, dipLow, [rings], 2, 1.1),
   lsit_dip: dip(lTop, lLow, [bars]),
   impossible_dip: dip(straightTop, straightForearm, [bars], 2.2, 1.4),
-  bulgarian_dip: { ...bulgarianM, props: [place(bulgarianM, bulgarianM.keys[0]), place(bulgarianM, bulgarianM.keys[0])].map((b, i) => { const h = i ? b.farHand : b.hand; return { t: 'rings', x: Math.round(h.x), y: Math.round(h.y) } }) },
+  bulgarian_dip: { ...bulgarianM, props: (() => { const b = world(bulgarianM); return [b.hand, b.farHand].map((h) => ({ t: 'rings', x: Math.round(h.x), y: Math.round(h.y), z: Math.round(h.z ?? 0) }) as const) })() },
   rto_dip: dip(rto, dipLow, [rings], 2.2, 1.3),
 }

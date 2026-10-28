@@ -1,6 +1,6 @@
-import { blend, joints, LEN, place, type Beat, type Body, type Move, type Pose } from '../../core/figure'
+import { blend, joints, LEN, place, type Beat, type Body, type Move, type Pose, type Stage } from '../../core/figure'
 import { reach } from './legs'
-import { armsTo, balance, fit, handOf, headDown, holdBeats, legsTo, line, nudge, pikeTo, rep, set, solve, straight, tempo, toeBox, tween } from './push'
+import { armsTo, balance, com3, world, fit, fit3, frame, handOf, headDown, holdBeats, type Key3, legsTo, line, nudge, off, pikeTo, rep, set, solidMove, straight, tempo, toeBox, tween } from './push'
 
 // Inverted, the belly faces -x and the back +x.
 /** Handstand: hollow bows the spine toward the back (ribs in), lean tips the legs toward the belly, shoulders elevated (pushed tall). */
@@ -73,42 +73,57 @@ const kick = (() => {
   return fit((L) => set(p, [5, 6], L), (b) => b.toe.y - b.hand.y, -40, 40)
 })()
 
-// Front view: near limbs on the viewer's left.
-const ARM = LEN.upper + LEN.fore
-const front = (t: number, nu: number, fu: number, nl: number, fl: number, ns = nl, fs = fl): Pose => [t, nu, nu, fu, fu, nl, ns, fl, fs, t, t, 5]
-const fHS = front(0, 0, 0, -180, 180)
-/**
- * Chest to wall, seen from behind: the hips shift `d` toward the far hand (negative: the near hand) and the
- * unloaded hand lifts to tap its own shoulder. `shift` = d keeps the hands planted.
- */
-const tapPose = (d: number, tap: 'near' | 'far' | null): Pose => {
-  const p = front(0, 0, 0, -180, 180)
-  const b = joints(p, true)
-  const y = b.shoulder.y + Math.sqrt((ARM - 0.3) ** 2 - d * d)
-  const to: Partial<Record<'hand' | 'farHand', [number, number]>> = {
-    hand: tap === 'near' ? [b.nearShoulder.x + 2, b.nearShoulder.y + 4] : [b.nearShoulder.x - d, y],
-    farHand: tap === 'far' ? [b.farShoulder.x - 2, b.farShoulder.y + 4] : [b.farShoulder.x - d, y],
-  }
-  // Elbows bend out to the side.
-  const [a, c] = [1, -1].map((k) => reach(p, to, { front: true, k: { hand: k, farHand: -k } }))
-  const out = (q: Pose) => { const j = joints(q, true); return j.farElbow.x - j.elbow.x }
-  return out(a) > out(c) ? a : c
-}
-const TAP = 13
-const taps: [number, 'near' | 'far' | null, Beat][] = [
-  [0, null, { hold: 0.3, dur: 0.7 }], [TAP, null, { dur: 0.5 }], [TAP, 'near', { hold: 0.2, dur: 0.5 }], [TAP, null, { dur: 0.7 }],
-  [0, null, { hold: 0.3, dur: 0.7 }], [-TAP, null, { dur: 0.5 }], [-TAP, 'far', { hold: 0.2, dur: 0.5 }], [-TAP, null, { dur: 0.7 }],
-]
-const tapMove: Move = {
-  keys: taps.map(([d, t]) => tapPose(d, t)), front: true, back: true, mode: 'cycle', x: 'hip', ms: 700,
-  beats: taps.map(([d, , b]) => ({ ...b, shift: d })),
-}
-const straddleF = front(0, 0, 0, -135, 135)
-const diamond = (() => {
-  const s = solve((s) => joints(front(0, 0, 0, -148, 148, s, -s), true).foot.x, 179, 60)
-  return front(0, 0, 0, -148, 148, s, -s)
+// Solid keys. Inverted the belly faces -x; legs at 180 point up.
+const inv = (t: number, u: number, legs: [number, number, number, number], st: Partial<Stage> = {}, scap = 5): Key3 =>
+  ({ p: [t, u, u, u, u, ...legs, t, t, scap], st: { armOut: 4, farArmOut: 4, ...st } })
+const turnBy = (k: Key3, v: number): Key3 => ({ p: k.p.map((a, i) => (i <= 10 ? a! + v : a)) as Pose, st: k.st })
+const midHands = (b: Body) => (b.hand.x + b.farHand.x) / 2
+/** k turned about the hands until the centre of mass is over them. */
+const upright = (k: Key3) => fit3(([v]) => turnBy(k, v), [0], (b) => [com3(b).x - midHands(b)])
+const UP: [number, number, number, number] = [180, 180, 180, 180]
+const legsOut = (o: number) => ({ legOut: o, farLegOut: o })
+const sHS = upright(inv(2, 2, UP, {}))
+const sStraddle = upright(inv(2, 2, UP, legsOut(45)))
+// Stag: the belly-side knee drops forward bent, the other leg reaches back.
+const sStag = upright(inv(2, 2, [215, 125, 160, 160]))
+// Diamond: knees bent out to the sides, soles together over the hips.
+const sDiamond = upright(inv(2, 2, [180, 180, 180, 180], { ...legsOut(45), shinOut: -92, farShinOut: -92 }))
+const oneArm = (() => {
+  // Hips shift over the near hand: the body rolls until the centre of mass is over it, the free arm out to the side.
+  const k = (r: number, v: number): Key3 => turnBy({ p: sStraddle.p, st: { ...sStraddle.st, roll: r, farArmOut: 80 } }, v)
+  return fit3(([r, v]) => k(r, v), [0, 0], (b) => [com3(b).x - b.hand.x, com3(b).z - (b.hand.z ?? 0)])
 })()
-const oneArm = balance((t) => front(t, -100, 0, -140 + t, 140 + t), -30, 30, (b) => b.farHand.x, true)
+
+/**
+ * Chest to wall, seen from behind and above the hands: the body rolls over one hand and the other hand lifts
+ * to tap its own shoulder. Hands stay where the straight key plants them (hip fixed).
+ */
+const ctwBase = upright(inv(2, 0, [184, 184, 184, 184]))
+// Hands planted a little closer than straight arms reach, so the shoulders can travel over either hand.
+const HAND = { near: off(frame(ctwBase).hand, frame(ctwBase).hip, [0, 3, 0]), far: off(frame(ctwBase).farHand, frame(ctwBase).hip, [0, 3, 0]) } as unknown as Record<string, [number, number, number]>
+type Tap = 'near' | 'far' | null
+const TAP_ARM = [-25, 150]
+/** The shoulders lean `ROLL` over the supporting hand. */
+const ROLL = 6
+function tapKey(tap: Tap, roll: number): Key3 {
+  const p = ctwBase.p
+  const build = ([nu, nf, ao, fu, ff, fo]: number[]): Key3 => ({ p: [p[0], nu, nf, fu, ff, ...p.slice(5)] as Pose, st: { roll, armOut: ao, farArmOut: fo } })
+  const tip = (b: Body, h: 'hand' | 'farHand') => off(b[h], h === 'hand' ? b.nearShoulder : b.farShoulder, [-7, 9, 0])
+  const [n, f] = [tap === 'near' ? TAP_ARM : [0, 0], tap === 'far' ? TAP_ARM : [0, 0]]
+  return fit3(build, [n[0], n[1], 4, f[0], f[1], 4], (b) => [
+    ...(tap === 'near' ? tip(b, 'hand') : off(b.hand, b.hip, HAND.near)),
+    ...(tap === 'far' ? tip(b, 'farHand') : off(b.farHand, b.hip, HAND.far)),
+  ])
+}
+const taps: [Key3, Beat][] = [
+  [tapKey(null, 0), { hold: 0.3, dur: 0.7 }], [tapKey(null, -ROLL), { dur: 0.5 }], [tapKey('near', -ROLL), { hold: 0.2, dur: 0.5 }], [tapKey(null, -ROLL), { dur: 0.7 }],
+  [tapKey(null, 0), { hold: 0.3, dur: 0.7 }], [tapKey(null, ROLL), { dur: 0.5 }], [tapKey('far', ROLL), { hold: 0.2, dur: 0.5 }], [tapKey(null, ROLL), { dur: 0.7 }],
+]
+const tapMove = (() => {
+  const m = solidMove(taps.map(([k]) => k), taps.map(([, b]) => b), 55, { mode: 'cycle', x: 'hip', ms: 700 })
+  const b = world(m)
+  return { ...m, props: [{ t: 'wall', x: Math.round(Math.min(b.toe.x, b.farToe.x, b.shoulder.x - 8)) - 2 } as const] }
+})()
 
 // Walk: legs lean over the back (+x) and the body travels that way. Each hand is planted 6/8 of the loop,
 // sliding back under the hips as they pass, and swings 2/8 ahead. Hand positions in eighths of the stride.
@@ -150,17 +165,30 @@ const press = (keys: Pose[]): Move => ({
 })
 const pressFloat = legsTo(blend(pressLean, pressMid, 0.5, 'lin'), 8, -175, -5)
 
-// Straddle press seen from the front: the trunk points at the viewer in the fold (foreshortened) and rises
-// to vertical as the straddled legs leave the floor, sweep out level, then close overhead.
-const straddleAt = (trunk: number, lift: number): Pose => {
-  const at = (L: number) => front(0, -4, 4, -L, L)
-  return at(solve((L) => { const b = joints(at(L), true, false, trunk); return b.hand.y - b.foot.y - LEN.sole - lift }, 5, 90))
-}
-const SP = [0.2, 0.45, 1, 1]
-const straddlePress: Move = {
-  keys: [straddleAt(SP[0], 0), straddleAt(SP[1], 4), front(0, -2, 2, -95, 95), fHS], front: true, x: 'hip', ms: 1000,
-  beats: ([{ hold: 0.5, dur: 1.2 }, { dur: 1.4 }, { dur: 1.3, ease: 'out' }, { hold: 0.8 }] as Beat[]).map((b, i) => ({ ...b, trunk: SP[i] })),
-}
+/**
+ * Straddle press, solid and seen from the front: from a straddled fold the hips rise over the hands, the
+ * legs sweep out to the sides and up, then close overhead. Toes leave the floor only once balanced.
+ */
+const pressKey = (t: number, u: number, L: number, o: number) => inv(t, t + u, [L, L, L, L], legsOut(o), 3)
+// Fold: trunk near level, shoulders ahead of the hands, legs wide; then the shoulders lean on until balanced, toes still down.
+const pressFold = fit3(([t]) => pressKey(t, -80, 0, 40), [62], (b) => [b.toe.y - b.hand.y])
+const toeFromHand = (k: Key3) => { const b = frame(k); return b.toe.x - b.hand.x }
+const sPressLean = fit3(([v, a, t]) => turnBy(pressKey(t, a, 4, 42), v), [0, -80, 55], (b) => [com3(b).x - midHands(b), b.toe.y - b.hand.y, b.toe.x - b.hand.x - toeFromHand(pressFold)])
+// Down: legs split, the belly-side leg steps down to its straddle spot, then the other follows into the fold.
+const DOWN = -180
+const sHSdown = upright(inv(2, 2, [DOWN, DOWN, DOWN, DOWN]))
+const split = upright(inv(2, 2, [DOWN + 55, DOWN + 55, DOWN - 20, DOWN - 20], { legOut: 15, farLegOut: 15 }))
+const stepDown = (() => {
+  const b0 = frame(pressFold)
+  const toe = off(b0.toe, b0.hand) as [number, number, number]
+  const f = pressFold.p
+  return fit3(([v, L, t, F]) => turnBy({ p: [t, ...(f.slice(1, 5) as number[]), L, L, F, F, t, t, 3] as unknown as Pose, st: { ...pressFold.st, farLegOut: 25 } }, v),
+    [0, f[5]!, f[0], -120], (b) => [...off(b.toe, b.hand, toe), com3(b).x - (b.hand.x + b.toe.x) / 2 - 20])
+})()
+const straddlePress = solidMove(
+  [pressFold, sPressLean, upright(pressKey(28, -35, -60, 75)), upright(pressKey(8, -8, -120, 85)), upright(pressKey(2, 0, -165, 45)), sHSdown, split, stepDown],
+  [{ hold: 0.5, dur: 1 }, { dur: 1 }, { dur: 1.1 }, { dur: 1 }, { dur: 0.9, ease: 'out' }, { hold: 0.8, dur: 0.9 }, { dur: 0.8 }, { hold: 0.2, dur: 0.6 }], -40, { x: 'hand', mode: 'cycle' },
+)
 
 export const MOVES: Record<string, Move> = {
   pike_hold: { keys: [pikeEntry, pike, pikeTo(PD, -5, -28)], x: 'hand', ms: 1000, beats: holdBeats(1.4, 2) },
@@ -180,9 +208,9 @@ export const MOVES: Record<string, Move> = {
   hs_walk: { keys: walkKeys, mode: 'cycle', x: 'hip', travel: 8 * STEP, ms: 230 },
   straddle_press: straddlePress,
   deficit_hspu: withWall({ keys: [bwTop, dfBottom], x: 'hand', y: 'hand', at: [0, -24], props: [{ t: 'bars', x: 0, y: -24 }], ...tempo(2, 1.2) }),
-  hs_shapes: { keys: [fHS, straddleF, diamond], front: true, mode: 'cycle', x: 'hip', ms: 1000, beats: [{ hold: 0.5 }, { hold: 0.5 }, { hold: 0.5 }] },
+  hs_shapes: solidMove([sHS, sStraddle, sDiamond, sStag], [{ hold: 0.5 }, { hold: 0.5 }, { hold: 0.5 }, { hold: 0.5 }], -50, { mode: 'cycle', x: 'hand' }),
   free_hspu: { keys: [HS, hspuBottom(null)], x: 'hand', ...tempo(2, 1.2) },
   pike_press: press([fold, pressLean, pressFloat, pressMid, back(hs(5, 0, -1.5)), back(HS)]),
-  oahs: { keys: [straddleF, oneArm], front: true, x: 'farHand', ms: 1300 },
+  oahs: solidMove([sStraddle, oneArm, turnBy(oneArm, 1)], holdBeats(1.5, 1.5), -55, { x: 'hand' }),
   ninety_pu: { keys: [HS, ninety], x: 'hand', ...tempo(2.2, 1.5) },
 }

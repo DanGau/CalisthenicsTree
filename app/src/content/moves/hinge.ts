@@ -1,5 +1,5 @@
-import type { Move, Pose } from '../../core/figure'
-import { H, KNEEL, ang, put, repPath } from './mobility'
+import type { Move, Pose, Stage } from '../../core/figure'
+import { H, KNEEL, ang, put, put3, repPath } from './mobility'
 
 /**
  * Supine with the shoulders on the floor at world x 0 and the hip h up: the torso runs from the
@@ -28,7 +28,7 @@ const thrust = (h: number): Pose => {
 const rdl = (t: number, c: number, head: number, far: [number, number], farArm: [number, number] = [0, 0], hip: [number, number] = [-14, 75]): Pose =>
   put([t, 0, 0, ...farArm, 0, 0, ...far, c, head], hip, { foot: [0, H.ankle] })
 /**
- * Hinge path (motion-reference §8), `s` 0 standing to 1 at the bottom: the knee softens 15-20° in the
+ * Hinge path (motion-reference Â§8), `s` 0 standing to 1 at the bottom: the knee softens 15-20Â° in the
  * first third and then stays put; the hips travel back while the trunk tips and the rear leg rises with it.
  */
 const hinge = (s: number): Pose => {
@@ -37,6 +37,19 @@ const hinge = (s: number): Pose => {
   const lean = 87 * s
   return rdl(180 - lean, 180 - lean, 180 - lean + 3 * s, [-8 - 79 * s, -8 - 79 * s], [0, 0], [-14 * Math.sin((s * Math.PI) / 2), 81 - 6 * k2])
 }
+
+/**
+ * Airplane, `r` 0 (square T, facing the floor) to 1 (open): the pelvis and trunk roll about the stance leg, whose
+ * foot stays planted; the far arm reaches for the ceiling, the near hand hangs to the floor, the rear knee bends.
+ */
+const AIR_CAM = 30
+const plane = (r: number): [Pose, Partial<Stage>] => {
+  const hip: [number, number] = [-14, 75]
+  const p: Pose = [93, 25 * r, 110 * r, 0, 0, 0, 0, -87, -87 - 50 * r, 96, 100]
+  const [q, st] = put3(p, { roll: -80 * r }, hip, { foot: [0, H.ankle, 10] })
+  return [q, { ...st, armOut: 80 * r, farArmOut: 85 * r, farLegOut: -15 * r }]
+}
+const [air0, air1] = [plane(0), plane(1)]
 
 // Nordic: knees at x 0, heels anchored; the body leans from the knee as one straight piece, hands crossed on the chest.
 const lean = (d: number): Pose => {
@@ -71,8 +84,8 @@ export const MOVES: Record<string, Move> = {
   sl_rdl: { ...repPath(hinge, 1.9, 1.1, 0.4, 0.3), x: 'foot', ms: 1000 },
   // Hips open: the pelvis turns about the stance leg, chest to the side, free arm to the ceiling, rear knee bends out. Slow both ways.
   airplane: {
-    keys: [hinge(1), rdl(96, 102, 140, [-98, -150], [178, 178])],
-    beats: [{ hold: 0.4, dur: 1.6 }, { turn: 65, hold: 0.8, dur: 1.4 }],
+    keys: [air0[0], air1[0]], solid: true, view: AIR_CAM,
+    beats: [{ ...air0[1], hold: 0.4, dur: 1.8 }, { ...air1[1], hold: 0.8, dur: 1.8 }],
     mode: 'cycle', x: 'foot', ms: 1000,
   },
   // Near-constant speed to the break point, then a fall caught on the hands; push back up.

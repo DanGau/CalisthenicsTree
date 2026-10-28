@@ -94,8 +94,20 @@ const boxSit = plant(fwd(145, 152), { foot: 30, farFoot: 30 }, 44)
 const deep = plant(fwd(132, 145, 168), { foot: 22, farFoot: 22 }, 30)
 
 // Cossack (front view): bent thigh at 105 puts the foot 28 below the hip; the straight leg reaches it at 68 degrees.
-const cossL: Pose = [175, 30, 150, -30, -150, 105, 0, -68, -68, 172, 180]
-const cossR: Pose = [185, 30, 150, -30, -150, 68, 68, -105, 0, 188, 180]
+// Cossack (solid, near-front view): feet planted 96 apart, the hips shift 30 over one foot and sink; that knee
+// bends forward over the toes, the other leg goes long out to the side. Chest leans forward, arms forward to balance.
+const coss = (side: 1 | -1): [Pose, Beat] => {
+  const D = 180 / Math.PI
+  const [W, d, L] = [48, 30, LEN.thigh + LEN.shin]
+  const straight = Math.asin((W + d - 10) / L)
+  const h = L * Math.cos(straight)
+  const bentOut = Math.asin((W - d - 10) / L)
+  const knee = Math.acos(h / (L * Math.cos(bentOut))) * D
+  const [bent, long]: [number, number][] = [[knee, -knee], [0, 0]]
+  const [near, far] = side === 1 ? [bent, long] : [long, bent]
+  return [[150, 80, 95, 80, 95, ...near, ...far, 145, 160], { legOut: (side === 1 ? bentOut : straight) * D, farLegOut: (side === 1 ? straight : bentOut) * D, armOut: 10, farArmOut: 10 }]
+}
+const [cossL, cossR] = [coss(1), coss(-1)]
 
 // Split squat: front shin near vertical, back knee drops to just off the floor.
 const splitTop = plant([180, 8, 14, -8, -10, 0, 0, 0, 0], { foot: 30, farFoot: -36 }, 76)
@@ -151,7 +163,7 @@ export const holdBeats = (enter = 1.2, hold = 1.4): Beat[] => [{ hold: 0.3, dur:
 export const MOVES: Record<string, Move> = {
   box_squat: { ...rep(boxTop, boxSit, 1.8, 1, 0.3), x: 'foot', props: [{ t: 'box', x: -64, w: 36, h: 38 }] },
   squat: { ...rep(boxTop, deep), x: 'foot' },
-  cossack: { keys: [cossL, cossR], front: true, ms: 1300, beats: [{ hold: 0.4 }, { hold: 0.4 }] },
+  cossack: { keys: [cossL[0], cossR[0]], solid: true, view: 70, x: 'foot', ms: 1300, beats: [{ ...cossL[1], hold: 0.4 }, { ...cossR[1], hold: 0.4 }] },
   split_squat: rep(splitTop, splitLow),
   step_up: { keys: [stepLow, stepTop], mode: 'cycle', beats: [{ hold: 0.2, dur: 1 }, { hold: 0.35, dur: 1.6 }], x: 'foot', y: 'foot', at: [0, -45], props: [{ t: 'box', x: -26, w: 52, h: 40 }] },
   assisted_shrimp: { ...rep(shrimpTop(false, true), shrimpLow(false, true), 1.8, 1.1), x: 'foot', props: [{ t: 'pole', x: 60 }] },

@@ -1,5 +1,5 @@
-import { blend, joints, LEN, type Move, type Pose, type Pt } from '../../core/figure'
-import { armsTo, balance, holdBeats, set, solve } from './push'
+import { blend, joints, LEN, type Body, type Move, type Pose, type Pt, type Stage } from '../../core/figure'
+import { armsTo, balance, com3, fit3, frame, holdBeats, type Key3, nudge, off, set, solidMove, solve } from './push'
 
 const D2R = Math.PI / 180
 const dir = (deg: number, len: number): Pt => ({ x: Math.sin(deg * D2R) * len, y: Math.cos(deg * D2R) * len })
@@ -55,26 +55,54 @@ const pigeonIn = (() => {
 })()
 
 /**
- * Front view twist (side crow, grasshopper): shoulders square to the viewer, arms nearly vertical with the
- * elbows a touch out; the trunk leans toward the viewer so the hips sit just outside the near elbow.
+ * Solid twist (side crow, grasshopper): chaturanga arms (forearms near vertical, elbows back), trunk leaning
+ * forward, both legs swung to one side. `legs` builds the key from [trunk, upper arm, ...leg vars].
  */
-const twist = (legs: [number, number, number, number], head = 195): Pose => [-88, 10, -4, -10, 4, ...legs, 188, head]
-/** Shins of a twist solved so the feet rest on the floor (trunk foreshortened to `trunk`). */
-const feetDown = (p: Pose, trunk = 1): Pose => {
-  const at = (s: number) => set(set(p, [6], s), [8], s - 6)
-  return at(solve((s) => { const b = joints(at(s), true, false, trunk); return Math.max(b.foot.y, b.farFoot.y) + LEN.sole - b.hand.y }, 150, 20))
-}
-// Side crow: both knees stacked on the near upper arm, shins folded back under. Leaning onto the arm, the chest
-// tips toward the viewer (trunk foreshortened) and the hips settle onto the near elbow.
-const SC = { in: 0.9, on: 0.6 }
-const sideCrow = twist([80, 130, 74, 124])
-const sideCrowIn = feetDown(twist([112, 60, 106, 54]), SC.in)
-// Grasshopper: the near leg straight across both upper arms, the far leg bent with its foot by the near knee.
-const grasshopper = twist([-88, -88, 150, 70], 190)
-const grasshopperIn = (() => {
-  const at = (L: number) => twist([L, L, 150, 70], 190)
-  return at(solve((L) => { const b = joints(at(L), true); return b.foot.y + LEN.sole - b.hand.y }, -88, -20))
+const twistKey = (t: number, u: number, legs: [number, number, number, number], st: Partial<Stage>, head = 20): Key3 =>
+  ({ p: [t, u, 4, u, 4, ...legs, t, t + head, -2], st: { armOut: 6, farArmOut: 6, ...st } })
+const midX = (b: Body) => (b.hand.x + b.farHand.x) / 2
+/**
+ * Side crow: the pelvis lies on its side (hips stacked, `roll`), knees bent forward and stacked on the near
+ * upper arm above the elbow; the chest twists back to face the floor over shoulder-width hands, forearms vertical.
+ */
+const hz = (p: Pt) => p.z ?? 0
+const sideCrowAt = (lean: number, toes: boolean, v0: number[], hands?: number[]) => fit3(
+  ([t, tw, r, nu, nf, fu, ff, ao, fo, nt]) => ({ p: [t, nu, nf, fu, ff, nt, nt - 110, nt - 4, nt - 114, t, t + 25, -2], st: { roll: r, twist: tw, armOut: ao, farArmOut: fo } }),
+  v0,
+  (b) => {
+    const c = com3(b)
+    const mid = { x: (b.hand.x + b.farHand.x) / 2, z: (hz(b.hand) + hz(b.farHand)) / 2 }
+    return [
+      ...(hands ? off(b.farHand, b.hand, hands as [number, number, number]) : [b.hand.y - b.farHand.y, Math.hypot(b.hand.x - b.farHand.x, hz(b.hand) - hz(b.farHand)) - 40]),
+      c.x - mid.x - lean, c.z - mid.z,
+      ...off(b.knee, b.elbow, [0, -9, 0]),
+      toes ? Math.max(b.toe.y, b.farToe.y) - b.hand.y : 0,
+      (b.hand.x - b.elbow.x) * 0.3, (hz(b.hand) - hz(b.elbow)) * 0.3, (b.farHand.x - b.farElbow.x) * 0.3, (hz(b.farHand) - hz(b.farElbow)) * 0.3,
+    ]
+  },
+)
+const sideCrow = (() => {
+  // From crow: the pelvis turns a quarter about the spine and the whole body rolls back so the chest faces the floor.
+  const c = crow
+  return sideCrowAt(0, false, [c[0], -80, 80, c[1], c[2], c[3], c[4], 0, 0, c[5]])
 })()
+const vars = (k: Key3) => [k.p[0], k.st.twist!, k.st.roll!, ...[1, 2, 3, 4].map((i) => k.p[i]!), k.st.armOut!, k.st.farArmOut!, k.p[5]!]
+const scHands = (() => { const b = frame(sideCrow); return off(b.farHand, b.hand) })()
+const sideCrowSway = sideCrowAt(3, false, vars(sideCrow), scHands)
+const sideCrowIn = sideCrowAt(-6, true, vars(sideCrow), scHands)
+// Grasshopper: the near leg straight out across the backs of the arms past the far elbow; the far leg bent, its
+// foot resting on the straight leg's thigh.
+const grassAt = (lean: number, toe: boolean) => fit3(
+  ([t, u, nt, lo, ft, fs, fo]) => twistKey(t, u, [nt, nt, ft, fs], { legOut: lo, farLegOut: fo }, 25),
+  [100, -60, 80, -50, 120, 20, 10],
+  (b, [t]) => {
+    const k = off(b.knee, b.farElbow, [0, -9, 0])
+    return [toe ? (t - 98) * 0.5 : com3(b).x - midX(b) - lean, ...(toe ? [k[0], k[2], b.toe.y - b.hand.y] : k), ...off(b.farFoot, b.knee, [6, -8, 0])]
+  },
+)
+const grasshopper = grassAt(0, false)
+// Entry: trunk leaning in, the straight leg's toes still on the floor.
+const grasshopperIn = grassAt(0, true)
 
 // Tripod: hands on the belly side, head down ahead of them, forearms vertical, knees on the elbows, then legs up.
 const TRI = { u: -82 }
@@ -130,17 +158,20 @@ const oaMid = [[0.3, 4, 14], [0.7, 50, 32]].map(([f, x, y]) => {
 })
 /** Small correction: fingers press and the hips settle a touch. */
 const nod = (p: Pose, d = 3): Pose => set(set(p, [0], p[0] + d), [9], (p[9] ?? p[0]) + d)
+const nod3 = (k: Key3): Key3 => ({ ...k, p: nudge(k.p, { 2: 2, 4: 2 }) })
+/** Camera for the twists: a quarter off the front, the stacked legs toward the viewer. */
+const TW = 35
 
 export const MOVES: Record<string, Move> = {
   frog_stand: bal(frogIn, frog, nod(frog)),
   crow: bal(crowIn, crow, nod(crow)),
-  side_crow: bal(sideCrowIn, sideCrow, nod(sideCrow, -3), { front: true, beats: holdBeats(1.5, 1.5).map((b, i) => ({ ...b, trunk: i ? SC.on : SC.in })) }),
+  side_crow: solidMove([sideCrowIn, sideCrow, sideCrowSway], holdBeats(1.5, 1.5), -60, { x: 'hand' }),
   crane: bal(crow, crane, nod(crane)),
   tripod_hs: { keys: [tripodTuck, tripod], x: 'hand', ms: 1000, beats: [{ hold: 0.5, dur: 2 }, { hold: 1 }] },
-  flying_pigeon: bal(pigeonIn, pigeon, nod(pigeon)),
+  flying_pigeon: solidMove([pigeonIn, pigeon, nod(pigeon)].map((p) => ({ p, st: { legOut: 20, shinOut: -90 } })), holdBeats(1.5, 1.5), 40, { x: 'hand' }),
   elbow_lever: { ...bal(leverTuck, elbowLever, nod(elbowLever, 2)), keys: [leverTuck, ...leverMid, elbowLever, nod(elbowLever, 2)], beats: [{ hold: 0.5, dur: 0.6 }, { dur: 0.5 }, { dur: 0.8 }, { dur: 1.5 }, { hold: 0.25 }] },
   forearm_stand: { keys: [faIn, forearm], x: 'elbow', ms: 1000, beats: [{ hold: 0.5, dur: 1.1, ease: 'out' }, { hold: 1 }] },
-  grasshopper: bal(grasshopperIn, grasshopper, nod(grasshopper, -3), { front: true }),
+  grasshopper: solidMove([grasshopperIn, grasshopper, nod3(grasshopper)], holdBeats(1.5, 1.5), TW, { x: 'hand' }),
   oa_elbow_lever: { ...bal(elbowLever, oaLever, nod(oaLever, 2)), keys: [elbowLever, ...oaMid, oaLever, nod(oaLever, 2)], beats: [{ hold: 0.5, dur: 0.4 }, { dur: 0.4 }, { dur: 0.5 }, { dur: 1.5 }, { hold: 0.25 }] },
   crow_to_hs: { keys: [crow, crowTuck, HS], x: 'hand', ms: 1000, beats: [{ hold: 0.5, dur: 1.3 }, { dur: 1.5, ease: 'out' }, { hold: 0.8 }] },
   scorpion: { keys: [forearm, scorpion], x: 'elbow', ms: 1000, beats: [{ hold: 0.5, dur: 2 }, { hold: 1 }] },

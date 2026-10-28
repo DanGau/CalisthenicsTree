@@ -1,6 +1,6 @@
-import { full, joints, type Beat, type Move, type Pose } from '../../core/figure'
+import { full, joints, place, type Beat, type Move, type Pose } from '../../core/figure'
 import { plant, pos, reach, rot } from './legs'
-import { ball, wheel } from './tumble'
+import { ball, unwrap, wheel } from './tumble'
 
 /** Lowest point of the head and trunk, in hip coordinates. */
 const base = (p: Pose, front = false) => {
@@ -91,24 +91,47 @@ const spinTuck = (w: number): Pose => {
 }
 const spinOpen: Pose = [255, 160, 170, 160, 170, 140, 110, 125, 95, 262, 250]
 
-// Windmill (front view): rolling across the upper back, hips high, the leg V turning about the body's long axis
-// so it opens and closes as seen from the front; the shoulders rock with it.
-const mill = (ph: number): Pose => {
-  const r = (ph * Math.PI) / 180
-  const t = 62 + 14 * Math.sin(r)
-  const v = t + 160
-  return [t, t + 165 + 20 * Math.sin(r), t + 90, t + 195 + 20 * Math.sin(r), t + 270, v + 70 * Math.cos(r), v + 60 * Math.cos(r), v - 70 * Math.cos(r), v - 60 * Math.cos(r), t, 90]
+// Windmill (solid): rolling round across the upper back and chest about the body's long axis, arms reaching
+// forward along it, hands together, so they clear the floor. The legs stay up behind in a wide V that sweeps round with the roll, so the hips flex over
+// the back and open over the chest.
+const D = 180 / Math.PI
+const mill = (r: number): [Pose, Beat] => {
+  const [cr, sr] = [Math.cos(r / D), Math.sin(r / D)]
+  const leg = (s: number) => {
+    // World direction: up behind (elevation 55), spread 34 to each side across the rolled body.
+    const [e, h] = [55 / D, 34 / D]
+    const w = [-Math.cos(e) * Math.cos(h), -Math.sin(e) * Math.cos(h) - s * Math.sin(h) * sr, s * Math.sin(h) * cr]
+    const l = Math.hypot(...w)
+    // Undo the roll to get the body-frame direction, then its sagittal angle and swing out.
+    const [x, y, z] = [w[0] / l, (w[1] * cr + w[2] * sr) / l, (-w[1] * sr + w[2] * cr) / l]
+    return [Math.atan2(x, y) * D, Math.asin(s * z) * D]
+  }
+  const [[n, no], [f, fo]] = [leg(1), leg(-1)]
+  return [[86, 84, 84, 84, 84, n, n, f, f, 84, 70], { roll: r, armOut: -18, farArmOut: -18, legOut: no, farLegOut: fo, dur: 0.1, ease: 'lin' }]
 }
+const MILL = [0, 45, 90, 135, 180, 225, 270, 315].map(mill)
 
-// Flare (front view): straight arms, wide straddle near level; the body leans away from each leg as it circles,
-// weight shifting hand to hand so the free hand lets the leg pass.
-const flare = (s: number): Pose => {
-  const p: Pose = [180 + s, 0, 0, 0, 0, -118 - 0.5 * s, -118 - 0.5 * s, 118 - 0.5 * s, 118 - 0.5 * s]
-  const b = joints(p, true)
-  const f = b.shoulder.y + 53
-  if (s > 0) return reach([...p.slice(0, 3), -125, -135, ...p.slice(5)] as Pose, { hand: [b.nearShoulder.x - 4, f] }, { front: true })
-  if (s < 0) return reach([p[0], 125, 135, ...p.slice(3)] as Pose, { farHand: [b.farShoulder.x + 4, f] }, { front: true })
-  return reach(p, { hand: [b.nearShoulder.x - 4, f], farHand: [b.farShoulder.x + 4, f] }, { front: true })
+// Flare (solid): body near level on straight arms, hips high, legs in a wide V circling with the turn. The weight
+// passes hand to hand at the half turns; the free side rolls up and its hand lifts as the legs sweep past it, and
+// the V swings toward that side. The support hand stays put (shift cancels its drift).
+/** Camera looks down this far on the spinning moves, so floor-plane circles read. */
+const TILT = 25
+const flare = (): Pick<Move, 'keys' | 'beats'> => {
+  const keys: Pose[] = []
+  const beats: Beat[] = []
+  for (let k = 0; k < 12; k++) {
+    const phi = k * 30
+    const s = Math.sin((phi * Math.PI) / 180)
+    const [up, nearUp] = [Math.max(0, s), Math.max(0, -s)]
+    // The V tilts as it circles: one leg high, the other low, crossing over at the quarter turns.
+    const tilt = 18 * Math.cos((phi * Math.PI) / 180)
+    const p: Pose = [95, 20 * nearUp, 40 * nearUp, 20 * up, 40 * up, -112 - tilt, -112 - tilt, -112 + tilt, -112 + tilt, 98, 60]
+    const st = { turn: phi, roll: -22 * s, armOut: s > 0 ? 22 * s : 45 * nearUp, farArmOut: s < 0 ? -22 * s : 45 * up, legOut: 58 - 22 * s, farLegOut: 58 + 22 * s }
+    const b = place({ keys: [p], solid: true, tilt: TILT }, p, st)
+    keys.push(p)
+    beats.push({ ...st, shift: -(s >= 0 ? b.hand.x : b.farHand.x), dur: 0.8 / 12, ease: 'lin' })
+  }
+  return { keys, beats }
 }
 
 // Macaco: from a squat, reach one hand back low, throw the hips over it and land on the feet.
@@ -121,7 +144,6 @@ const macLand: Pose = rot(plant([165, 30, 40, 200, 200, 0, 0, 0, 0, 170, 175], {
 const swipeDown: Pose = plant([35, 0, 0, 0, 0, 0, 0, 0, 0, 25, 20], { hand: 56, farHand: 44, foot: -4, farFoot: 12 }, 70)
 const swipeUp: Pose = [235, 315, 315, 290, 290, 75, 65, 125, 115, 260, 290]
 
-const steady = (n: number, d = 1): Beat[] => Array.from({ length: n }, () => ({ dur: d, ease: 'lin' }))
 
 // Timing below is in seconds (ms 1000).
 
@@ -134,6 +156,8 @@ const freeze = (entry: Pose, f: Pose, breath: Pose): Pick<Move, 'keys' | 'beats'
   const over = F.map((v, i) => v + Math.sign(v - E[i]) * Math.min(2, Math.abs(v - E[i]) * 0.05)) as Pose
   return { keys: [entry, over, f, breath], mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 0.4 }, { dur: 0.25 }, { dur: 1.2 }, { hold: 0.3, dur: 0.7 }] }
 }
+/** Drawn solid, the camera `view` degrees round. */
+const seen = <M extends Move>(m: M, view: number): M => ({ ...m, solid: true, view })
 /** A balance held between two keys, swaying at the real ≈0.3 Hz rhythm (1.5 s each way). */
 const sway = (half = 1.5): Pick<Move, 'beats' | 'ms'> => ({ ms: 1000, beats: [{ hold: 0.3, dur: half }, { hold: 0.3 }] })
 
@@ -141,19 +165,19 @@ export const MOVES: Record<string, Move> = {
   ginga: { keys: [ginga('far'), gingaBase, ginga('near'), gingaBase], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.1, dur: 0.5 }, { dur: 0.5 }, { hold: 0.1, dur: 0.5 }, { dur: 0.5 }] },
   cocorinha: { keys: [ginga('far'), squatGuard], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.45 }, { hold: 0.5, dur: 0.7 }] },
   negativa: { keys: [ginga('far'), negativa], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.6 }, { hold: 0.8, dur: 0.9 }] },
-  baby_freeze: freeze(babyIn, baby(0), baby(3)),
+  baby_freeze: seen(freeze(babyIn, baby(0), baby(3)), 25),
   qdr: { keys: [qdr([150, 20, 155, 30]), qdr([-80, -80, -70, -70])], ...sway(1.2) },
   au: wheel({ spread: [[30, 25], [57, 45], [25, 60], [57, 45], [30, 25]], time: 1.8 }),
   chair_freeze: { keys: [chair(-50), chair(-53)], ...sway() },
   back_spin: {
-    keys: [spinSit, spinWind, spinTuck(0), spinTuck(14), spinTuck(0), spinTuck(14), spinOpen], mode: 'cycle', ms: 1000, flow: 0.05,
+    keys: [spinSit, spinWind, spinTuck(0), spinTuck(14), spinTuck(0), spinTuck(14), spinOpen], mode: 'cycle', solid: true, tilt: TILT, x: 'shoulder', ms: 1000, flow: 0.05,
     beats: [{ hold: 0.3, dur: 0.45 }, { turn: 30, dur: 0.2, ease: 'snap' }, ...[120, 240, 360, 480].map((turn): Beat => ({ turn, dur: 0.22, ease: 'lin' })), { turn: 560, dur: 0.6, ease: 'out' }],
   },
   macaco: { keys: [macSit, macReach, macOver, macLand], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.6 }, { dur: 0.3, ease: 'snap' }, { dur: 0.4 }, { hold: 0.3, dur: 0.8 }] },
   turtle_freeze: { keys: [turtle(-6), turtle(6)], ms: 1000, beats: [{ hold: 0.2, dur: 1 }, { hold: 0.2, dur: 1 }] },
-  windmill: { keys: [mill(0), mill(90), mill(180), mill(270)], mode: 'cycle', front: true, x: 'shoulder', y: 'shoulder', at: [0, -18], ms: 1000, flow: 0.08, beats: steady(4, 0.2) },
+  windmill: { keys: unwrap(MILL.map((k) => k[0])), beats: MILL.map((k) => k[1]), mode: 'cycle', solid: true, tilt: TILT, view: 30, x: 'shoulder', ms: 1000 },
   swipe: { keys: [swipeDown, swipeUp, rot(swipeDown, 360)], mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 0.3 }, { lift: 22, dur: 0.35 }, { hold: 0.3, dur: 0.01 }] },
-  airchair: freeze(airIn, airchair(140), airchair(144)),
-  flare: { keys: [flare(0), flare(38), flare(0), flare(-38)], mode: 'cycle', front: true, ms: 1000, flow: 0.08, beats: [0.7, 1, 0.7, 1].map((trunk): Beat => ({ trunk, dur: 0.2, ease: 'lin' })) },
+  airchair: seen(freeze(airIn, airchair(140), airchair(144)), 30),
+  flare: { ...flare(), mode: 'cycle', solid: true, tilt: TILT, ms: 1000 },
   hollowback: { keys: [hollow(0), hollow(12)], ...sway() },
 }

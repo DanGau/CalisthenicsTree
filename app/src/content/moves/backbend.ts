@@ -1,5 +1,5 @@
-import { blend, joints, type Move, type Pose } from '../../core/figure'
-import { breathe, H, INSTEP, put, rep, repPath, where } from './mobility'
+import { blend, joints, type Beat, type Move, type Pose, type Stage } from '../../core/figure'
+import { breathe, H, INSTEP, put, put3, repPath, where } from './mobility'
 
 type Legs = [number, number, number, number]
 const LEGS0: Legs = [0, 0, 0, 0]
@@ -73,13 +73,37 @@ const kneelKey = (thigh: number, t: number, c: number, head: number, arms: numbe
 const archFree = (t: number, c: number, head: number, arms: number, hip: [number, number]): Pose =>
   put([t, arms, arms, arms, arms, 0, 0, 0, 0, c, head], hip, { foot: [66, H.ankle], farFoot: [66, H.ankle] })
 
-// High plank facing +x, hands at x 0 under the shoulders, on the toes.
-const plank = put([116, 0, 0, 0, 0, -73, -73, -73, -73, 116, 122], [-25.5, 37], { hand: [0, H.hand], farHand: [0, H.hand] }, { hand: 1, farHand: 1 })
-/** Spine a turn back, so the roll from the bridge (spine at -100) passes over the top. */
-const over = (p: Pose): Pose => p.map((v, i) => (i === 0 || i === 9 || i === 10 ? (v ?? 0) - 360 : v)) as Pose
-
-/** Far arm straight up off the floor. */
-const farUp = (p: Pose): Pose => [p[0], p[1], p[2], -180, -180, ...p.slice(5)] as Pose
+/**
+ * Bridge rotation, `s` 0 (bridge) to 1 (plank): the body rolls belly-down about its long axis over the planted
+ * near hand, which stays put while the hip travels a hand's width across. The far hand lifts over the top and
+ * lands; the feet pivot and walk back a little. Spine angles stay in the body frame (the plank is the bridge flipped).
+ */
+const ROT = { roll: -180, cam: 25, hand: 17 }
+const rotKey = (s: number, prev: Pose): [Pose, Partial<Stage>] => {
+  const e = (1 - Math.cos(Math.PI * s)) / 2
+  const mix = (a: number, b: number) => a + (b - a) * e
+  const j = joints(full).hand
+  const hip: [number, number] = [mix(-j.x, 25), mix(H.hand + j.y, 38) + 8 * Math.sin(Math.PI * s)]
+  const hz = 2 * ROT.hand * e
+  const roll = ROT.roll * e
+  const p: Pose = [...prev]
+  p[0] = mix(-100, -64)
+  p[9] = mix(-55, -66)
+  p[10] = mix(-10, -60)
+  const feet = mix(66, 90)
+  const to: Parameters<typeof put3>[3] = { hand: [0, H.hand, ROT.hand - hz], foot: [feet, H.ankle + 14 * Math.sqrt(e), 10 - 20 * e], farFoot: [feet, H.ankle + 14 * Math.sqrt(e), -10 + 20 * e] }
+  const free = s > 0.08 && s < 0.92
+  if (!free) to.farHand = [0, H.hand, s < 0.5 ? -ROT.hand : 3 * ROT.hand - hz]
+  const [q, st] = put3(p, { roll }, hip, to, { hand: 1, farHand: 1 })
+  if (free) {
+    const u = (s - 0.08) / 0.84
+    q[3] = q[4] = 180 * u
+    st.farArmOut = 70 * Math.sin(Math.PI * u)
+  }
+  return [q, st]
+}
+const ROT_S = [0, 0.08, 0.2, 0.32, 0.44, 0.56, 0.68, 0.8, 0.92, 1]
+const rotKeys = ROT_S.reduce<[Pose, Partial<Stage>][]>((ks, s) => [...ks, rotKey(s, ks.at(-1)?.[0] ?? [0, 0, 0, 0, 0, 0, 0, 0, 0])], [])
 
 // Press to the top of the head first, elbows up, then drive through to straight arms.
 const headTop = put([-110, 0, 0, 0, 0, 0, 0, 0, 0, -40, -5], [46, 39.8], { hand: [0, H.hand], farHand: [0, H.hand], foot: [78, H.ankle], farFoot: [78, H.ankle] }, { hand: -1, farHand: -1 })
@@ -106,7 +130,15 @@ export const MOVES: Record<string, Move> = {
     x: 'hand', at: [-6, 0], props: [{ t: 'box', x: -40, w: 40, h: BOX }], ms: 1000,
   },
   camel: { ...breathe([camel(0, 180, 180, 180, [-10, 62]), camel(-28, 210, 275, 305, HEEL)], 900, camel(-26, 206, 266, 298, HEEL)), x: 'knee', point: true },
-  wall_angels: { front: true, ms: 1000, ...rep([180, 90, 180, -90, -180, 0, 0, 0, 0, 180, 180, -3], [180, 155, 170, -155, -170, 0, 0, 0, 0, 180, 180, 4], 1.6, 1.6, 0.4, 0.4) },
+  // Back to the wall: goalpost arms (elbows at shoulder height, forearms up) slide up to a Y and back, arms on the wall.
+  wall_angels: {
+    keys: [[180, 180, 180, 180, 180, 0, 0, 0, 0, 180, 180, -3], [180, 180, 180, 180, 180, 0, 0, 0, 0, 180, 180, 4]], solid: true, view: 70,
+    mode: 'cycle', ms: 1000,
+    beats: [
+      { armOut: 88, farArmOut: 88, foreOut: -88, farForeOut: -88, hold: 0.4, dur: 1.6 },
+      { armOut: 22, farArmOut: 22, foreOut: 0, farForeOut: 0, hold: 0.4, dur: 1.6 },
+    ],
+  },
   // Press to the head, then drive up with momentum; lower slowly back through the head.
   full_bridge: {
     keys: [lying, between(lying, headTop, 0.5, 78), headTop, between(headTop, top, 0.5, 78), top, between(headTop, top, 0.5, 78), headTop, between(lying, headTop, 0.5, 78)],
@@ -153,11 +185,10 @@ export const MOVES: Record<string, Move> = {
     x: 'foot', at: [66, 0], ms: 900,
     beats: [{ hold: 0.6, dur: 0.6 }, { dur: 0.5 }, { dur: 0.7 }, { dur: 1 }, { hold: 0.6 }],
   },
-  // Far hand reaches up and over as the hips turn; the body rolls round the near hand to face the floor in a plank, and back.
+  // Far hand reaches up and over; the body rolls round the near hand to face the floor in a plank, and back.
   bridge_rotation: {
-    keys: [full, farUp(bridge(-112, -120, -130, -2)), over(farUp(plank)), over(plank)],
-    x: 'hand', y: 'hand', at: [0, -H.hand], ms: 1000,
-    beats: [{ hold: 0.5, dur: 1 }, { turn: 60, dur: 0.6, ease: 'lin' }, { turn: 120, dur: 1, ease: 'out' }, { turn: 180, hold: 0.8 }],
+    keys: rotKeys.map(([p]) => p), solid: true, view: ROT.cam, x: 'hand', y: 'hand', at: [0, -H.hand], ms: 1000,
+    beats: rotKeys.map(([, st], i): Beat => ({ ...st, hold: i === 0 ? 0.5 : i === ROT_S.length - 1 ? 0.8 : 0, dur: (ROT_S[i + 1] ?? 0) - ROT_S[i] ? 3.2 * ((ROT_S[i + 1] ?? 1) - ROT_S[i]) : 1 })),
   },
   // Rock over the hands, kick through handstand and back down.
   tick_tock: {

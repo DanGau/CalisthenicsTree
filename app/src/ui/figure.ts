@@ -1,4 +1,4 @@
-import { at, LEN, place, sequence, type Body, type Move, type Pose, type Prop, type Pt, type Stage } from '../core/figure'
+import { at, camera, LEN, place, sequence, type Body, type Move, type Pose, type Prop, type Pt, type Stage } from '../core/figure'
 
 const f = (n: number) => n.toFixed(1)
 const sub = (a: Pt, b: Pt): Pt => ({ x: a.x - b.x, y: a.y - b.y })
@@ -83,11 +83,11 @@ function head(b: Body, front: boolean, s: number, back = false) {
 }
 
 /** A 3D body: every part drawn back to front by depth, limbs shaded darker when behind the trunk. */
-function solidBody(b: Body) {
+function solidBody(b: Body, extra: [number, string][] = []) {
   const z = (...ps: Pt[]) => ps.reduce((a, p) => a + (p.z ?? 0), 0) / ps.length
   const mid = z(b.hip, b.shoulder)
   const shade = (...ps: Pt[]) => (z(...ps) < mid - 2 ? 'f' : 'n')
-  const parts: [number, string][] = []
+  const parts: [number, string][] = [...extra]
   const part = (svg: string, ...ps: Pt[]) => parts.push([z(...ps), svg])
   const armOf = (s: Pt, e: Pt, h: Pt) => {
     const c = shade(s, e, h)
@@ -145,6 +145,47 @@ function prop(p: Prop, front: boolean, up = 0) {
   }
 }
 
+/** Solid moves: props as 3D shapes through the camera, each with its depth for drawing order. */
+function prop3(p: Prop, m: Move, up = 0): [number, string] {
+  const c = (x: number, y: number, z: number) => camera(m, { x, y, z })
+  const seg = (a: Pt, b: Pt, cls: string) => `<line class="${cls}" x1="${f(a.x)}" y1="${f(a.y)}" x2="${f(b.x)}" y2="${f(b.y)}"/>`
+  const poly = (ps: Pt[], cls: string) => `<polygon class="${cls}" points="${hull(ps).map((q) => `${f(q.x)},${f(q.y)}`).join(' ')}"/>`
+  const depth = (...ps: Pt[]) => ps.reduce((a, q) => a + (q.z ?? 0), 0) / ps.length
+  switch (p.t) {
+    case 'bar': { const [a, b] = [c(p.x, p.y, -140), c(p.x, p.y, 140)]; return [depth(a, b), seg(a, b, 'prop')] }
+    case 'rings': {
+      const zs = p.z === undefined ? [-22, 22] : [p.z]
+      const rs = zs.map((z) => [c(p.x, -400, z), c(p.x, p.y - 6, z), c(p.x, p.y, z)])
+      return [depth(...rs.map((r) => r[2])), rs.map(([top, strap, ring]) => seg(top, strap, 'prop thin') + `<circle class="prop ring" r="6" cx="${f(ring.x)}" cy="${f(ring.y)}"/>`).join('')]
+    }
+    case 'pole': { const [a, b] = [c(p.x, -up - 2000, 0), c(p.x, 0, 0)]; return [depth(c(p.x, 0, 0)), seg(a, b, 'prop')] }
+    case 'wall': { const ps = [c(p.x, 0, -150), c(p.x, 0, 150), c(p.x, -400, 150), c(p.x, -400, -150)]; return [-999, poly(ps, 'prop fill')] }
+    case 'box': {
+      const z0 = p.z ?? 0
+      const ps = [p.x, p.x + p.w].flatMap((x) => [0, -p.h].flatMap((y) => [z0 - 40, z0 + 40].map((z) => c(x, y, z))))
+      return [-999, poly(ps, 'prop fill')]
+    }
+    case 'bars': {
+      const w = p.z ?? 22
+      const ps = [-w, w].map((z) => [c(p.x - 15, p.y, z), c(p.x + 15, p.y, z), c(p.x, 0, z), c(p.x, p.y, z)])
+      return [depth(...ps.map((q) => q[0])), ps.map(([a, b, foot, top]) => seg(foot, top, 'prop thin') + seg(a, b, 'prop')).join('')]
+    }
+  }
+}
+
+/** Convex hull (monotone chain) of projected points. */
+function hull(ps: Pt[]) {
+  const s = [...ps].sort((a, b) => a.x - b.x || a.y - b.y)
+  const cross = (o: Pt, a: Pt, b: Pt) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+  const half = (pts: Pt[]) => pts.reduce<Pt[]>((h, p) => {
+    while (h.length >= 2 && cross(h[h.length - 2], h[h.length - 1], p) <= 0) h.pop()
+    return [...h, p]
+  }, [])
+  const lo = half(s)
+  const hi = half([...s].reverse())
+  return [...lo.slice(0, -1), ...hi.slice(0, -1)]
+}
+
 /** Bounds over every key, so the frame stays still while the figure moves. */
 function frame(m: Move) {
   // A travelling or climbing move is framed without it: the view follows.
@@ -169,10 +210,22 @@ function floor(cam: number) {
   return `<line class="floor" x1="${cam - 600}" y1="0" x2="${cam + 600}" y2="0"/>${marks.map((x) => `<line class="floor mark" x1="${x}" y1="2" x2="${x - 6}" y2="9"/>`).join('')}`
 }
 
+/** Tilted camera: the floor is a plane seen from above, with depth lines so near and far read. */
+function plane(cam: number, tilt: number) {
+  const sn = Math.sin((tilt * Math.PI) / 180)
+  const lines = [-120, -80, -40, 0, 40, 80, 120].map((z) => `<line class="floor mark" x1="${cam - 600}" y1="${f(z * sn)}" x2="${cam + 600}" y2="${f(z * sn)}"/>`)
+  return `<rect class="plane" x="${cam - 600}" y="${f(-120 * sn)}" width="1200" height="${f(240 * sn)}"/>${lines.join('')}`
+}
+
 function scene(m: Move, pose: Pose, st: Partial<Stage> = {}) {
   const cam = m.travel ? (st.shift ?? 0) : 0
   const up = m.climb ? (st.lift ?? 0) : 0
-  const world = `${(m.props ?? []).map((p) => prop(p, !!m.front, up)).join('')}${m.floor === false ? '' : floor(cam)}<g class="fig">${m.solid ? solidBody(place(m, pose, st)) : body(place(m, pose, st), !!m.front, Math.cos(((st.turn ?? 0) * Math.PI) / 180) < 0 ? -1 : 1, m.back)}</g>`
+  const ground = m.floor === false ? '' : m.solid && m.tilt ? plane(cam, m.tilt) : floor(cam)
+  // Solid moves sort props in among the body parts by depth (a pole in front of the chest, a bar behind).
+  const fig = m.solid
+    ? `<g class="fig">${solidBody(place(m, pose, st), (m.props ?? []).map((p) => prop3(p, m, up)))}</g>`
+    : `${(m.props ?? []).map((p) => prop(p, !!m.front, up)).join('')}<g class="fig">${body(place(m, pose, st), !!m.front, Math.cos(((st.turn ?? 0) * Math.PI) / 180) < 0 ? -1 : 1, m.back)}</g>`
+  const world = ground + fig
   return cam || up ? `<g transform="translate(${f(-cam)} ${f(up)})">${world}</g>` : world
 }
 

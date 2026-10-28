@@ -20,12 +20,14 @@ export type Joint = 'hip' | 'shoulder' | 'head' | 'elbow' | 'hand' | 'knee' | 'f
 
 export type Prop =
   | { t: 'bar'; x: number; y: number }
-  | { t: 'rings'; x: number; y: number }
+  /** `z` (solid moves): one ring at that depth; omitted, a pair either side. */
+  | { t: 'rings'; x: number; y: number; z?: number }
   | { t: 'wall'; x: number }
   | { t: 'pole'; x: number }
-  | { t: 'box'; x: number; w: number; h: number }
+  /** `z` (solid moves): depth of the box centre. */
+  | { t: 'box'; x: number; w: number; h: number; z?: number }
   /** Parallel bars or parallettes seen end-on: a post topped at `y`. */
-  | { t: 'bars'; x: number; y: number }
+  | { t: 'bars'; x: number; y: number; z?: number }
 
 /**
  * `keys` play in order. `bounce` plays them back in reverse (reps); `cycle` jumps from the
@@ -42,6 +44,10 @@ export type Move = {
   front?: boolean
   /** True 3D: limbs swing out (`armOut`..), the body rolls and turns, drawn by depth. */
   solid?: boolean
+  /** Solid moves: camera turns about the vertical by this many degrees, props and all (0 side, 90 front). */
+  view?: number
+  /** Solid moves: camera looks down by this many degrees, so circles on the floor plane read (flare, back spin). */
+  tilt?: number
   /** With `front`: seen from behind (no face). */
   back?: boolean
   /** Toes pointed all loop (kneeling, prone, tops of the feet on the floor); 'near' or 'far' for one foot. */
@@ -75,11 +81,16 @@ export type Ease = 'io' | 'in' | 'out' | 'snap' | 'lin'
  */
 export type Stage = {
   lift: number; shift: number; turn: number; trunk: number; legs: number; arms: number
-  /** `solid` moves only: roll about the body's forward axis, and each limb's swing out to its side (abduction). */
+  /**
+   * `solid` moves only: `roll` about the body's forward axis; each limb's swing out to its side (abduction);
+   * `foreOut`..`farShinOut` add to that for the forearm or shin alone (knee out, foot back under: 90/90, goalpost arms);
+   * `twist` turns the chest, arms and head about the spine against the pelvis (thread the needle).
+   */
   roll: number; armOut: number; farArmOut: number; legOut: number; farLegOut: number
+  foreOut: number; farForeOut: number; shinOut: number; farShinOut: number; twist: number
 }
 export type Beat = Partial<Stage> & { hold?: number; dur?: number; ease?: Ease }
-const STAGE: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0 }
+const STAGE: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0, foreOut: 0, farForeOut: 0, shinOut: 0, farShinOut: 0, twist: 0 }
 const KEYS = Object.keys(STAGE) as (keyof Stage)[]
 const stage = (b: Beat): Stage => ({ ...STAGE, ...Object.fromEntries(KEYS.filter((k) => b[k] !== undefined).map((k) => [k, b[k]])) })
 
@@ -173,14 +184,14 @@ export function solid(p: Pose, st: Stage, point: Move['point'] = false): Body {
   const fS = add3(shoulder, [0, 0, -GIRDLE.shoulder])
   const nH: V3 = [0, 0, GIRDLE.hip]
   const fH: V3 = [0, 0, -GIRDLE.hip]
-  const limb = (root: V3, a: number, b: number, out: number, s: number, l1: number, l2: number) => {
+  const limb = (root: V3, a: number, b: number, out: number, out2: number, s: number, l1: number, l2: number) => {
     const mid = add3(root, dir3(a, out, s, l1))
-    return [mid, add3(mid, dir3(b, out, s, l2))]
+    return [mid, add3(mid, dir3(b, out + out2, s, l2))]
   }
-  const [elbow, hand] = limb(nS, nu, nf, st.armOut, 1, LEN.upper * st.arms, LEN.fore * st.arms)
-  const [farElbow, farHand] = limb(fS, fu, ff, st.farArmOut, -1, LEN.upper * st.arms, LEN.fore * st.arms)
-  const [knee, foot] = limb(nH, nt, ns, st.legOut, 1, LEN.thigh * st.legs, LEN.shin * st.legs)
-  const [farKnee, farFoot] = limb(fH, ft, fs, st.farLegOut, -1, LEN.thigh * st.legs, LEN.shin * st.legs)
+  const [elbow, hand] = limb(nS, nu, nf, st.armOut, st.foreOut, 1, LEN.upper * st.arms, LEN.fore * st.arms)
+  const [farElbow, farHand] = limb(fS, fu, ff, st.farArmOut, st.farForeOut, -1, LEN.upper * st.arms, LEN.fore * st.arms)
+  const [knee, foot] = limb(nH, nt, ns, st.legOut, st.shinOut, 1, LEN.thigh * st.legs, LEN.shin * st.legs)
+  const [farKnee, farFoot] = limb(fH, ft, fs, st.farLegOut, st.farShinOut, -1, LEN.thigh * st.legs, LEN.shin * st.legs)
   const sole = (f: V3, sh: number, out: number, s: number, len: number, pt: boolean) =>
     add3(add3(f, dir3(sh, out, s, LEN.sole)), dir3(pt ? sh + 15 : footAngle(sh), out, s, len))
   const [pn, pf] = [point === true || point === 'near', point === true || point === 'far']
@@ -189,9 +200,20 @@ export function solid(p: Pose, st: Stage, point: Move['point'] = false): Body {
   const face = add3(head, dir3(c - 90, 0, 0, 1))
   const pts: Record<string, V3> = {
     hip, waist, shoulder, head, face, elbow, hand, farElbow, farHand, knee, farKnee, foot, farFoot,
-    toe: sole(foot, ns, st.legOut, 1, LEN.foot, pn), farToe: sole(farFoot, fs, st.farLegOut, -1, LEN.foot, pf),
-    heel: sole(foot, ns, st.legOut, 1, -4, pn), farHeel: sole(farFoot, fs, st.farLegOut, -1, -4, pf),
+    toe: sole(foot, ns, st.legOut + st.shinOut, 1, LEN.foot, pn), farToe: sole(farFoot, fs, st.farLegOut + st.farShinOut, -1, LEN.foot, pf),
+    heel: sole(foot, ns, st.legOut + st.shinOut, 1, -4, pn), farHeel: sole(farFoot, fs, st.farLegOut + st.farShinOut, -1, -4, pf),
     nearShoulder: nS, nearHip: nH, farShoulder: fS, farHip: fH,
+  }
+  // Twist: the upper body turns about the spine axis through the waist.
+  if (st.twist) {
+    const ax = dir3(c, 0, 0, 1)
+    const [ct, sn] = [Math.cos(rad(st.twist)), Math.sin(rad(st.twist))]
+    for (const k of ['shoulder', 'head', 'face', 'elbow', 'hand', 'farElbow', 'farHand', 'nearShoulder', 'farShoulder']) {
+      const v = pts[k].map((q, i) => q - waist[i]) as V3
+      const dot = v[0] * ax[0] + v[1] * ax[1] + v[2] * ax[2]
+      const cr3: V3 = [ax[1] * v[2] - ax[2] * v[1], ax[2] * v[0] - ax[0] * v[2], ax[0] * v[1] - ax[1] * v[0]]
+      pts[k] = v.map((q, i) => waist[i] + q * ct + cr3[i] * sn + ax[i] * dot * (1 - ct)) as V3
+    }
   }
   const [cr, sr, cy, sy] = [Math.cos(rad(st.roll)), Math.sin(rad(st.roll)), Math.cos(rad(st.turn)), Math.sin(rad(st.turn))]
   const out = {} as Body
@@ -202,11 +224,24 @@ export function solid(p: Pose, st: Stage, point: Move['point'] = false): Body {
   return out
 }
 
+/** A scene point seen through a solid move's camera: turned by `view`, then tilted down by `tilt`. */
+export function camera(m: Move, v: Pt): Pt {
+  const [cv, sv, ct, st] = [Math.cos(rad(m.view ?? 0)), Math.sin(rad(m.view ?? 0)), Math.cos(rad(m.tilt ?? 0)), Math.sin(rad(m.tilt ?? 0))]
+  const z0 = v.z ?? 0
+  const [x, z] = [v.x * cv - z0 * sv, v.x * sv + z0 * cv]
+  return { x, y: v.y * ct + z * st, z: z * ct - v.y * st }
+}
+
 /** Joints placed in the scene per the move's pins. */
 export function place(m: Move, p: Pose, st: Partial<Stage> = {}): Body {
   const full3 = { ...STAGE, ...st }
   const { lift, shift, turn, trunk, legs, arms } = full3
-  if (m.solid) return pin(m, solid(p, full3, m.point), lift, shift)
+  if (m.solid) {
+    // Pin on true heights, then move the camera, so contacts stay put as the body turns.
+    const b = pin(m, solid(p, full3, m.point), lift, shift)
+    for (const v of Object.values(b)) Object.assign(v, camera(m, v))
+    return b
+  }
   const raw = joints(p, m.front, m.point, trunk, legs, arms)
   // Turning about the vertical axis squeezes x about the hip; past 90 the figure faces the other way.
   // A floor of 0.3 width keeps the body readable mid-turn; it flips sides at 90 like a cartoon turn.
@@ -224,7 +259,9 @@ function pin(m: Move, b: Body, lift: number, shift: number): Body {
   const dy = ((m.y ?? 'floor') === 'floor' ? ay - lowest : ay - b[m.y as Joint].y) - lift
   const dx = ax - xj.x + shift
   const out = {} as Body
-  for (const [k, v] of Object.entries(b)) out[k as keyof Body] = { x: v.x + dx, y: v.y + dy, z: v.z }
+  // Solid moves: the pinned joint also sits at depth 0, so the camera turns about it and it stays put.
+  const dz = -(xj.z ?? 0)
+  for (const [k, v] of Object.entries(b)) out[k as keyof Body] = { x: v.x + dx, y: v.y + dy, z: v.z === undefined ? undefined : v.z + dz }
   return out
 }
 
@@ -299,19 +336,24 @@ export function at(m: Move, ms: number): Stage & { pose: Pose } {
   const pt = (i: number) => (i < 0 ? P[n + i].map((v, j) => v - W[j]) : i >= n ? P[i - n].map((v, j) => v + W[j]) : P[i])
   const T = seq.map((f) => f.dur * step)
   const total = loopMs(m)
-  // Speed at each key: a hold or a reversal stops it; an ease asks for its own; otherwise a harmonic mean keeps it monotone.
-  const speed = (i: number, j: number) => {
+  // Speed at each key: a hold or a reversal stops it; a segment's ease may ask for its own end speed;
+  // otherwise a harmonic mean keeps it monotone. `side` 0 leaves key i, 1 arrives at it.
+  const auto = (i: number, j: number) => {
     const k = (i + n) % n
-    if (seq[k].hold > 0) return 0
     const prev = (k - 1 + n) % n
     const dIn = (pt(i)[j] - pt(i - 1)[j]) / T[prev]
     const dOut = (pt(i + 1)[j] - pt(i)[j]) / T[k]
-    const asked = [ENDS[seq[prev].ease][1], ENDS[seq[k].ease][0]].filter((v): v is number => v !== null)
-    if (asked.length) {
-      const want = asked.reduce((a, v) => a + v, 0) / asked.length
-      return want * (asked.length === 2 ? (dIn + dOut) / 2 : ENDS[seq[k].ease][0] !== null ? dOut : dIn)
-    }
     return dIn * dOut <= 0 ? 0 : (2 * dIn * dOut) / (dIn + dOut)
+  }
+  const speed = (i: number, j: number, side: 0 | 1) => {
+    const k = (i + n) % n
+    if (seq[k].hold > 0) return 0
+    const seg = side === 0 ? k : (k - 1 + n) % n
+    const ask = ENDS[seq[seg].ease][side]
+    const d = side === 0 ? (pt(i + 1)[j] - pt(i)[j]) / T[seg] : (pt(i)[j] - pt(i - 1)[j]) / T[seg]
+    // Clamped to the segment's own direction and at most 3x its mean speed, so it never overshoots.
+    const v = ask === null ? auto(i, j) : ask * d
+    return d === 0 ? 0 : Math.sign(d) * Math.min(Math.max(0, v * Math.sign(d)), 3 * Math.abs(d))
   }
   const value = (j: number, g: number) => {
     const loop = Math.floor(g / total)
@@ -321,7 +363,7 @@ export function at(m: Move, ms: number): Stage & { pose: Pose } {
     const a = pt(i)[j]
     const b = pt(i + 1)[j]
     const u = Math.min(1, Math.max(0, (t - seq[i].hold * step) / T[i]))
-    const [m0, m1] = [speed(i, j) * T[i], speed(i + 1, j) * T[i]]
+    const [m0, m1] = [speed(i, j, 0) * T[i], speed(i + 1, j, 1) * T[i]]
     const u2 = u * u
     const u3 = u2 * u
     return loop * W[j] + (2 * u3 - 3 * u2 + 1) * a + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * b + (u3 - u2) * m1
@@ -334,6 +376,7 @@ export function at(m: Move, ms: number): Stage & { pose: Pose } {
 
 /** Lowest joint of a pose as placed; a value above 0 means it sinks into the floor. */
 export const sink = (m: Move, p: Pose, st: Partial<Stage> = {}) => {
-  const b = place(m, p, st)
+  // True heights: camera tilt only changes how the floor is drawn.
+  const b = place({ ...m, tilt: 0 }, p, st)
   return Math.max(...POINTS.map((k) => b[k].y), b.head.y + LEN.head)
 }

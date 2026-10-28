@@ -1,6 +1,6 @@
 import { place, type Body, type Move, type Pose } from '../../core/figure'
 import { pos, reach } from './legs'
-import { body, chestPt, grip, hold, pinned, rep } from './pull'
+import { body, chestPt, grip, hold, type K3, onBar, pinned, reach3, rep } from './pull'
 
 /** Root of f in [lo, hi] by bisection (f must change sign). */
 export const solve = (lo: number, hi: number, f: (x: number) => number) => {
@@ -85,6 +85,12 @@ const sag = (p: Pose, d = 8): Pose => p.map((v, i) => (i === 0 || i >= 5 && i <=
 // Squeeze: hips a touch higher, blades pressed down harder.
 const tense = (p: Pose): Pose => { const q = sag(p, -2); q[11] = -5; return q }
 const lhold = (p: Pose): Move => ({ ...pin, ...hold(sag(p), p, tense(p)), ms: 1000 })
+/** Straddle, solid, seen 30 off the side and 30 from above: legs 28 out each way, hands 52 apart on the bar. */
+export const straddle3 = (p: Pose): K3 => {
+  const [x, y] = pos(p, 'hand')
+  return reach3({ p, s: { legOut: 28, farLegOut: 28, armOut: 8, farArmOut: 8 } }, { hand: [x, y, 26], farHand: [x, y, -26] })
+}
+export const straddleHold = (p: Pose, rings = false): Move => onBar(hold(...[sag(p), p, tense(p)].map(straddle3) as [K3, K3, K3]), { view: 30, tilt: 30, rings })
 // Bar to the hips with the body level: arms row in to the belly.
 const leverRow = (p: Pose) => grip(p, chestPt(p, 0.05, 16), 1, true)
 // Pull-up to the bar, chest over, then the straight-arm lean back to a lever.
@@ -102,7 +108,7 @@ export const MOVES: Record<string, Move> = {
   tuck_fl_row: { ...pin, ...rep(tuck, null, [leverRow(tuck)], { rise: 1.5, lower: 2.2, top: 0.3, bottom: 0.3 }), ms: 1000 },
   oneleg_fl: { ...lever([L([90, 90, 180, 90]), L([180, 90, 90, 90])], 1000), beats: [{ hold: 1.2, dur: 2 }, { hold: 1.2 }] },
   ice_cream: { ...lever([chinOver, fl], 1000), mode: 'cycle', beats: [{ hold: 0.3, dur: 2.4 }, { hold: 0.6, dur: 1.6 }] },
-  straddle_fl: lhold(L([82, 82, 98, 98])),
+  straddle_fl: straddleHold(fl),
   full_fl: lhold(fl),
   fl_raise: { ...lever([inverted, fl], 1000), mode: 'cycle', beats: [{ hold: 0.3, dur: 2.5 }, { hold: 0.6, dur: 1.7 }] },
   fl_pullup: { ...pin, ...rep(fl, null, [leverRow(fl)], { rise: 1.6, lower: 2.4, top: 0.3, bottom: 0.3 }), ms: 1000 },

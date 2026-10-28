@@ -1,7 +1,7 @@
 import { place, type Move, type Pose } from '../../core/figure'
 import { solve } from './frontlever'
 import { pos, reach, rot } from './legs'
-import { body, fgrip, grip, hold, rep } from './pull'
+import { body, grip, grip3, hold, type K3, onBar, rep } from './pull'
 
 
 // On the back, head to the left. Low back flat (torso -92), the chest curls up off the floor in the hollow.
@@ -63,9 +63,12 @@ const dragon = (t: number, tucked = false): Pose => {
   return reach(p, { hand: [s[0] - 34, s[1] + 4], farHand: [s[0] - 34, s[1] + 4] }, { k: { hand: 1, farHand: 1 } })
 }
 
-// Wipers (front view): lying back under the bar, trunk foreshortened toward the viewer, straight legs
-// up at the bar sweep side to side from the hips; the pelvis counter-rotates a little.
-const wiper = (side: number): Pose => fgrip(body(180 - side * 0.15, 180, 180, [180 + side, 180 + side, 180 + side, 180 + side], 180, -3), [28, -52.8], [-28, -52.8])
+// Wipers, solid, seen 70 off the side: hanging, hips rolled up so straight legs point at the bar, then the legs
+// sweep side to side together as the pelvis rotates under a square upper body.
+const wiper = (side: number): K3 => {
+  const k = grip3(body(214, 196, 190, [178, 178, 178, 178], 180, -3), { legOut: side, farLegOut: -side, twist: -side * 0.3 }, [10, -50, 28], [10, -50, -28])
+  return k
+}
 
 const hb = (hold: number, ...durs: number[]): Move['beats'] => durs.map((d, i) => ({ hold: i === 0 || i === durs.length - 1 ? hold : 0, dur: d }))
 
@@ -83,7 +86,7 @@ export const MOVES: Record<string, Move> = {
   ttb: { ...rep(hang, null, [legsUp, ttbTop], { rise: 1.3, lower: 2 }), ...hangPin, ms: 1000 },
   dragon_flag: { keys: [dragon(10), dragon(-78)], mode: 'cycle', ...dragonPin, ms: 1000, beats: [{ hold: 0.3, dur: 2.2 }, { hold: 0.3, dur: 1.4 }] },
   lsit_30: { keys: [ell, support([93, 93, 93, 93], 177)], ...supportPin, ms: 1000, beats: hb(0.3, 2, 2) },
-  wipers: { keys: [wiper(-75), wiper(0), wiper(75)], front: true, ...hangPin, at: [28, -210], ms: 1000, beats: [{ hold: 0.3, dur: 0.8, trunk: 0.4, ease: 'in' }, { dur: 0.8, trunk: 0.4, ease: 'out' }, { hold: 0.3, trunk: 0.4 }] },
+  wipers: onBar({ keys: [wiper(-55), wiper(0), wiper(55)], beats: [{ hold: 0.3, dur: 0.8, ease: 'in' }, { dur: 0.8, ease: 'out' }, { hold: 0.3 }] }, { view: 70 }),
   standing_rollout: { ...rep(stand(28, 0), null, [stand(flatT, flatT - 180)], { rise: 2.5, lower: 1.6, top: 0.3 }), x: 'foot', ms: 1000 },
   vsit: { ...hold(vs(196, 92, 8), vs(204, 130, 12), vs(205, 132, 12)), ms: 1000 },
   v120: { ...hold(vs(206, 132, 12), vs(216, 170, 16), vs(217, 172, 16)), ms: 1000 },

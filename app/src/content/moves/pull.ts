@@ -1,4 +1,4 @@
-import { at, loopMs, type Beat, type Move, type Pose } from '../../core/figure'
+import { at, loopMs, solid, type Beat, type Body, type Move, type Pose, type Stage } from '../../core/figure'
 import { pos, reach } from './legs'
 
 const R = Math.PI / 180
@@ -37,7 +37,7 @@ const even = (n: number, total: number): Beat[] => Array.from({ length: n }, ():
  * A strength rep (cycle): from `hang` the blades `set` first (null skips it; ≈0.2 s, arms still), the concentric
  * through `path` to its last key, a pause, the slower eccentric back the same way, the blades release last.
  */
-export const rep = (hang: Pose, set: Pose | null, path: Pose[], o: { rise?: number; lower?: number; top?: number; bottom?: number } = {}): Pick<Move, 'keys' | 'beats' | 'mode'> => {
+export const rep = <T = Pose>(hang: T, set: T | null, path: T[], o: { rise?: number; lower?: number; top?: number; bottom?: number } = {}): { mode: 'cycle'; keys: T[]; beats: Beat[] } => {
   const { rise = 1.1, lower = 1.8, top = 0.25, bottom = 0.25 } = o
   const down = [...path].reverse().slice(1)
   const up = even(path.length, rise)
@@ -55,7 +55,7 @@ export const rep = (hang: Pose, set: Pose | null, path: Pose[], o: { rise?: numb
  * A static hold (bounce): a slow entry (≈2 s) from `entry` into `p`, then two sways to the small tension change `q`
  * at the real balance period (≈1.5 s each way). Timing in seconds with `ms` 1000.
  */
-export const hold = (entry: Pose, p: Pose, q: Pose): Pick<Move, 'keys' | 'beats'> => ({
+export const hold = <T = Pose>(entry: T, p: T, q: T): { keys: T[]; beats: Beat[] } => ({
   keys: [entry, p, q, p],
   beats: [{ hold: 0.4, dur: 2 }, { hold: 0.2, dur: 1.5 }, { hold: 0.2, dur: 1.5 }, { hold: 0.2 }],
 })
@@ -82,19 +82,112 @@ export const twoHands = (ref: Pose) => {
   }
 }
 
+/** A solid key: a pose and its 3D stage (roll, limb swing out, camera turn). */
+export type K3 = { p: Pose; s: Partial<Stage> }
+export type V3 = [number, number, number]
+type Limb = 'hand' | 'farHand' | 'foot' | 'farFoot'
+const SLOT3 = { hand: [1, 2, 'armOut'], farHand: [3, 4, 'farArmOut'], foot: [5, 6, 'legOut'], farFoot: [7, 8, 'farLegOut'] } as const
+const ZERO: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0, foreOut: 0, farForeOut: 0, shinOut: 0, farShinOut: 0, twist: 0 }
+/** Joints of a solid key about the hip, camera turn removed: x forward, y down, z the near side (before roll). */
+export const b3 = (k: K3): Body => solid(k.p, { ...ZERO, ...k.s, turn: 0 })
+export const p3 = (k: K3, j: keyof Body): V3 => { const v = b3(k)[j]; return [v.x, v.y, v.z ?? 0] }
+export const add3 = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+export const sub3 = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+
+type Var = number | keyof Stage
+const get = (k: K3, v: Var) => (typeof v === 'number' ? k.p[v]! : k.s[v] ?? ZERO[v])
+const set = (k: K3, vs: Var[], x: number[], tie: [number, number][]): K3 => {
+  const p = [...k.p] as Pose
+  const s = { ...k.s }
+  vs.forEach((v, i) => { if (typeof v === 'number') p[v] = x[i]; else s[v] = x[i] })
+  for (const [a, b] of tie) p[b] = p[a]
+  return { p, s }
+}
+/** Damped least squares: adjusts `vars` so `err` (a list of residuals) goes to zero. `tie` copies p[a] to p[b]. */
+export const fit = (k: K3, vars: Var[], err: (k: K3) => number[], tie: [number, number][] = []): K3 => {
+  let x = vars.map((v) => get(k, v))
+  let lam = 1
+  let r = err(set(k, vars, x, tie))
+  let e = r.reduce((a, v) => a + v * v, 0)
+  for (let it = 0; it < 80 && e > 1e-6; it++) {
+    const J = vars.map((_, j) => { const y = [...x]; y[j] += 0.05; return err(set(k, vars, y, tie)).map((v, i) => (v - r[i]) / 0.05) })
+    const n = vars.length
+    const A = Array.from({ length: n }, (_, i) => Array.from({ length: n + 1 }, (_, j) =>
+      j === n ? -J[i].reduce((a, v, m) => a + v * r[m], 0) : J[i].reduce((a, v, m) => a + v * J[j][m], 0) + (i === j ? lam : 0)))
+    for (let i = 0; i < n; i++) {
+      const piv = A[i][i] || 1e-9
+      for (let j = 0; j < n; j++) if (j !== i) { const f = A[j][i] / piv; for (let c = i; c <= n; c++) A[j][c] -= f * A[i][c] }
+    }
+    const y = x.map((v, i) => v + A[i][n] / (A[i][i] || 1e-9))
+    const r2 = err(set(k, vars, y, tie))
+    const e2 = r2.reduce((a, v) => a + v * v, 0)
+    if (e2 < e) { x = y; r = r2; e = e2; lam = Math.max(1e-4, lam / 3) } else lam *= 4
+  }
+  return set(k, vars, x, tie)
+}
+/** Re-aims limbs (both segments and swing out) so each end reaches its goal in `b3` coordinates; `straight` limbs stay locked. */
+export const reach3 = (k: K3, goals: Partial<Record<Limb, V3>>, straight: Limb[] = []): K3 => {
+  const ls = Object.keys(goals) as Limb[]
+  const vars = ls.flatMap((l): Var[] => straight.includes(l) ? [SLOT3[l][0], SLOT3[l][2]] : [...SLOT3[l]])
+  const tie = ls.filter((l) => straight.includes(l)).map((l): [number, number] => [SLOT3[l][0], SLOT3[l][1]])
+  const q = fit(k, vars, (q) => { const b = b3(q); return ls.flatMap((l) => sub3([b[l].x, b[l].y, b[l].z ?? 0], goals[l]!)) }, tie)
+  // Swing out kept within 180 of where it started, so blends between keys take the short way.
+  for (const l of ls) { const o = SLOT3[l][2]; q.s[o] = q.s[o]! - Math.round((q.s[o]! - (k.s[o] ?? 0)) / 360) * 360 }
+  return q
+}
+/** Solid move parts from K3 keys: poses as keys, stages folded into the beats, seen from camera yaw `view`. */
+export const solid3 = (m: { keys: K3[]; beats?: Beat[]; mode?: Move['mode'] }, view: number): Pick<Move, 'keys' | 'beats' | 'solid' | 'view'> & { mode?: Move['mode'] } => ({
+  ...m, solid: true, view, keys: m.keys.map((k) => k.p), beats: m.keys.map((k, i) => ({ ...k.s, ...m.beats?.[i] })),
+})
+const OUTS = ['armOut', 'farArmOut', 'legOut', 'farLegOut', 'foreOut', 'farForeOut', 'shinOut', 'farShinOut'] as const
+/** `pinned` for solid moves: samples every ≈`step` ms and re-solves `fix` on each sample, stage included. */
+export const pinned3 = (m: Move, fix: (k: K3) => K3, step = 40): Move => {
+  const L = loopMs(m)
+  const n = Math.round(L / step)
+  const s = Array.from({ length: n }, (_, i) => at(m, (i * L) / n))
+  const ks = s.map(({ pose, ...st }) => fix({ p: pose, s: st }))
+  return {
+    ...m, mode: 'cycle', flow: 0, keys: ks.map((k, i) => k.p.map((v, j) => v! - Math.round((v! - s[i].pose[j]!) / 360) * 360) as Pose),
+    beats: ks.map((k, i) => ({ ...k.s, ...Object.fromEntries(OUTS.map((o) => [o, k.s[o]! - Math.round((k.s[o]! - s[i][o]) / 360) * 360])), dur: L / n / (m.ms ?? 900) })),
+  }
+}
+/** Fix: the far hand keeps its 3D offset from the near hand in `ref` (both on one bar, rings or pole). */
+export const twoHands3 = (ref: K3, straight: Limb[] = []) => {
+  const d = sub3(p3(ref, 'farHand'), p3(ref, 'hand'))
+  return (k: K3): K3 => reach3(k, { farHand: add3(p3(k, 'hand'), d) }, straight)
+}
+
 type Part = Pick<Move, 'keys'> & Partial<Move>
 const side = (m: Part, ms?: number, props: Move['props'] = [{ t: 'bar', x: 0, y: BAR }]): Move => ({ x: 'hand', y: 'hand', at: [0, BAR], props, ms, ...m })
-const front = (m: Part, ms?: number, x = 28): Move => ({ front: true, x: 'hand', y: 'hand', at: [x, BAR], props: [{ t: 'bar', x: 0, y: BAR }], ms, ...m })
+type Legs = [number, number, number, number]
+export const CAM = 60
+/** Solid: both hands to points from the shoulder centre (`b3` coordinates). */
+export const grip3 = (p: Pose, s: Partial<Stage>, near: V3, far: V3): K3 => {
+  const k: K3 = { p, s: { armOut: 10, farArmOut: 10, ...s } }
+  const sh = p3(k, 'shoulder')
+  return reach3(k, { hand: add3(sh, near), farHand: add3(sh, far) })
+}
+/**
+ * A solid hang seen from camera yaw `view` (default CAM): the near hand pinned, the far hand held to its offset in the
+ * first key (unless `free`), the bar (along z) or a ring under each hand.
+ */
+export const onBar = (m: { keys: K3[]; beats?: Beat[]; mode?: Move['mode'] }, o: { view?: number; tilt?: number; y?: number; rings?: boolean; free?: boolean; extra?: Move['props'] } = {}): Move => {
+  const y = o.y ?? BAR
+  const base: Move = { ...solid3(m, o.view ?? CAM), x: 'hand', y: 'hand', at: [0, y], ms: 1000, tilt: o.tilt }
+  const mv = o.free ? base : pinned3(base, twoHands3(m.keys[0]))
+  // The pin puts the near hand at depth 0.
+  const props: Move['props'] = o.rings ? (['hand', 'farHand'] as const).map((h) => ({ t: 'rings', x: 0, y, z: p3(m.keys[0], h)[2] - p3(m.keys[0], 'hand')[2] })) : [{ t: 'bar', x: 0, y }]
+  return { ...mv, props: [...props, ...(o.extra ?? [])] }
+}
 
-// Front view, hands 56 apart. Passive hang: blades shrugged up. Set: blades down, the body rises on straight arms.
-// Half way, then chin over (shoulders 6 below the bar, elbows down at the ribs).
-const fpose = (y: number, s: number, legs: [number, number, number, number] = [0, 0, 0, 0]): Pose =>
-  fgrip(body(180, 180, 180, legs, 180, s), [28, y], [-28, y])
+// Solid hangs, seen 60 off the side: grip width and depth at once. Hands 56 apart. Passive hang: blades shrugged up.
+// Set: blades down, the body rises on straight arms. Half way, then chin over (shoulders 6 below the bar).
+const fpose = (y: number, s: number, legs: Legs = [0, 0, 0, 0]): K3 => grip3(body(180, 180, 180, legs, 180, s), {}, [0, y, 28], [0, y, -28])
 export const fHang = fpose(-52.8, 4)
-export const fSettle = fpose(-52.8, 2, [3, -3, -2, 2])
-const fSet = fpose(-52.8, -4, [2, -1, -1, 2])
-const fMid = fpose(-30, -3, [3, -2, -2, 3])
-const fTop = fpose(-6, -2, [5, -4, -4, 5])
+export const fSettle = fpose(-52.8, 2, [3, -1, 2, -1])
+const fSet = fpose(-52.8, -4, [2, -1, 2, -1])
+const fMid = fpose(-30, -3, [6, -2, 5, -2])
+const fTop = fpose(-6, -2, [10, -4, 8, -4])
 
 // Side view. Passive hang: blades up, head sunk. Active: blades down, chest up, slight hollow.
 export const passive = body(180, 180, 166, [0, 0, 0, 0], 174, 5)
@@ -116,11 +209,11 @@ const ctbBody = body(198, 222, 196, [18, 6, 18, 6], 180, -3)
 const ctbTop = grip(ctbBody, chestPt(ctbBody, 0.6, 17), -1, true)
 const ctbMid = grip(body(190, 205, 190, [12, 4, 12, 4], 180, -4), [16, -28])
 
-// Archer: hands 92 apart; the body slides under the working hand, the other arm straightens along the bar.
-const arc = (y: number, s: number, near: number, far: number): Pose => fgrip(body(180, 180, 180, [2, -2, -2, 2], 180, s), [near, y], [far, y])
-const wHang = arc(-45.5, 3, 46, -46)
-const archR = arc(-6, -2, 22, -70)
-const archL = arc(-6, -2, 70, -22)
+// Archer: hands 92 apart; the body slides and tips under the working hand, the other arm straightens along the bar.
+const arc = (y: number, s: number, near: number, far: number, roll = 0): K3 => grip3(body(180, 180, 180, [4, -2, 4, -2], 180, s), { roll }, [0, y, near], [0, y, far])
+const wHang = arc(-44, 3, 46, -46)
+const archR = arc(-7, -2, 25, -67, 5)
+const archL = arc(-7, -2, 67, -25, -5)
 const wTop = arc(-6, -2, 46, -46)
 
 // Kipping: swing back to an arch (feet behind, chest through), snap to a hollow (feet ahead), then the bar to the belly.
@@ -161,48 +254,50 @@ const mu = (kipped: boolean, props?: Move['props']): Move => side({
     { dur: kipped ? 0.25 : 0.35 }, { dur: 0.6 }, { hold: 0.6, dur: 0.9 }, { dur: 0.8 }, { dur: 0.8 }, { dur: 0.5 }, { dur: 0.25 },
   ],
 }, 1000, props)
-/** One arm: the body tilts so the hips hang under the hand at `x` (hip coordinates); free fist at the side. */
-export const oa = (t: number, y: number, legs: [number, number, number, number], s = 0, x = 3): Pose => {
-  const p = body(t, t, 180 + (t - 180) / 2, legs, 180, s)
-  const q = reach(p, { hand: [x, pos(p, 'shoulder', true)[1] + y] }, { front: true })
-  q[3] = t - 194
-  q[4] = t - 174
-  return q
+/**
+ * One arm: the body rolls 11 so the working shoulder leans over the hips and the hand above them; the free fist
+ * hangs at the side. Pulling, the body twists toward the working arm (`turn`).
+ */
+export const oa = (y: number, legs: Legs, s = 0, twist = 0): K3 => {
+  const k: K3 = { p: body(180, 182, 182, legs, 180, s).map((v, i) => (i === 3 || i === 4 ? 4 : v)) as Pose, s: { roll: 11, armOut: 5, farArmOut: 8, turn: twist } }
+  return reach3(k, { hand: [2, p3(k, 'nearShoulder')[1] + y, 0] })
 }
-export const oaHang = oa(192, -54, [6, 6, 8, 4], 3)
-export const oaSet = oa(190, -54, [6, 4, 8, 4], -3)
-const oaMid = oa(194, -32, [8, 4, 10, 4], -3)
-const oaTop = oa(196, -6, [10, 4, 12, 6], -2)
-// Assisted: the other hand holds a towel 44 below the bar.
-const towel = (p: Pose): Pose => {
-  const n = pos(p, 'hand', true)
-  return reach(p, { farHand: [n[0] - 56, n[1] + 44] }, { front: true, k: { farHand: 1 } })
+export const oaHang = oa(-53.5, [6, 0, 8, 0], 3)
+export const oaSet = oa(-53.5, [6, 0, 8, 0], -3)
+const oaMid = oa(-32, [10, -2, 12, -2], -3, 12)
+const oaTop = oa(-6, [14, -4, 16, -4], -2, 25)
+// Assisted: the other hand holds a towel 44 below the bar and 56 to the side; no twist.
+const towel = (k: K3): K3 => reach3({ p: k.p, s: { ...k.s, turn: 0, farArmOut: -30 } }, { farHand: add3(p3(k, 'hand'), [0, 44, -56]) })
+/** The bar over the working hand only, a towel ring at the other. */
+const towelRing = (m: Move, k: K3): Move => {
+  const [h, f] = [p3(k, 'hand'), p3(k, 'farHand')]
+  return { ...m, props: [{ t: 'bar', x: 0, y: BAR }, { t: 'rings', x: f[0] - h[0], y: BAR + f[1] - h[1], z: f[2] - h[2] }] }
 }
 /** Negative (seconds): a 3-4 s lowering from the top, blades release last, then step back up. */
-const negative = (top: Pose, mid: Pose, set: Pose, hang: Pose): Part => ({
-  mode: 'cycle', ms: 1000, keys: [top, mid, set, hang],
+const negative = (top: K3, mid: K3, set: K3, hang: K3) => ({
+  mode: 'cycle' as const, keys: [top, mid, set, hang],
   beats: [{ hold: 0.5, dur: 1.8 }, { dur: 1.7 }, { dur: 0.3 }, { hold: 0.4, dur: 0.8 }],
 })
 
 export const MOVES: Record<string, Move> = {
-  dead_hang: front({ keys: [fHang, fSettle], beats: [{ hold: 0.3, dur: 1 }, { hold: 0.3 }] }, 1000),
+  dead_hang: onBar({ keys: [fHang, fSettle], beats: [{ hold: 0.3, dur: 1 }, { hold: 0.3 }] }),
   scap_pull: side({ mode: 'cycle', keys: [passive, active], beats: [{ hold: 0.6, dur: 0.45 }, { hold: 0.8, dur: 0.8 }] }, 1000),
-  neg_pullup: pinned(front(negative(fTop, fMid, fSet, fHang)), twoHands(fHang)),
+  neg_pullup: onBar(negative(fTop, fMid, fSet, fHang)),
   chinup: side(rep(passive, active, [sMid, sTop]), 1000),
-  pullup: pinned(front(rep(fHang, fSet, [fMid, fTop]), 1000), twoHands(fHang)),
+  pullup: onBar(rep(fHang, fSet, [fMid, fTop])),
   lsit_pullup: side(rep(lHang, lSet, [lMid, lTop], { rise: 1.4, lower: 2 }), 1000),
-  pullup_12: pinned(front(rep(fHang, fSet, [fMid, fTop], { rise: 0.8, lower: 1.2, top: 0.1, bottom: 0.1 }), 1000), twoHands(fHang)),
+  pullup_12: onBar(rep(fHang, fSet, [fMid, fTop], { rise: 0.8, lower: 1.2, top: 0.1, bottom: 0.1 })),
   ctb: side(rep(passive, active, [ctbMid, ctbTop], { rise: 1.2 }), 1000),
-  archer_pullup: pinned(front({
+  archer_pullup: onBar({
     mode: 'cycle', keys: [wHang, archR, wHang, archL],
     beats: [{ hold: 0.3, dur: 1.2 }, { hold: 0.25, dur: 1.8 }, { hold: 0.3, dur: 1.2 }, { hold: 0.25, dur: 1.8 }],
-  }, 1000, 46), twoHands(wHang)),
+  }),
   high_pullup: kip,
-  typewriter: pinned(front({ keys: [archR, wTop, archL], beats: [{ hold: 0.4, dur: 1.3 }, { dur: 1.3 }, { hold: 0.4 }] }, 1000, 46), twoHands(archR)),
-  oa_neg: front(negative(oaTop, oaMid, oaSet, oaHang)),
+  typewriter: onBar({ keys: [archR, wTop, archL], beats: [{ hold: 0.4, dur: 1.3 }, { dur: 1.3 }, { hold: 0.4 }] }),
+  oa_neg: onBar(negative(oaTop, oaMid, oaSet, oaHang), { free: true }),
   bar_mu: mu(true),
-  oa_assisted: { ...pinned(front(rep(towel(oaHang), towel(oaSet), [towel(oaMid), towel(oaTop)], { rise: 1.3, lower: 2 }), 1000), twoHands(towel(oaHang))), props: [{ t: 'bar', x: 0, y: BAR }, { t: 'rings', x: -28, y: BAR + 44 }] },
+  oa_assisted: towelRing(onBar(rep(towel(oaHang), towel(oaSet), [towel(oaMid), towel(oaTop)], { rise: 1.3, lower: 2 })), towel(oaHang)),
   ring_mu: mu(false, [{ t: 'rings', x: 0, y: BAR }]),
-  oapu: front(rep(oaHang, oaSet, [oaMid, oaTop], { rise: 1.4, lower: 2.2 }), 1000),
+  oapu: onBar(rep(oaHang, oaSet, [oaMid, oaTop], { rise: 1.4, lower: 2.2 }), { free: true }),
   strict_mu: mu(false),
 }

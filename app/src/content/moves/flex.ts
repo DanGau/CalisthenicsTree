@@ -1,4 +1,4 @@
-import type { Move, Pose } from '../../core/figure'
+import type { Move, Pose, Stage } from '../../core/figure'
 import { breathe, H, INSTEP, ang, put, rep } from './mobility'
 
 const stand: Pose = [180, 2, 4, -2, -4, 0, 0, 0, 0]
@@ -11,16 +11,30 @@ const SEAT: [number, number] = [0, 10.6]
 const sit = (t: number, c: number, head: number, hands: [number, number], legs = 85, k = -1): Pose =>
   put([t, 0, 0, 0, 0, legs, legs, legs, legs, c, head], SEAT, { hand: hands, farHand: hands }, { hand: k, farHand: k })
 
-// Front view straddle: legs out at l from vertical, hip resting on the floor.
-const straddle = (l: number, t: number, arms: [number, number, number, number]): Pose => [t, ...arms, l, l, -l, -l]
-// Middle split: hip height (ankles at H.ankle) rides on `lift`; the trunk leans toward the viewer (scale k) while the hands are low.
-const midH = (l: number) => 76 * Math.cos((l * Math.PI) / 180) + H.ankle
-const midHands = (l: number, k = 1): Pose =>
-  put(straddle(l, 180, [10, 10, -10, -10]), [0, midH(l)], { hand: [32, H.hand], farHand: [-32, H.hand] }, { hand: 1, farHand: -1 }, true, k)
+// Straddles are solid (3D), seen a third of the way round from the front.
+const CAM = 60
+const D = 180 / Math.PI
+/** Sagittal angle of a straight leg swung out `o` so the ankle sits `drop` below the hip. */
+const legAt = (o: number, drop: number) => Math.acos(drop / (76 * Math.cos(o / D))) * D
+/** Stage for a straddle `o` each side. */
+const wide = (o: number, more: Partial<Stage> = {}): Partial<Stage> => ({ legOut: o, farLegOut: o, ...more })
 
-// Pancake (front view): legs wide on the floor; the trunk folds toward the viewer (trunk scale `k`), hands walk out in front.
-const pancakeKey = (k: number, hx: number): Pose =>
-  put([180, 10, 10, -10, -10, 86, 86, -86, -86, 180, 180], [0, 10.6], { hand: [hx, H.hand], farHand: [-hx, H.hand] }, { hand: 1, farHand: -1 }, true, k)
+// Pancake: seated, legs straight out 55° each side, heels down; the pelvis tips forward and the hands walk out.
+const PANCAKE = 55
+const pancakeKey = (t: number, c: number, head: number, hx: number): Pose => {
+  const l = legAt(PANCAKE, SEAT[1] - H.ankle)
+  return put([t, 0, 0, 0, 0, l, l, l, l, c, head], SEAT, { hand: [hx, H.hand], farHand: [hx, H.hand] }, { hand: 1, farHand: 1 })
+}
+
+// Middle split: feet slide out to the sides, the hip (height on `lift`) sinks; hands on the floor in front.
+const midH = (o: number) => 76 * Math.cos(o / D) + H.ankle
+const midKey = (o: number, t: number, hx: number): Pose =>
+  put([t, 0, 0, 0, 0, 0, 0, 0, 0, t, t + 10], [0, midH(o)], { hand: [hx, H.hand], farHand: [hx, H.hand] }, { hand: 1, farHand: 1 })
+
+// Straddle sit on a cushion: hip 16 up, legs 45° out sloping to the heels.
+const CUSHION = { t: 'box', x: -14, w: 22, h: 10 } as const
+const CUSH_LEG = legAt(45, 16 - H.ankle)
+const cushion = (t: number, arms: [number, number]): Pose => [t, arms[0], arms[1], arms[0], arms[1], CUSH_LEG, CUSH_LEG, CUSH_LEG, CUSH_LEG, t + 2, t]
 
 // Half split: rear (far) knee down at x 0 under the hip, front leg straight to the heel.
 const halfSplit = (t: number, c: number, head: number, hands: [number, number]): Pose =>
@@ -46,9 +60,6 @@ const curl = (t: number, c: number, head: number, legs = 0): Pose => [t, 0, 0, 0
 const needle = (rear: number): Pose =>
   put([40, 0, 0, 0, 0, 0, 0, rear, rear, 20, -5], [0, 81], { foot: [0, H.ankle], hand: [30, H.hand], farHand: [30, H.hand] }, { hand: 1, farHand: 1 })
 
-// Straddle sit on a cushion (front view): legs slope down to the heels.
-const CUSHION = { t: 'box', x: -22, w: 44, h: 10 } as const
-const cushion = (arms: [number, number, number, number], t = 180): Pose => straddle(78, t, arms)
 
 export const MOVES: Record<string, Move> = {
   // Flat-back hinge, then the spine lets go; roll up a vertebra at a time.
@@ -56,12 +67,15 @@ export const MOVES: Record<string, Move> = {
   // Chest leads toward the toes; the hinge is at the hip.
   pike_seated: { ...breathe([sit(180, 180, 180, [6, H.hand]), sit(128, 112, 105, [80, 12])]), x: 'hip' },
   // Hands on the thighs, then sit up tall and reach long.
-  straddle_sit: { ...breathe([cushion([30, 10, -30, -10], 182), cushion([168, 178, -168, -178])]), front: true, props: [CUSHION] },
+  straddle_sit: {
+    ...breathe([cushion(178, [30, 50]), cushion(186, [172, 178])], 900, undefined, [wide(45, { armOut: 22, farArmOut: 22 }), wide(45, { armOut: 12, farArmOut: 12 })]),
+    solid: true, view: CAM, y: 'hip', at: [0, -16], props: [CUSHION],
+  },
   // Hands by the knees push down; the straight legs lift and hold.
   pike_comp: { ...rep(sit(165, 140, 150, [32, 2]), sit(165, 140, 150, [32, 2], 100), 0.7, 1.4, 0.3, 0.8), x: 'hip', ms: 900 },
   half_split: { ...breathe([halfSplit(174, 174, 178, [26, 40]), halfSplit(112, 98, 92, [44, H.hand])], 900, halfSplit(116, 103, 96, [43, H.hand])), x: 'hip', point: 'far' },
-  // Front view: the pelvis tilts the trunk partway toward the viewer, spine long, hands out front.
-  pancake_45: { ...breathe([pancakeKey(1, 34), pancakeKey(0.65, 30)], 900, undefined, [{ trunk: 1 }, { trunk: 0.65 }]), front: true, y: 'hip', at: [0, -10.6] },
+  // The pelvis tips the long spine halfway to the floor, hands out front.
+  pancake_45: { ...breathe([pancakeKey(178, 178, 178, 30), pancakeKey(138, 136, 140, 44)], 900, undefined, [wide(PANCAKE), wide(PANCAKE)]), solid: true, view: CAM, y: 'hip', at: [0, -SEAT[1]] },
   // Chin, upper back, lower back, then the hips fold; arms hang. Rolls up in reverse.
   jefferson: {
     keys: [curl(180, 180, 180), curl(180, 180, 120), curl(178, 120, 60), curl(130, 50, 10), curl(58, 4, -12, 3)],
@@ -69,12 +83,15 @@ export const MOVES: Record<string, Move> = {
     beats: [{ hold: 0.6, dur: 1.4, ease: 'in' }, { dur: 1.4, ease: 'lin' }, { dur: 1.4, ease: 'lin' }, { dur: 1.6, ease: 'out' }, { hold: 1.2 }],
   },
   front_split_half: { ...breathe([blockSplit(34), blockSplit(30), blockSplit(27)], 900, blockSplit(28)), x: 'hip', point: true, props: [{ t: 'box', x: -10, w: 20, h: 19 }] },
-  // Seen from the front: the chest folds down between the wide legs as the hands walk out.
-  pancake: { ...breathe([pancakeKey(1, 34), pancakeKey(0.3, 22)], 900, pancakeKey(0.5, 28), [{ trunk: 1 }, { trunk: 0.3 }]), front: true, y: 'hip', at: [0, -10.6] },
+  // The chest folds down between the wide legs as the hands walk out.
+  pancake: { ...breathe([pancakeKey(178, 178, 178, 30), pancakeKey(102, 98, 100, 62)], 900, pancakeKey(110, 104, 106, 60), [wide(PANCAKE), wide(PANCAKE)]), solid: true, view: CAM, y: 'hip', at: [0, -SEAT[1]] },
   pike_full: { ...breathe([sit(128, 112, 105, [80, 12]), sit(110, 100, 95, [88, 8])]), x: 'hip' },
   front_split: { ...breathe([split(22, [3, H.hand]), split(15, [3, H.hand]), split(9.5, [3, H.hand])], 900, split(11.5, [3, H.hand])), x: 'hip', point: true },
   // Hips slide down as the feet slide out, hands taking the weight.
-  middle_split: { ...breathe([midHands(64, 0.42), midHands(86)], 900, midHands(80, 0.8), [{ lift: midH(64), trunk: 0.42 }, { lift: midH(86), trunk: 1 }]), front: true, y: 'hip' },
+  middle_split: {
+    ...breathe([midKey(55, 140, 34), midKey(86, 168, 26)], 900, midKey(82, 165, 27), [wide(55, { lift: midH(55) }), wide(86, { lift: midH(86) })]),
+    solid: true, view: CAM, y: 'hip',
+  },
   // Fold first, then lift the heels with the hands beside the hips.
   compression_max: { ...rep(sit(150, 128, 120, [8, 2], 105), sit(150, 128, 120, [8, 2], 115), 0.6, 1.2, 0.3, 0.8), x: 'hip' },
   needle: { ...breathe([needle(-120), needle(-172)]), x: 'foot' },

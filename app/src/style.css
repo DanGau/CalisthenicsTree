@@ -180,3 +180,4 @@ h1, h2, h3 { font-family: var(--display); letter-spacing: 0.03em; text-wrap: bal
 .figure .prop.bar { fill: #cfc6b4; stroke: #6b6355; stroke-width: 2; }
 .figure .floor.mark { stroke-width: 1.5; opacity: 0.5; }
 .figure .prop.mark { stroke-width: 2; opacity: 0.7; }
+.figure .plane { fill: var(--stone-2); opacity: 0.5; }

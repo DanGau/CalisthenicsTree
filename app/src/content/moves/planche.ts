@@ -1,6 +1,5 @@
-import { joints, place, type Move, type Pose, type Prop } from '../../core/figure'
-import { reach } from './legs'
-import { balance, bent, fit, handOf, holdBeats, line, reachTo, rep, set, straight, tween } from './push'
+import { type Move, type Pose, type Prop } from '../../core/figure'
+import { balance, bent, com3, world, fit, fit3, handOf, holdBeats, type Key3, line, reachTo, rep, set, solidMove, straight, tween } from './push'
 
 const ARM = 54
 
@@ -34,27 +33,31 @@ const fullBody = (dip = 0): Pose => [92 - dip, 0, 0, 0, 0, -91 + dip, -91 + dip,
 const planche = float(fullBody())
 
 /**
- * Front view from slightly above: the back rises behind the head (hips level with the shoulders) and straight legs fan out `a`
- * from down. Hands `span` apart, both arms straight; `shift` moves the body toward the near hand.
+ * Solid planche: trunk tilted `t` (90 level), straight arms swung `armOut` and solved so the centre of mass is
+ * over the hands, legs straight `pike` below the trunk line and swung `legOut` each.
  */
-function facing(a: number, span: number, shift = 0): Pose {
-  const p: Pose = [180, 0, 0, 0, 0, a, a, -a, -a, 0, 180, D]
-  const b = joints(p, true)
-  const s = Math.sign(b.nearShoulder.x - b.farShoulder.x)
-  const w = span / 2 - 17
-  const y = b.shoulder.y + Math.sqrt((ARM - 0.4) ** 2 - (w + Math.abs(shift)) ** 2)
-  return reach(p, { hand: [b.nearShoulder.x + s * (w - shift), y], farHand: [b.farShoulder.x - s * (w + shift), y] }, { front: true, k: { hand: s, farHand: -s } })
+function solidPlanche(t: number, o: { armOut: number; legOut: number; pike?: number; head?: number }): Key3 {
+  const legs = t - 180 - (o.pike ?? 0)
+  const build = ([u]: number[]): Key3 => ({ p: [t, u, u, u, u, legs, legs, legs, legs, t - 6, t + (o.head ?? 16), D], st: { armOut: o.armOut, farArmOut: o.armOut, legOut: o.legOut, farLegOut: o.legOut } })
+  return fit3(build, [-60], (b) => [com3(b).x - b.hand.x])
 }
-// Straddle, front view: toes leave the floor, the legs fan up level.
-const STR = 40
-// Maltese, front view on parallettes: arms spread wide, chest low.
-const MAL = { span: 128, y: -26 }
-const maltese = (a: number, head = 180): Pose => set(facing(a, MAL.span), [10], head)
+// Straddle: hands a touch wider, legs wide; it lifts from straddled toes on the floor.
+const STR = { armOut: 8, legOut: 45 }
+const straddleIn = (() => {
+  const key = (t: number): Key3 => ({ p: [t, -40, -40, -40, -40, t - 180, t - 180, t - 180, t - 180, t - 6, t + 16, D], st: { armOut: STR.armOut, farArmOut: STR.armOut, legOut: STR.legOut, farLegOut: STR.legOut } })
+  return fit3(([t]) => key(t), [110], (b) => [b.toe.y - b.hand.y])
+})()
+const straddle = solidPlanche(92, STR)
+// Maltese on parallettes: legs together, arms swung far out to the sides, chest just above the hands.
+const MAL = { armOut: 72, legOut: 0, y: -26 }
 const parallettes = (m: Move): Prop[] => {
-  const b = place(m, m.keys[0])
-  return [b.hand, b.farHand].map((h) => ({ t: 'bars', x: Math.round(h.x), y: Math.round(h.y) }))
+  const b = world(m)
+  return [{ t: 'bars', x: Math.round(b.hand.x), y: Math.round(b.hand.y), z: Math.round(Math.abs(b.hand.z ?? 22)) }]
 }
-const front = (keys: Pose[], beats = holdBeats(2, 1.5)): Move => ({ keys, front: true, x: 'hand', ms: 1000, beats })
+const maltese = (() => {
+  const mv = solidMove([solidPlanche(95, { ...MAL, pike: 8, head: 10 }), solidPlanche(91, MAL), solidPlanche(90, { ...MAL, pike: -2 })], holdBeats(1.5, 1.5), 40, { x: 'hand', y: 'hand', at: [0, MAL.y], point: true, tilt: 25 })
+  return { ...mv, props: parallettes(mv) }
+})()
 
 /** Seconds per beat unit. */
 const m = (keys: Pose[]): Move => ({ keys, x: 'hand', ms: 1000 })
@@ -70,12 +73,9 @@ export const MOVES: Record<string, Move> = {
   tuck_planche: { ...m([tuckIn, tuck, float(set(tuckBody, [10], 100))]), beats: holdBeats(1.8, 1.5) },
   tuck_planche_pu: { x: 'hand', ...floatRep(tuckBody, tuck, -80, 2.2, 1.6) },
   adv_tuck_planche: { ...m([tuck, advTuck, float(advBody(26))]), beats: holdBeats(2, 1.5) },
-  straddle_planche: front([facing(STR + 8, 40), facing(84, 40), facing(80, 40, 2)]),
+  straddle_planche: solidMove([straddleIn, straddle, solidPlanche(91, { ...STR, legOut: STR.legOut + 3 })], holdBeats(1.8, 1.5), 35, { x: 'hand', point: true, tilt: 25 }),
   one_leg_planche: { ...m([advTuck, oneLeg, float(set(oneLeg, [7, 8], -86))]), beats: holdBeats(2, 1.5) },
   full_planche: { ...m([advTuck, planche, float(fullBody(4))]), beats: holdBeats(2.5, 1.5) },
   planche_pu: { x: 'hand', ...floatRep(fullBody(), planche, -82, 2.5, 1.8) },
-  maltese: (() => {
-    const mv: Move = { ...front([maltese(96, 176), maltese(101)], [{ hold: 0.4, dur: 1.5 }, { hold: 0.3 }]), y: 'hand', at: [0, MAL.y] }
-    return { ...mv, props: parallettes(mv) }
-  })(),
+  maltese,
 }
