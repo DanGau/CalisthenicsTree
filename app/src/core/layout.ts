@@ -1,7 +1,7 @@
 import type { Skill } from './types'
 
 export const RING = 95
-export const HUB = 220
+export const HUB = 240
 export const LANE = 52
 /** Smallest allowed gap between node centres; content tests enforce it. */
 export const MIN_GAP = 44

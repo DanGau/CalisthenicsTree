@@ -28,6 +28,8 @@ export type Prop =
   | { t: 'box'; x: number; w: number; h: number; z?: number }
   /** Parallel bars or parallettes seen end-on: a post topped at `y`. */
   | { t: 'bars'; x: number; y: number; z?: number }
+  /** Hangboard or campus rung: a block in front of the hands, its edge under a hand pinned at (x, y); `w` its width (solid). */
+  | { t: 'board'; x: number; y: number; z?: number; w?: number }
 
 /**
  * `keys` play in order. `bounce` plays them back in reverse (reps); `cycle` jumps from the

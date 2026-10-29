@@ -19,6 +19,8 @@ import { MOVES as backlever } from './backlever'
 import { MOVES as frontlever } from './frontlever'
 import { MOVES as pull } from './pull'
 import { MOVES as grip } from './grip'
+import { MOVES as fingers } from './fingers'
+import { MOVES as hips } from './hips'
 
 /** One animation per skill id, split into files by branch. */
-export const MOVES: Record<string, Move> = { ...handstand, ...push, ...dip, ...planche, ...armbal, ...tumble, ...floor, ...flow, ...parkour, ...legs, ...hinge, ...mobility, ...flex, ...backbend, ...core, ...flag, ...backlever, ...frontlever, ...pull, ...grip }
+export const MOVES: Record<string, Move> = { ...handstand, ...push, ...dip, ...planche, ...armbal, ...tumble, ...floor, ...flow, ...parkour, ...legs, ...hinge, ...mobility, ...flex, ...backbend, ...core, ...flag, ...backlever, ...frontlever, ...pull, ...grip, ...fingers, ...hips }

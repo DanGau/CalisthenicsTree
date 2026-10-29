@@ -1,7 +1,7 @@
 import { place, type Move, type Pose } from '../../core/figure'
 import { solve } from './frontlever'
 import { pos, reach, rot } from './legs'
-import { body, grip, grip3, hold, type K3, onBar, rep } from './pull'
+import { body, grip, grip3, hold, type K3, onBar, pinned, rep } from './pull'
 
 
 // On the back, head to the left. Low back flat (torso -92), the chest curls up off the floor in the hollow.
@@ -70,6 +70,23 @@ const wiper = (side: number): K3 => {
   return k
 }
 
+// Tension hold: hands on the bar, straight body angled down to the feet on a box in front, hips up.
+const tense = (t: number, legs: number, s: number): Pose => body(t, t, t + 4, [legs, legs, legs, legs], t, s)
+const TB = tense(222, 40, -3)
+const tbFeet = place({ keys: [], ...hangPin }, TB)
+const tbBox = { t: 'box' as const, x: tbFeet.foot.x - 25, w: 60, h: -Math.max(tbFeet.toe.y, tbFeet.heel.y) }
+/** Re-aims the legs so the feet stay on the box as the hips move. */
+const onBox = (p: Pose): Pose => {
+  const b = place({ keys: [], ...hangPin }, p)
+  const f: [number, number] = [tbFeet.foot.x - b.hip.x, tbFeet.foot.y - b.hip.y]
+  return reach(p, { foot: f, farFoot: f }, { k: { foot: -1, farFoot: -1 } })
+}
+// Cut loose: the feet slip, the body swings forward under the bar, back, then the lats brake it dead.
+const swingTo = (p: Pose, d: number): Pose => p.map((v, i) => (i === 11 ? v : v! + d)) as Pose
+const cutFwd = swingTo(body(176, 168, 172, [40, 20, 40, 20], 184, -2), -22)
+const cutBack = swingTo(body(184, 196, 190, [-14, -8, -14, -8], 178, 1), 14)
+const cutBrake = swingTo(body(180, 178, 180, [16, 6, 16, 6], 180, -4), -4)
+
 const hb = (hold: number, ...durs: number[]): Move['beats'] => durs.map((d, i) => ({ hold: i === 0 || i === durs.length - 1 ? hold : 0, dur: d }))
 
 export const MOVES: Record<string, Move> = {
@@ -90,5 +107,9 @@ export const MOVES: Record<string, Move> = {
   standing_rollout: { ...rep(stand(28, 0), null, [stand(flatT, flatT - 180)], { rise: 2.5, lower: 1.6, top: 0.3 }), x: 'foot', ms: 1000 },
   vsit: { ...hold(vs(196, 92, 8), vs(204, 130, 12), vs(205, 132, 12)), ms: 1000 },
   v120: { ...hold(vs(206, 132, 12), vs(216, 170, 16), vs(217, 172, 16)), ms: 1000 },
+  tension_board: pinned({ ...hangPin, ...hold(onBox(tense(226, 36, 0)), onBox(TB), onBox(tense(220, 42, -4))), ms: 1000, props: [hangPin.props[0], tbBox] }, onBox, 20),
+  cut_loose: { ...hangPin, mode: 'cycle', flow: 0.15, ms: 1000, keys: [onBox(TB), cutFwd, cutBack, cutBrake, hang, legsUp, ttbTop, legsUp, hang],
+    beats: [{ hold: 0.6, dur: 0.6, ease: 'in' }, { dur: 0.9 }, { dur: 0.7 }, { hold: 0.3, dur: 0.5 }, { dur: 0.6 }, { dur: 0.4 }, { hold: 0.3, dur: 0.6 }, { dur: 0.7 }, { hold: 0.3, dur: 0.6 }],
+    props: [hangPin.props[0], tbBox] },
   manna: { ...hold(vs(216, 170, 16), vs(240, 200, 20), vs(241, 202, 20)), ms: 1000 },
 }

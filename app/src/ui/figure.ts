@@ -142,8 +142,12 @@ function prop(p: Prop, front: boolean, up = 0) {
     }
     case 'box': return `<rect class="prop fill" x="${p.x}" y="${-p.h}" width="${p.w}" height="${p.h}" rx="3"/>`
     case 'bars': return `<line class="prop thin" x1="${p.x}" y1="${p.y}" x2="${p.x}" y2="0"/><circle class="prop" r="4" cx="${p.x}" cy="${p.y}"/>`
+    case 'board': return BOARD.map(([x0, x1, y0, y1]) => `<rect class="prop fill" x="${p.x + x0}" y="${p.y + y0}" width="${x1 - x0}" height="${y1 - y0}" rx="1.5"/>`).join('')
   }
 }
+
+/** Board blocks about the edge point, [x0, x1, y0, y1]: the board face in front, the edge the hand sits on (palm radius 4.5). */
+const BOARD = [[3, 28, -30, 16], [-7, 3, 4.5, 9]]
 
 /** Solid moves: props as 3D shapes through the camera, each with its depth for drawing order. */
 function prop3(p: Prop, m: Move, up = 0): [number, string] {
@@ -169,6 +173,12 @@ function prop3(p: Prop, m: Move, up = 0): [number, string] {
       const w = p.z ?? 22
       const ps = [-w, w].map((z) => [c(p.x - 15, p.y, z), c(p.x + 15, p.y, z), c(p.x, 0, z), c(p.x, p.y, z)])
       return [depth(...ps.map((q) => q[0])), ps.map(([a, b, foot, top]) => seg(foot, top, 'prop thin') + seg(a, b, 'prop')).join('')]
+    }
+    case 'board': {
+      // Drawn at its farthest depth, so the fingers on the edge stay in front of it.
+      const [z0, w] = [p.z ?? 0, (p.w ?? 120) / 2]
+      const blocks = BOARD.map(([x0, x1, y0, y1]) => [x0, x1].flatMap((x) => [y0, y1].flatMap((y) => [z0 - w, z0 + w].map((z) => c(p.x + x, p.y + y, z)))))
+      return [Math.min(...blocks.flat().map((q) => q.z ?? 0)), blocks.map((b) => poly(b, 'prop fill')).join('')]
     }
   }
 }

@@ -279,6 +279,21 @@ const negative = (top: K3, mid: K3, set: K3, hang: K3) => ({
   beats: [{ hold: 0.5, dur: 1.8 }, { dur: 1.7 }, { dur: 0.3 }, { hold: 0.4, dur: 0.8 }],
 })
 
+// Lock-offs: elbows at full flexion (chin over), 90° (hand 38 above the shoulder) and 120° (47).
+const f90 = fpose(-38, -3, [8, -3, 7, -3])
+const f120 = fpose(-46, -3, [6, -2, 5, -2])
+const oa90 = oa(-38, [12, -3, 14, -3], -3, 18)
+const oa120 = oa(-46, [10, -2, 12, -2], -3, 12)
+/** Lock-off ladder (seconds): hold the top, lower to 90°, hold, to 120°, hold, pull back up. */
+const lockLadder = (top: K3, a: K3, b: K3, h: number) => ({
+  mode: 'cycle' as const, keys: [top, a, b],
+  beats: [{ hold: h, dur: 0.9 }, { hold: h, dur: 0.6 }, { hold: h, dur: 1.2 }],
+})
+// Offset: the low hand on a towel 40 below the bar, close in; the bar hand does the work.
+const offset = (k: K3): K3 => reach3({ p: k.p, s: { ...k.s, turn: 0, farArmOut: -20 } }, { farHand: add3(p3(k, 'hand'), [0, 40, -40]) })
+/** Board edge (fingers.ts) in place of the bar. */
+const onEdge = (m: Move): Move => ({ ...m, props: [{ t: 'board', x: 0, y: BAR }] })
+
 export const MOVES: Record<string, Move> = {
   dead_hang: onBar({ keys: [fHang, fSettle], beats: [{ hold: 0.3, dur: 1 }, { hold: 0.3 }] }),
   scap_pull: side({ mode: 'cycle', keys: [passive, active], beats: [{ hold: 0.6, dur: 0.45 }, { hold: 0.8, dur: 0.8 }] }, 1000),
@@ -300,4 +315,9 @@ export const MOVES: Record<string, Move> = {
   ring_mu: mu(false, [{ t: 'rings', x: 0, y: BAR }]),
   oapu: onBar(rep(oaHang, oaSet, [oaMid, oaTop], { rise: 1.4, lower: 2.2 }), { free: true }),
   strict_mu: mu(false),
+  lockoff: onBar(lockLadder(fTop, f90, f120, 1.6)),
+  weighted_pull: onBar(rep(fHang, fSet, [fMid, fTop], { rise: 1.6, lower: 2.4, top: 0.3, bottom: 0.6 })),
+  offset_pull: towelRing(onBar(rep(offset(oaHang), offset(oaSet), [offset(oaMid), offset(oaTop)], { rise: 1.3, lower: 2 })), offset(oaHang)),
+  oa_lockoff: onBar(lockLadder(oaTop, oa90, oa120, 1.2), { free: true }),
+  oapu_edge: onEdge(onBar(rep(oaHang, oaSet, [oaMid, oaTop], { rise: 1.5, lower: 2.3 }), { free: true })),
 }

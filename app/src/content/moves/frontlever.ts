@@ -97,6 +97,10 @@ const leverRow = (p: Pose) => grip(p, chestPt(p, 0.05, 16), 1, true)
 const chinBody = body(186, 196, 186, [12, 4, 12, 4])
 const chinOver = grip(chinBody, chestPt(chinBody, 1, 15), -1, true)
 
+// Toe hook: a second bar on top of the insteps in the lever; the toes pull up under it.
+const hookToe = place(pin, fl).toe
+const hookBar = { t: 'bar', x: hookToe.x - 4, y: hookToe.y - 8 } as const
+
 export const MOVES: Record<string, Move> = {
   incline_row: rowMove(-122, 'bar'),
   row: rowMove(-104, 'rings'),
@@ -110,6 +114,7 @@ export const MOVES: Record<string, Move> = {
   ice_cream: { ...lever([chinOver, fl], 1000), mode: 'cycle', beats: [{ hold: 0.3, dur: 2.4 }, { hold: 0.6, dur: 1.6 }] },
   straddle_fl: straddleHold(fl),
   full_fl: lhold(fl),
+  toe_hook_lever: { ...lhold(fl), keys: [advTuck, fl, tense(fl), fl], props: [bar, hookBar] },
   fl_raise: { ...lever([inverted, fl], 1000), mode: 'cycle', beats: [{ hold: 0.3, dur: 2.5 }, { hold: 0.6, dur: 1.7 }] },
   fl_pullup: { ...pin, ...rep(fl, null, [leverRow(fl)], { rise: 1.6, lower: 2.4, top: 0.3, bottom: 0.3 }), ms: 1000 },
 }

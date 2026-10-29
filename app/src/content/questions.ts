@@ -12,12 +12,14 @@ export const QUESTIONS: Question[] = [
     { label: 'Flow and ground movement', focus: ['flow', 'floor'] },
     { label: 'Acrobatics and parkour', focus: ['tumble', 'parkour'] },
     { label: 'Core and flag', focus: ['core', 'flag'] },
+    { label: 'Climbing', focus: ['fingers', 'hips', 'pull'] },
   ] },
   { id: 'pain', ask: 'Anything nagging you?', multi: true, options: [
     { label: 'Wrists', focus: ['mobility'] },
     { label: 'Shoulders', focus: ['mobility', 'backbend'] },
     { label: 'Lower back', focus: ['hinge', 'core'] },
     { label: 'Knees', focus: ['legs', 'mobility'] },
+    { label: 'Fingers', focus: ['fingers'] },
     { label: 'Nothing' },
   ] },
   { id: 'pushups', ask: 'How many strict push-ups can you do?', options: [
@@ -92,4 +94,23 @@ export const QUESTIONS: Question[] = [
     { label: 'Cartwheel', grants: ['cartwheel', 'back_roll'] },
     { label: 'Round-off', grants: ['roundoff', 'back_roll'] },
   ] },
+  { id: 'climb', ask: 'Do you climb?', options: [
+    { label: 'No' },
+    { label: 'Under 1 year', grants: ['abrahangs'] },
+    { label: '1–2 years', grants: ['hang_20'] },
+    { label: '2+ years', grants: ['repeaters'] },
+  ] },
+  { id: 'hangboard', ask: 'Best 10s hang on a 20 mm edge?', options: [
+    { label: 'Never tried' },
+    { label: 'Bodyweight', grants: ['hang_20'] },
+    { label: '+25% BW', grants: ['max_hang'] },
+    { label: '+50% BW', grants: ['max_hang_50'] },
+    { label: 'One arm', grants: ['oa_hang_20'] },
+  ] },
+  { id: 'frog', ask: 'Frog stretch, hips at knee line?', options: [
+    { label: 'Not close' },
+    { label: 'Halfway', grants: ['frog'] },
+    { label: 'Hips touch a wall', grants: ['wall_frog'] },
+  ] },
 ]
+
