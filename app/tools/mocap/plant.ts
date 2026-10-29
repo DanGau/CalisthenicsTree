@@ -35,9 +35,10 @@ const PLANT: Record<Plant['joint'], (keyof Skel)[]> = { foot: ['nA', 'nT'], farF
 
 /**
  * Windows where a hand or foot is down (near the floor and the lowest joint) and still in the raw data, in loop seconds from `frames[0]`.
- * `total` is the loop length; windows touching both ends merge across the seam.
+ * `total` is the loop length; windows touching both ends merge across the seam. `raised` joints rest on a prop
+ * (bench, box): down means near their own lowest height and still, wherever the rest of the body is.
  */
-export function contacts(sk: Skel[], frames: number[], dt: number, total: number, o: { height?: number; speed?: number; min?: number } = {}): Plant[] {
+export function contacts(sk: Skel[], frames: number[], dt: number, total: number, o: { height?: number; speed?: number; min?: number; raised?: string[] } = {}): Plant[] {
   const [hMax, vMax, minLen] = [o.height ?? 7, o.speed ?? 45, o.min ?? 0.1]
   const out: Plant[] = []
   for (const [joint, keys] of Object.entries(PLANT) as [Plant['joint'], (keyof Skel)[]][]) {
@@ -50,7 +51,7 @@ export function contacts(sk: Skel[], frames: number[], dt: number, total: number
       const v = Math.hypot(q[0] - p[0], q[2] - p[2]) / (((b - a) * dt) || 1)
       // Down means near the floor and near the frame's lowest point: pin keeps the lowest point down.
       const low = Math.min(...Object.values(sk[frames[i]]).map((q) => -q[1]))
-      return h[i] - floor < hMax && h[i] - low < LOWEST && v < vMax
+      return h[i] - floor < hMax && (o.raised?.includes(joint) || h[i] - low < LOWEST) && v < vMax
     })
     const t = (i: number) => (frames[i] - frames[0]) * dt
     const runs: [number, number][] = []

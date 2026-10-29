@@ -1,12 +1,12 @@
 // Offline: CMU mocap clip → solid Move. See docs/figure.md (Mocap).
 //   npm run mocap -- sheet <clip> [from] [to] [step] [--yaw d] [--tilt d]      contact sheet + stats, to find frame ranges
-//   npm run mocap -- video <landmarks.json> <from> <to> <id> [--ground low|foot|hand] [--jump f] [--vis v] [--cutoff hz] [--beta b] [--step n] --title t --author a --license l --url u, plus build's flags
+//   npm run mocap -- video <landmarks.json> <from> <to> <id> [--ground low|foot|hand] [--jump f] [--vis v] [--cutoff hz] [--beta b] [--step n] [--flat k] --title t --author a --license l --url u, plus build's flags
 //   npm run mocap -- gltf <file.glb> [anim] [from] [to] [id] [--fps n] --title t --author a --license l --url u, plus build's flags; no anim lists them, no id gives a contact sheet
-//   npm run mocap -- build <clip> <from> <to> <id> [--mode cycle|bounce] [--pin hip|foot] [--yaw d] [--view d] [--tilt d] [--mirror] [--tol d] [--tail s] [--seam s|off] [--match n] [--plant auto|joints]
+//   npm run mocap -- build <clip> <from> <to> <id> [--mode cycle|bounce] [--pin hip|foot] [--yaw d] [--view d] [--tilt d] [--mirror] [--tol d] [--tail s] [--seam s|off] [--match n] [--plant auto|joints] [--on joint:box[:w]] [--grip bar|rings|bars:y]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { at, loopMs, type Move } from '../../src/core/figure'
+import { at, loopMs, place, type Move } from '../../src/core/figure'
 import { MOVES } from '../../src/content/moves'
 import { COLS } from '../../src/content/mocap/clip'
 import { still } from '../../src/ui/figure'
@@ -99,7 +99,7 @@ async function video(json: string) {
   const L = loadLandmarks(json)
   const [from, to] = [+pos[2], +pos[3]]
   const o: VideoOpts = { yaw: num('yaw', 0), mirror: flags.mirror === 'true', pin: (flags.pin ?? 'hip') as Opts['pin'], ground: (flags.ground ?? 'low') as VideoOpts['ground'],
-    jump: num('jump', 0.15), minVis: num('vis', 0.5), cutoff: num('cutoff', 2), beta: num('beta', 0.3) }
+    jump: num('jump', 0.15), minVis: num('vis', 0.5), cutoff: num('cutoff', 2), beta: num('beta', 0.3), flat: flags.flat ? +flags.flat : undefined }
   const v = videoSkeleton(L, from, to, o)
   const step = num('step', Math.max(1, Math.round(1 / 30 / v.dt)))
   const frames: number[] = []
@@ -157,15 +157,24 @@ async function emit(id: string, src: Source) {
     S = S.slice(0, Math.max(2, S.length - back.length + back.indexOf(Math.min(...back))))
   }
   const base: Parameters<typeof build>[0] = { mode, x: o.pin === 'hip' ? undefined : o.pin, view: flags.view ? +flags.view : undefined, tilt: flags.tilt ? +flags.tilt : undefined }
+  // Hanging or supported on a prop (--grip bar:-210, rings:-210, bars:-130): the near hand is pinned on it, the body hangs from there.
+  if (flags.grip) {
+    const [t, y] = flags.grip.split(':')
+    Object.assign(base, { x: 'hand', y: 'hand', at: [0, +y], props: [{ t, x: 0, y: +y }] })
+    for (const s of S) s.v[12] = s.v[13] = 0
+  }
   const tail = num('tail', 4 * dt)
   // Contacts (cycles): --plant auto, or joints foot,farFoot,hand,farHand; --plant-height and --plant-speed tune detection.
   const total = S[S.length - 1].t + (cycle ? S[1].t : tail)
   const want = flags.plant && flags.plant !== 'auto' ? flags.plant.split(',') : undefined
+  // A limb on a prop (--on farFoot:box[:w]): planted at its own lowest height; the box is placed under it.
+  const on = flags.on?.split(':')
+  const raised = on ? [on[0]] : []
   let plants = flags.plant && mode === 'cycle'
-    ? contacts(skel, frames.slice(0, S.length), dt, total, { height: num('plant-height', 7), speed: num('plant-speed', 45) }).filter((p) => !want || want.includes(p.joint))
+    ? contacts(skel, frames.slice(0, S.length), dt, total, { height: num('plant-height', 7), speed: num('plant-speed', 45), raised }).filter((p) => !want || want.includes(p.joint))
     : []
   // Down means on the floor: no lift while planted (data floors drift).
-  for (const s of S) if (plants.some((p) => (p.from > p.to ? s.t >= p.from || s.t <= p.to : s.t >= p.from && s.t <= p.to))) s.v[12] = 0
+  for (const s of S) if (plants.some((p) => !raised.includes(p.joint) && (p.from > p.to ? s.t >= p.from || s.t <= p.to : s.t >= p.from && s.t <= p.to))) s.v[12] = 0
   if (cycle) S = seam(S, num('seam', 0.15))
   const r = reduce(base, S, num('tol', 6), tail)
   if (cycle) {
@@ -179,6 +188,14 @@ async function emit(id: string, src: Source) {
     plants = m.plants = hold(m)
     if (!plants.length) delete m.plants
     console.log(JSON.stringify({ plants, dropped: found - plants.length, slip: +slip(m).toFixed(2) }))
+  }
+  const rest = on && plants.find((p) => p.joint === on[0])
+  if (on && !rest) console.warn(`${on[0]} never rests on the ${on[1]}`)
+  if (rest) {
+    const w = +(on[2] ?? 36)
+    const st = at(m, (rest.from + 0.05) * (m.ms ?? 1000))
+    const b = place({ ...m, view: 0, tilt: 0 }, st.pose, st)[rest.joint]
+    base.props = m.props = [...(base.props ?? []), { t: 'box', x: Math.round(b.x - w / 2), w, h: Math.max(1, Math.round(-b.y - 2)) }]
   }
   const opts = Object.entries(base).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}: ${JSON.stringify(v).replace(/"/g, "'")}`).join(', ')
   const src_ = `${src.credit}

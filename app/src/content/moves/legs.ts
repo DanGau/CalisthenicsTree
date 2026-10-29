@@ -1,4 +1,5 @@
 import { full, joints, LEN, type Beat, type Joint, type Move, type Pose, type Pt } from '../../core/figure'
+import { bulgarian } from '../mocap/bulgarian'
 
 const D = 180 / Math.PI
 const wrap = (v: number) => ((((v + 180) % 360) + 360) % 360) - 180
@@ -146,10 +147,6 @@ const sissyTop = (pole: boolean): Pose => toPole([180, ...sissyArms(pole), 0, 0,
 const pistolLow = (free: number): Pose => plant([125, 90, 90, 90, 90, 0, 0, free, free, 138, 165], { foot: 26 }, 24)
 const pistolTop: Pose = [180, 90, 90, 90, 90, 0, 0, 70, 70, 180, 180]
 
-// Bulgarian: front foot on the floor, rear instep on a 40 bench behind.
-const bulg = (f: number, fx: number): Pose =>
-  plant(plant([180, 8, 14, -8, -10, 0, 0, 0, 0, 180, 180], { foot: fx }, f), { farFoot: -44 }, f - 40)
-
 // Reverse Nordic: kneel on the shins, lean the straight hip line back from the knee.
 const kneel = (lean: number): Pose => [180 + lean, 90 + lean, 90 + lean, 90 + lean, 90 + lean, lean, -90, lean, -90, 180 + lean, 180 + lean * 0.6]
 
@@ -167,7 +164,7 @@ export const MOVES: Record<string, Move> = {
   split_squat: rep(splitTop, splitLow),
   step_up: { keys: [stepLow, stepTop], mode: 'cycle', beats: [{ hold: 0.2, dur: 1 }, { hold: 0.35, dur: 1.6 }], x: 'foot', y: 'foot', at: [0, -45], props: [{ t: 'box', x: -26, w: 52, h: 40 }] },
   assisted_shrimp: { ...rep(shrimpTop(false, true), shrimpLow(false, true), 1.8, 1.1), x: 'foot', props: [{ t: 'pole', x: 60 }] },
-  bulgarian: { ...rep(bulg(78, 24), bulg(46, 30)), x: 'foot', props: [{ t: 'box', x: -88, w: 36, h: 40 }] },
+  bulgarian: { ...bulgarian, point: 'far' },
   box_pistol: { ...rep(pistolTop, plant([145, 90, 90, 90, 90, 0, 0, 86, 86, 152, 170], { foot: 30 }, 44), 2, 1.1, 0.3), x: 'foot', props: [{ t: 'box', x: -64, w: 36, h: 38 }] },
   shrimp: { ...rep(shrimpTop(), shrimpLow(), 1.9, 1.1), x: 'foot' },
   sissy: { ...rep(sissyTop(true), sissyLow(true), 2, 1.2), x: 'foot', props: [{ t: 'pole', x: 50 }] },

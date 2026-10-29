@@ -1,4 +1,6 @@
 {
   "back_tuck": { "clip": "88_01", "from": 16, "to": 190, "flags": "--tol 8 --plant auto --plant-speed 70" },
-  "aerial": { "clip": "90_08", "from": 150, "to": 300, "flags": "--plant auto --view 90" }
+  "aerial": { "clip": "90_08", "from": 150, "to": 300, "flags": "--plant auto --view 90" },
+  "bulgarian": { "video": true, "clip": ".video-cache/yt-wXasPD_vKqQ.json", "from": 24, "to": 84, "flags": "--plant auto --plant-height 20 --plant-speed 80 --flat 0.3 --on farFoot:box",
+    "args": ["--title", "Bulgarian Split Squat", "--author", "ExperienceLifeMag", "--license", "CC BY 3.0", "--url", "https://www.youtube.com/watch?v=wXasPD_vKqQ"] }
 }

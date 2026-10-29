@@ -17,6 +17,7 @@ export function moves(root: HTMLElement, branch?: string) {
         <div class="strip">${m ? `${live(s.id, m)}${some(m.keys).map(([k, i]) => still(m, k, m.beats?.[i])).join('')}` : '<p>missing</p>'}</div></section>`
     }).join('')}
     <p><small>Some motion derived from the CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu), created with funding from NSF EIA-0196217.</small></p>
+    <p><small>Bulgarian split squat pose-estimated from "Bulgarian Split Squat" by ExperienceLifeMag (youtube.com/watch?v=wXasPD_vKqQ), CC BY 3.0.</small></p>
   </div>`)
   root.replaceChildren(screen)
   animate(screen, MOVES)

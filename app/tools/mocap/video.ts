@@ -13,7 +13,7 @@ const MAP: Record<string, number[]> = {
 }
 
 /** Ground: `low` puts each frame's lowest point on the floor; `foot`/`hand` hold the feet/hands still (pushup, hang). */
-export type VideoOpts = Opts & { jump?: number; minVis?: number; maxGap?: number; cutoff?: number; beta?: number; ground?: 'low' | 'foot' | 'hand' }
+export type VideoOpts = Opts & { jump?: number; minVis?: number; maxGap?: number; cutoff?: number; beta?: number; ground?: 'low' | 'foot' | 'hand'; flat?: number }
 
 /** One-Euro filter run forward and backward, averaged, so there is no lag. */
 function oneEuro(x: number[], dt: number, cutoff: number, beta: number): number[] {
@@ -56,6 +56,27 @@ const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[xs.length >> 1]
 const dist = (a: V, b: V) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
 const avg = (ps: V[]): V => [0, 1, 2].map((k) => ps.reduce((s, p) => s + p[k], 0) / ps.length) as V
 
+/** Limb chains from the trunk out. */
+const CHAINS = ['Left', 'Right'].flatMap((s) => [[`${s}Arm`, `${s}ForeArm`, `${s}Hand`], [`${s}UpLeg`, `${s}Leg`, `${s}Foot`, `${s}ToeBase`]])
+
+/**
+ * Side-on clips: camera depth (z) is the body's side-to-side axis and the noisiest. Scale each limb
+ * segment's depth by `k` (0 flat in the sagittal plane, 1 as estimated), keeping its length, so only a
+ * small out-of-plane swing survives. Shoulder and hip width stay.
+ */
+function flatten(p: Record<string, V>, k: number) {
+  for (const c of CHAINS) {
+    let [prev, base] = [p[c[0]], p[c[0]]]
+    for (const j of c.slice(1)) {
+      const d: V = [p[j][0] - prev[0], p[j][1] - prev[1], p[j][2] - prev[2]]
+      const z = d[2] * k
+      const s = Math.sqrt(Math.max(0, d[0] ** 2 + d[1] ** 2 + d[2] ** 2 - z * z)) / (Math.hypot(d[0], d[1]) || 1e-6)
+      prev = p[j]
+      base = p[j] = [base[0] + d[0] * s, base[1] + d[1] * s, base[2] + z]
+    }
+  }
+}
+
 export const loadLandmarks = (path: string): Landmarks => JSON.parse(readFileSync(path, 'utf8'))
 
 /** Frames `from..to` (video frame numbers) as our skeleton, plus the per-sample time step. */
@@ -87,6 +108,7 @@ export function videoSkeleton(L: Landmarks, from: number, to: number, o: VideoOp
     p.Spine = [0, 1, 2].map((k) => hip[k] + 0.4 * (sh[k] - hip[k])) as V
     return p
   })
+  if (o.flat !== undefined) for (const p of P) flatten(p, o.flat)
   // Hip-centred per frame: re-anchor so the ground (or the held feet/hands) stays put.
   const anchor = (p: Record<string, V>): V | undefined => (o.ground === 'foot' ? avg([p.LeftFoot, p.RightFoot]) : o.ground === 'hand' ? avg([p.LeftHand, p.RightHand]) : undefined)
   const a0 = anchor(P[0])
