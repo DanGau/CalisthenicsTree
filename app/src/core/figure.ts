@@ -409,7 +409,7 @@ const LIMB: Record<Plant['joint'], [number, number, keyof Stage]> = { hand: [1, 
 const RAMP = 0.08
 const targets = new WeakMap<Move, V3[]>()
 
-/** Where each plant holds: its joint's mean place over the window on the uncorrected path. */
+/** Where each plant holds: its joint's mean place over the window on the uncorrected path, at its lowest there. */
 function plantTargets(m: Move): V3[] {
   const hit = targets.get(m)
   if (hit) return hit
@@ -418,14 +418,16 @@ function plantTargets(m: Move): V3[] {
   const out = m.plants!.map((p) => {
     const end = p.from > p.to ? p.to + total : p.to
     const sum: V3 = [0, 0, 0]
-    let n = 0
+    let [n, low] = [0, -Infinity]
     for (let u = p.from; u <= end + 1e-9; u += Math.min(0.02, (end - p.from) / 4 || 1)) {
       const s = spline(m, u * step)
       const b = ground(m, s.pose, s)[p.joint]
-      sum[0] += b.x; sum[1] += b.y; sum[2] += b.z ?? 0
+      sum[0] += b.x; sum[2] += b.z ?? 0
+      low = Math.max(low, b.y)
       n++
     }
-    return sum.map((v) => v / n) as V3
+    // Pin keeps the lowest point down, so a target above where the joint gets down to fights it.
+    return [sum[0] / n, low, sum[2] / n] as V3
   })
   targets.set(m, out)
   return out

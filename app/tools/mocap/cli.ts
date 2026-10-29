@@ -15,7 +15,7 @@ import { retarget, skeleton, world, type Opts, type Skel } from './fit'
 import { build, reduce } from './reduce'
 import { loadLandmarks, videoSkeleton, type VideoOpts } from './video'
 import { png, stick } from './render'
-import { contacts, poseGap, seam, slip } from './plant'
+import { contacts, hold, poseGap, seam, slip } from './plant'
 import { load as loadGlb, names, sample } from './gltf'
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -38,7 +38,7 @@ async function load(clip: string): Promise<Bvh> {
   const file = resolve(CACHE, `${clip}.bvh`)
   if (!existsSync(file)) {
     mkdirSync(CACHE, { recursive: true })
-    const url = `https://raw.githubusercontent.com/una-dinosauria/cmu-mocap/master/data/${s.padStart(3, '0')}/${+s}_${t}.bvh`
+    const url = `https://raw.githubusercontent.com/una-dinosauria/cmu-mocap/master/data/${s.padStart(3, '0')}/${s.padStart(2, '0')}_${t}.bvh`
     const r = await fetch(url)
     if (!r.ok) throw new Error(`${url}: ${r.status}`)
     writeFileSync(file, await r.text())
@@ -161,7 +161,7 @@ async function emit(id: string, src: Source) {
   // Contacts (cycles): --plant auto, or joints foot,farFoot,hand,farHand; --plant-height and --plant-speed tune detection.
   const total = S[S.length - 1].t + (cycle ? S[1].t : tail)
   const want = flags.plant && flags.plant !== 'auto' ? flags.plant.split(',') : undefined
-  const plants = flags.plant && mode === 'cycle'
+  let plants = flags.plant && mode === 'cycle'
     ? contacts(skel, frames.slice(0, S.length), dt, total, { height: num('plant-height', 7), speed: num('plant-speed', 45) }).filter((p) => !want || want.includes(p.joint))
     : []
   // Down means on the floor: no lift while planted (data floors drift).
@@ -174,7 +174,12 @@ async function emit(id: string, src: Source) {
     for (const a of [r.keys, r.dur, r.hold]) a.pop()
   }
   const m: Move = { ...build(base, r.keys, r.dur, r.hold), ...(plants.length ? { plants } : {}) }
-  if (plants.length) console.log(JSON.stringify({ plants, slip: +slip(m).toFixed(2) }))
+  if (plants.length) {
+    const found = plants.length
+    plants = m.plants = hold(m)
+    if (!plants.length) delete m.plants
+    console.log(JSON.stringify({ plants, dropped: found - plants.length, slip: +slip(m).toFixed(2) }))
+  }
   const opts = Object.entries(base).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}: ${JSON.stringify(v).replace(/"/g, "'")}`).join(', ')
   const src_ = `${src.credit}
 // Generated: npm run mocap -- ${argv.join(' ')}

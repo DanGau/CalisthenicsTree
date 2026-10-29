@@ -29,10 +29,12 @@ export function seam(S: Sample[], sec: number): Sample[] {
 export const poseGap = (p: number[], q: number[]) =>
   Math.max(...p.map((v, j) => (j === 12 || j === SHIFT || j === 14 ? 0 : WRAP.has(j) ? Math.abs(((v - q[j] + 540) % 360) - 180) : Math.abs(v - q[j]))))
 
+/** How far (body units) a contact may sit above the frame's lowest joint. */
+const LOWEST = 4
 const PLANT: Record<Plant['joint'], (keyof Skel)[]> = { foot: ['nA', 'nT'], farFoot: ['fA', 'fT'], hand: ['nW'], farHand: ['fW'] }
 
 /**
- * Windows where a hand or foot is down and still in the raw data, in loop seconds from `frames[0]`.
+ * Windows where a hand or foot is down (near the floor and the lowest joint) and still in the raw data, in loop seconds from `frames[0]`.
  * `total` is the loop length; windows touching both ends merge across the seam.
  */
 export function contacts(sk: Skel[], frames: number[], dt: number, total: number, o: { height?: number; speed?: number; min?: number } = {}): Plant[] {
@@ -46,7 +48,9 @@ export function contacts(sk: Skel[], frames: number[], dt: number, total: number
       const p = sk[a][keys[0]]
       const q = sk[b][keys[0]]
       const v = Math.hypot(q[0] - p[0], q[2] - p[2]) / (((b - a) * dt) || 1)
-      return h[i] - floor < hMax && v < vMax
+      // Down means near the floor and near the frame's lowest point: pin keeps the lowest point down.
+      const low = Math.min(...Object.values(sk[frames[i]]).map((q) => -q[1]))
+      return h[i] - floor < hMax && h[i] - low < LOWEST && v < vMax
     })
     const t = (i: number) => (frames[i] - frames[0]) * dt
     const runs: [number, number][] = []
@@ -79,11 +83,42 @@ export function contacts(sk: Skel[], frames: number[], dt: number, total: number
 }
 
 /** Worst drift (body units) of a planted joint inside its window, sampling `at` every 20 ms over two loops. */
-export function slip(m: Move): number {
+export const slip = (m: Move) => Math.max(0, ...slips(m))
+
+/** Under the test's slip limit (2.5). */
+const LIMIT = 2.4
+/** Seconds trimmed per step. */
+const TRIM = 1 / 30
+
+/**
+ * Trim each plant from whichever end helps more until it holds under the limit, or drop it.
+ * A window's edges often catch a limb still landing or lifting that the figure cannot reach.
+ */
+export function hold(m: Move): Plant[] {
+  let ps = [...(m.plants ?? [])]
+  const step = (m.ms ?? 900) / 1000
+  for (let i = 0; i < ps.length; ) {
+    const err = (q: Plant) => slips({ ...m, plants: ps.map((p, k) => (k === i ? q : p)) })[i]
+    let p = ps[i]
+    while (err(p) > LIMIT) {
+      const len = (p.to - p.from + loopMs(m) / 1000 / step) % (loopMs(m) / 1000 / step)
+      if (len < 0.1 / step + 2 * TRIM / step) break
+      const a = { ...p, from: +(p.from + TRIM / step).toFixed(3) }
+      const b = { ...p, to: +(p.to - TRIM / step).toFixed(3) }
+      p = err(a) < err(b) ? a : b
+    }
+    if (err(p) > LIMIT) ps = ps.filter((_, k) => k !== i)
+    else ps[i++] = p
+  }
+  return ps
+}
+
+/** Each plant's worst drift. */
+function slips(m: Move): number[] {
   const total = loopMs(m)
   const step = m.ms ?? 900
-  let worst = 0
-  for (const p of m.plants ?? []) {
+  return (m.plants ?? []).map((p) => {
+    let worst = 0
     const pts: number[][] = []
     for (let ms = 0; ms < 2 * total; ms += 20) {
       const u = (ms % total) / step
@@ -95,6 +130,6 @@ export function slip(m: Move): number {
       pts.push([b.x - loop * (m.travel ?? 0), b.y, b.z ?? 0])
     }
     for (const q of pts) for (const r of pts) worst = Math.max(worst, Math.hypot(q[0] - r[0], q[1] - r[1], q[2] - r[2]))
-  }
-  return worst
+    return worst
+  })
 }
