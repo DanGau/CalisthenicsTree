@@ -99,7 +99,8 @@ const mill = (r: number): [Pose, Beat] => {
   const [cr, sr] = [Math.cos(r / D), Math.sin(r / D)]
   const leg = (s: number) => {
     // World direction: up behind (elevation 55), spread 34 to each side across the rolled body.
-    const [e, h] = [55 / D, 34 / D]
+    // Legs ride high over the back (roll 0) and drop low behind over the chest (roll 180).
+    const [e, h] = [(35 + 25 * cr) / D, 34 / D]
     const w = [-Math.cos(e) * Math.cos(h), -Math.sin(e) * Math.cos(h) - s * Math.sin(h) * sr, s * Math.sin(h) * cr]
     const l = Math.hypot(...w)
     // Undo the roll to get the body-frame direction, then its sagittal angle and swing out.
@@ -107,7 +108,7 @@ const mill = (r: number): [Pose, Beat] => {
     return [Math.atan2(x, y) * D, Math.asin(s * z) * D]
   }
   const [[n, no], [f, fo]] = [leg(1), leg(-1)]
-  return [[86, 84, 84, 84, 84, n, n, f, f, 84, 70], { roll: r, armOut: -18, farArmOut: -18, legOut: no, farLegOut: fo, dur: 0.1, ease: 'lin' }]
+  return [[86, 84, 84, 84, 84, n, n, f, f, 84, 70], { roll: r, turn: r, armOut: -18, farArmOut: -18, legOut: no, farLegOut: fo, dur: 0.1, ease: 'lin' }]
 }
 const MILL = [0, 45, 90, 135, 180, 225, 270, 315].map(mill)
 
@@ -140,7 +141,8 @@ const macReach: Pose = plant(plant([215, 0, 0, 140, 160, 0, 0, 0, 0, 230, 250], 
 const macOver: Pose = [345, 345, 345, 290, 290, 170, 150, 205, 225, 350, 355]
 const macLand: Pose = rot(plant([165, 30, 40, 200, 200, 0, 0, 0, 0, 170, 175], { foot: 14, farFoot: -12 }, 46), 360)
 
-// Swipe: bent over on the hands, whip the hips and legs round through a backbend, land on the hands again.
+// Swipe (solid): bent over on the hands, throw the chest up and round, the arched body and legs whip a full turn
+// about the vertical, land on the hands again.
 const swipeDown: Pose = plant([35, 0, 0, 0, 0, 0, 0, 0, 0, 25, 20], { hand: 56, farHand: 44, foot: -4, farFoot: 12 }, 70)
 const swipeUp: Pose = [235, 315, 315, 290, 290, 75, 65, 125, 115, 260, 290]
 
@@ -176,7 +178,7 @@ export const MOVES: Record<string, Move> = {
   macaco: { keys: [macSit, macReach, macOver, macLand], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.6 }, { dur: 0.3, ease: 'snap' }, { dur: 0.4 }, { hold: 0.3, dur: 0.8 }] },
   turtle_freeze: { keys: [turtle(-6), turtle(6)], ms: 1000, beats: [{ hold: 0.2, dur: 1 }, { hold: 0.2, dur: 1 }] },
   windmill: { keys: unwrap(MILL.map((k) => k[0])), beats: MILL.map((k) => k[1]), mode: 'cycle', solid: true, tilt: TILT, view: 30, x: 'shoulder', ms: 1000 },
-  swipe: { keys: [swipeDown, swipeUp, rot(swipeDown, 360)], mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 0.3 }, { lift: 22, dur: 0.35 }, { hold: 0.3, dur: 0.01 }] },
+  swipe: { keys: [swipeDown, swipeUp, swipeDown], mode: 'cycle', solid: true, tilt: TILT, ms: 1000, flow: 0.15, beats: [{ hold: 0.5, dur: 0.3, ease: 'snap' }, { turn: 180, lift: 22, dur: 0.35 }, { turn: 360, hold: 0.3, dur: 0.01 }] },
   airchair: seen(freeze(airIn, airchair(140), airchair(144)), 30),
   flare: { ...flare(), mode: 'cycle', solid: true, tilt: TILT, ms: 1000 },
   hollowback: { keys: [hollow(0), hollow(12)], ...sway() },
