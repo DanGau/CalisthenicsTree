@@ -1,4 +1,6 @@
-import { blend, full, joints, LEN, solid, type Beat, type Move, type Pose, type Stage } from '../../core/figure'
+import { blend, full, joints, LEN, RUNG, solid, type Beat, type Move, type Pose, type Stage } from '../../core/figure'
+import { pos, reach } from './legs'
+import { pinned } from './pull'
 
 const D = 180 / Math.PI
 const STAGES = ['lift', 'turn', 'trunk', 'roll', 'armOut', 'farArmOut', 'legOut', 'farLegOut', 'foreOut', 'farForeOut', 'shinOut', 'farShinOut', 'twist'] as const
@@ -349,6 +351,28 @@ const wave: Pose[] = Array.from({ length: WAVE.n }, (_, i) => {
   return quad(0, t, c, h)
 })
 
+// Stall bars at x 0. Semi-hang: facing them, hands on rung 12, balls of the feet on rung 1, the hips sit back
+// and down while the chest sinks between the arms.
+const SEMI: [number, number][] = [[-50, 85], [-56, 74]]
+const semi = (hip: [number, number], t: number, c: number, head: number): Pose =>
+  put([t, 0, 0, 0, 0, 0, 0, 0, 0, c, head, 5], hip, { hand: [0, -RUNG(12)], farHand: [0, -RUNG(12)], foot: [-10, -RUNG(1) + 2.5 + H.ankle], farFoot: [-10, -RUNG(1) + 2.5 + H.ankle] })
+// Side bend, front view, bars on the viewer's right (the near side): near hand low on rung 6, far hand over the
+// head on rung 12, the hips push away to the left.
+const bend = (hip: [number, number], t: number, c: number, head: number): Pose =>
+  put([t, 0, 0, 0, 0, 0, 0, 0, 0, c, head], hip, { hand: [0, -RUNG(6)], farHand: [0, -RUNG(12)], foot: [-16, H.ankle], farFoot: [-36, H.ankle] }, { hand: -1, farHand: -1 }, true)
+/** Fixes for `pinned`, relative to the pinned near hand: semi-hang feet on rung 1; side bend far hand on rung 12, feet planted. */
+const semiFeet = (p: Pose): Pose => {
+  const [x, y] = pos(p, 'hand')
+  const f: [number, number] = [x - 10, y - RUNG(12) - (-RUNG(1) + 2.5 + H.ankle)]
+  return reach(p, { foot: f, farFoot: f })
+}
+const highHand = (p: Pose): Pose => {
+  const [x, y] = pos(p, 'hand', true)
+  const foot = (fx: number): [number, number] => [x + fx, y - RUNG(6) - H.ankle]
+  return reach(p, { farHand: [x, y + RUNG(12) - RUNG(6)], foot: foot(-16), farFoot: foot(-36) }, { front: true, k: { farHand: -1 } })
+}
+const BEND: [number, number][] = [[-30, 80.5], [-36, 80]]
+
 export const MOVES: Record<string, Move> = {
   // Rock the shoulders forward past the wrists and back, hands planted.
   wrist_prep: { keys: [quad(21, 110, 110, 95), quad(0, 109, 109, 100), quad(-17, 110, 110, 105)], ...kneePin, ms: 1100, beats: [{ hold: 0.5 }, {}, { hold: 0.6 }] },
@@ -406,5 +430,7 @@ export const MOVES: Record<string, Move> = {
     mode: 'cycle', x: 'foot', ms: 900,
     beats: [{ hold: 0.2, dur: 0.6, ease: 'snap' }, { dur: 1, ease: 'out' }, { hold: 0.6, dur: 1.4, ease: 'io' }, { dur: 1.3, ease: 'io' }, { hold: 0.5, dur: 0.8, ease: 'io' }],
   },
+  stall_semi_hang: pinned({ keys: [semi(SEMI[0], 168, 160, 150), semi(SEMI[1], 140, 128, 118)], x: 'hand', y: 'hand', at: [0, RUNG(12)], props: [{ t: 'stall', x: 0 }], ms: 1000, beats: [{ hold: 0.6, dur: 2.5 }, { hold: 2, dur: 2 }] }, semiFeet, 40),
+  stall_side_bend: pinned({ keys: [bend(BEND[0], 170, 155, 150), bend(BEND[1], 164, 128, 120)], front: true, x: 'hand', y: 'hand', at: [0, RUNG(6)], props: [{ t: 'stall', x: 0 }], ms: 1000, beats: [{ hold: 0.6, dur: 2.2 }, { hold: 2, dur: 2 }] }, highHand, 40),
   overhead_squat: { ...repPath(ohs, 2, 1.2, 0.4, 0.3), x: 'foot', ms: 1000 },
 }

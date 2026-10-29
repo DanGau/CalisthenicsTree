@@ -1,4 +1,4 @@
-import { blend, joints, type Beat, type Move, type Pose, type Stage } from '../../core/figure'
+import { blend, joints, RUNG, type Beat, type Move, type Pose, type Stage } from '../../core/figure'
 import { breathe, H, INSTEP, put, put3, repPath, where } from './mobility'
 
 type Legs = [number, number, number, number]
@@ -115,6 +115,11 @@ const between = (a: Pose, b: Pose, t: number, feet: number): Pose => {
   return put(p, [-h.x, H.hand + h.y], { foot: [feet, H.ankle], farFoot: [feet, H.ankle] })
 }
 
+// Stall bars at x 0 behind, hands on rung 12 overhead: the hips drive forward and the chest arches open.
+const archKey = (hip: [number, number], t: number, c: number, head: number, fx: number): Pose =>
+  put([t, 0, 0, 0, 0, 0, 0, 0, 0, c, head, 4], hip, { hand: [0, -RUNG(12)], farHand: [0, -RUNG(12)], foot: [fx, H.ankle + 2], farFoot: [fx, H.ankle + 2] }, { hand: 1, farHand: 1 })
+const ARCH: [number, number][] = [[44, 80.5], [52, 79]]
+
 export const MOVES: Record<string, Move> = {
   // Lumbar then thoracic extension; hips stay down, neck long.
   cobra: {
@@ -155,6 +160,10 @@ export const MOVES: Record<string, Move> = {
     beats: [{ hold: 0.5, dur: 1.3, ease: 'io' }, { hold: 0.9 }],
   },
   // Walk the hands down the wall slowly; walk back up.
+  stall_arch: {
+    keys: [archKey(ARCH[0], 190, 200, 205, 45), archKey(ARCH[1], 205, 240, 255, 45)], x: 'hand', y: 'hand', at: [0, RUNG(12)], props: [{ t: 'stall', x: 0, wall: -1 }], ms: 1000,
+    beats: [{ hold: 0.6, dur: 2 }, { hold: 1.5, dur: 1.6 }],
+  },
   bridge_walk: {
     keys: [
       wallKey(184, 196, 205, [76, 80], null),

@@ -1,4 +1,5 @@
-import type { Move, Pose, Stage } from '../../core/figure'
+import { RUNG, type Move, type Pose, type Stage } from '../../core/figure'
+import { pinned, pinned3 } from './pull'
 import { breathe, H, INSTEP, ang, put, rep } from './mobility'
 
 const stand: Pose = [180, 2, 4, -2, -4, 0, 0, 0, 0]
@@ -61,6 +62,17 @@ const needle = (rear: number): Pose =>
   put([40, 0, 0, 0, 0, 0, 0, rear, rear, 20, -5], [0, 81], { foot: [0, H.ankle], hand: [30, H.hand], farHand: [30, H.hand] }, { hand: 1, farHand: 1 })
 
 
+// Stall bars at x 0. Pike pull: feet by the bars, hands on rung 2; the arms bend to pull the chest down the legs.
+const h = (k: number) => -RUNG(k)
+const PIKE_HIP: [number, number] = [-34, 80.5]
+const pikePull = (t: number, c: number, head: number): Pose => put([t, 0, 0, 0, 0, 0, 0, 0, 0, c, head], PIKE_HIP, { hand: [0, h(2)], farHand: [0, h(2)], foot: [-30, H.ankle], farFoot: [-30, H.ankle] })
+// Pancake pull: straddle sitting with the feet at the bars, hands on rung 1 pull the chest down.
+const STALL_SEAT: [number, number] = [-48, SEAT[1]]
+const pancakePull = (t: number, c: number, head: number): Pose => {
+  const l = legAt(PANCAKE, SEAT[1] - H.ankle)
+  return put([t, 0, 0, 0, 0, l, l, l, l, c, head], STALL_SEAT, { hand: [0, h(1)], farHand: [0, h(1)] }, { hand: 1, farHand: 1 })
+}
+
 export const MOVES: Record<string, Move> = {
   // Flat-back hinge, then the spine lets go; roll up a vertebra at a time.
   fwd_fold: { ...breathe([stand, flatBack, fold], 1000), x: 'foot' },
@@ -84,6 +96,11 @@ export const MOVES: Record<string, Move> = {
   },
   front_split_half: { ...breathe([blockSplit(34), blockSplit(30), blockSplit(27)], 900, blockSplit(28)), x: 'hip', point: true, props: [{ t: 'box', x: -10, w: 20, h: 19 }] },
   // The chest folds down between the wide legs as the hands walk out.
+  stall_pike: pinned({ ...breathe([pikePull(52, 36, 20), pikePull(30, 14, 2)]), x: 'hip', y: 'hip', at: [PIKE_HIP[0], -PIKE_HIP[1]], props: [{ t: 'stall', x: 0 }] }, (p) => put(p, PIKE_HIP, { hand: [0, h(2)], farHand: [0, h(2)] }), 40),
+  stall_pancake: pinned3({
+    ...breathe([pancakePull(150, 146, 150), pancakePull(128, 122, 124), pancakePull(110, 104, 106)], 900, undefined, [wide(PANCAKE), wide(PANCAKE), wide(PANCAKE)]),
+    solid: true, view: -CAM, x: 'hip', y: 'hip', at: [STALL_SEAT[0], -SEAT[1]], props: [{ t: 'stall', x: 0 }],
+  }, (k) => ({ ...k, p: put(k.p, STALL_SEAT, { hand: [0, h(1)], farHand: [0, h(1)] }, { hand: 1, farHand: 1 }) })),
   pancake: { ...breathe([pancakeKey(178, 178, 178, 30), pancakeKey(102, 98, 100, 62)], 900, pancakeKey(110, 104, 106, 60), [wide(PANCAKE), wide(PANCAKE)]), solid: true, view: CAM, y: 'hip', at: [0, -SEAT[1]] },
   pike_full: { ...breathe([sit(128, 112, 105, [80, 12]), sit(110, 100, 95, [88, 8])]), x: 'hip' },
   front_split: { ...breathe([split(22, [3, H.hand]), split(15, [3, H.hand]), split(9.5, [3, H.hand])], 900, split(11.5, [3, H.hand])), x: 'hip', point: true },

@@ -20,7 +20,7 @@ Each skill has a looping cartoon in `app/src/content/moves/<branch>.ts`, keyed b
 - `keys`: poses in order. `mode: 'bounce'` (default) plays them back in reverse for reps; `'cycle'` loops last → first.
 - Placement: `x` names the joint pinned horizontally to `at[0]` (default `hip`). `y` is `'floor'` (default: lowest point rests on the floor) or a joint pinned to `at[1]` (hangs: `x: 'hand', y: 'hand', at: [0, -210]`).
 - `front: true` draws a front view: angles mean left/right (-90 = viewer's left, 90 = right); near limbs sit on the viewer's left. Use it for archer, cossack, side plank, flag, middle split, cartwheel.
-- `props`: `bar`, `rings`, `wall`, `pole`, `box {x,w,h}`, `bars` (parallel bars end-on). `floor: false` hides the floor.
+- `props`: `bar`, `rings`, `wall`, `pole`, `box {x,w,h}`, `bars` (parallel bars end-on), `stall` (stall bars: rungs every 13 at `RUNG(k)`, wall behind; edge-on flat, a ladder in solid). `floor: false` hides the floor.
 - `ms`: base transition time (default 900). Holds use 2 keys: entry, then the hold with a small change (breathing, tension).
 
 ## Timing and momentum

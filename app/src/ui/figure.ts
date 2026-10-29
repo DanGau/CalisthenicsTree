@@ -1,4 +1,4 @@
-import { at, camera, LEN, place, sequence, type Body, type Move, type Pose, type Prop, type Pt, type Stage } from '../core/figure'
+import { at, camera, RUNG, LEN, place, sequence, type Body, type Move, type Pose, type Prop, type Pt, type Stage } from '../core/figure'
 
 const f = (n: number) => n.toFixed(1)
 const sub = (a: Pt, b: Pt): Pt => ({ x: a.x - b.x, y: a.y - b.y })
@@ -143,8 +143,17 @@ function prop(p: Prop, front: boolean, up = 0) {
     case 'box': return `<rect class="prop fill" x="${p.x}" y="${-p.h}" width="${p.w}" height="${p.h}" rx="3"/>`
     case 'bars': return `<line class="prop thin" x1="${p.x}" y1="${p.y}" x2="${p.x}" y2="0"/><circle class="prop" r="4" cx="${p.x}" cy="${p.y}"/>`
     case 'board': return BOARD.map(([x0, x1, y0, y1]) => `<rect class="prop fill" x="${p.x + x0}" y="${p.y + y0}" width="${x1 - x0}" height="${y1 - y0}" rx="1.5"/>`).join('')
+    case 'stall': {
+      // Side or front view: the ladder edge-on, rungs end-on; the wall shows only from the side.
+      if (front) return `<rect class="prop fill" x="${p.x - 3}" y="${RUNG(17.6)}" width="6" height="${-RUNG(17.6)}"/>${STALL.map((k) => `<circle class="prop bar" r="2.5" cx="${p.x}" cy="${RUNG(k)}"/>`).join('')}`
+      const w = p.wall ?? 1
+      const [x0, x1] = [Math.min(p.x, p.x + 13 * w), Math.max(p.x, p.x + 13 * w)]
+      return `<rect class="prop fill" x="${w > 0 ? x1 : x0 - 12}" y="-400" width="12" height="400"/><rect class="prop fill" x="${x0 - 3}" y="${RUNG(17.6)}" width="${x1 - x0 + 3}" height="${-RUNG(17.6)}"/>${STALL.map((k) => `<circle class="prop bar" r="2.5" cx="${p.x}" cy="${RUNG(k)}"/>`).join('')}`
+    }
   }
 }
+
+const STALL = Array.from({ length: 17 }, (_, i) => i + 1)
 
 /** Board blocks about the edge point, [x0, x1, y0, y1]: the board face in front, the edge the hand sits on (palm radius 4.5). */
 const BOARD = [[3, 28, -30, 16], [-7, 3, 4.5, 9]]
@@ -179,6 +188,15 @@ function prop3(p: Prop, m: Move, up = 0): [number, string] {
       const [z0, w] = [p.z ?? 0, (p.w ?? 120) / 2]
       const blocks = BOARD.map(([x0, x1, y0, y1]) => [x0, x1].flatMap((x) => [y0, y1].flatMap((y) => [z0 - w, z0 + w].map((z) => c(p.x + x, p.y + y, z)))))
       return [Math.min(...blocks.flat().map((q) => q.z ?? 0)), blocks.map((b) => poly(b, 'prop fill')).join('')]
+    }
+    case 'stall': {
+      // Wall, rails and rungs drawn behind the body: hands and feet sit on the rungs.
+      const [z0, z1, top] = [p.z ?? -40, (p.z ?? -40) + (p.span ?? 80), RUNG(17.6)]
+      const wx = p.x + 13 * (p.wall ?? 1)
+      const wall = poly([c(wx, 0, z0 - 60), c(wx, 0, z1 + 60), c(wx, -400, z1 + 60), c(wx, -400, z0 - 60)], 'prop fill')
+      const rails = [z0, z1].map((z) => seg(c(p.x, top, z), c(p.x, 0, z), 'prop thin') + seg(c(p.x, top, z), c(wx, top, z), 'prop thin')).join('')
+      const rungs = STALL.map((k) => seg(c(p.x, RUNG(k), z0), c(p.x, RUNG(k), z1), 'prop')).join('')
+      return [-999, wall + rails + rungs]
     }
   }
 }

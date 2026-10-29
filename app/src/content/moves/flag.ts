@@ -1,4 +1,4 @@
-import { place, type Body, type Move, type Pose, type Stage } from '../../core/figure'
+import { place, RUNG, type Body, type Move, type Pose, type Stage } from '../../core/figure'
 import { add3, b3, body, fit, grip3, hold, onBar, rep, type V3, p3, pinned3, reach3, solid3, twoHands3, type K3 } from './pull'
 
 // Pole flags, solid, chest 30 off facing the viewer. Built standing (z = near side), then rolled 90 so the near side
@@ -38,6 +38,17 @@ const clutch = (legs: Legs, roll = 90): K3 => {
   return reach3(k, { hand: add3(p3(k, 'farHand'), [0, -72, 0]) }, ['hand'])
 }
 
+// Stall bar flag support: the same "<" arms, the body rolled only 37-40 so it hangs diagonally off the ladder,
+// top hand on rung 13, bottom hand 4 rungs lower and 58 along it (the jump: 5 rungs, 20 along, to reach the flag).
+// The ladder runs away from the head.
+const LOW: V3 = [0, 52, -58]
+const JUMP: V3 = [0, 65, -20]
+const onRungs = (k: K3, low: V3): K3 => reach3(k, { hand: p3(k, 'hand'), farHand: add3(p3(k, 'hand'), low) })
+const ladder = (m: { keys: K3[]; beats: Move['beats']; mode?: Move['mode'] }, low: V3): Move =>
+  pinned3({ ...solid3(m, CAM), x: 'hand', y: 'hand', at: [0, RUNG(13)], props: [{ t: 'stall', x: 0, wall: -1, z: -72 }], ms: 1000 }, twoHands3(onRungs(flagK(LINE, 40), low)))
+const sup = (roll: number, legs: Legs = LINE, low = LOW): K3 => onRungs(flagK(legs, roll), low)
+const BENT: Legs = [30, -10, 30, -10]
+const J = (roll: number, legs: Legs = LINE) => sup(roll, legs, JUMP)
 // Side plank, solid, chest 20 off facing the viewer: standing pose rolled onto the far side, turned to lie along x.
 // The fit sets the roll and the bottom (far) arm: elbow under the shoulder on the floor, forearm flat ahead of it,
 // and `rest` (feet, or the top knee or ankle on a bench) where it belongs.
@@ -86,5 +97,8 @@ export const MOVES: Record<string, Move> = {
   clutch_flag: pole(hold(clutch(TUCK, 80), clutch(LINE), clutch(LINE, 93)), clutch(LINE)),
   straddle_flag: flagHold(LINE, 32),
   full_flag: flagHold(LINE),
+  flag_support: ladder({ keys: [sup(37), sup(40), sup(41)], beats: [{ hold: 0.5, dur: 1.2, ease: 'out' }, { hold: 1.5, dur: 1.5 }, { hold: 1.5, dur: 1.2 }], mode: 'cycle' }, LOW),
+  flag_jump: ladder({ keys: [J(37), J(35, BENT), J(82, TUCK), J(84, TUCK), J(60), J(37)], mode: 'cycle',
+    beats: [{ hold: 0.4, dur: 0.8, ease: 'out' }, { hold: 0.1, dur: 0.45, ease: 'snap' }, { dur: 0.3, ease: 'out' }, { hold: 0.8, dur: 1.2 }, { dur: 1.2, ease: 'out' }, { hold: 0.4, dur: 0.6 }] }, JUMP),
   flag_raise: pole({ ...rep(raise[0], null, raise.slice(1), { rise: 2.5, lower: 1.7, top: 0.6, bottom: 0.4 }) }, flagK(LINE)),
 }

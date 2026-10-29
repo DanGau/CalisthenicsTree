@@ -30,6 +30,14 @@ export type Prop =
   | { t: 'bars'; x: number; y: number; z?: number }
   /** Hangboard or campus rung: a block in front of the hands, its edge under a hand pinned at (x, y); `w` its width (solid). */
   | { t: 'board'; x: number; y: number; z?: number; w?: number }
+  /**
+   * Stall bars (Swedish ladder): rungs every 13 at x from y -13 to -221 (`RUNG(k)`), the wall 13 behind on side `wall`
+   * (default +x); front view, edge-on without the wall. Solid: rails at `z` and `z + span` (default -40, 80).
+   */
+  | { t: 'stall'; x: number; wall?: 1 | -1; z?: number; span?: number }
+
+/** Height of stall bar rung `k` (1 = lowest, 17 = top). */
+export const RUNG = (k: number) => -13 * k
 
 /**
  * `keys` play in order. `bounce` plays them back in reverse (reps); `cycle` jumps from the

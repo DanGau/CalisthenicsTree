@@ -1,4 +1,4 @@
-import type { Move, Pose, Stage } from '../../core/figure'
+import { RUNG, type Move, type Pose, type Stage } from '../../core/figure'
 import { H, KNEEL, ang, put, put3, repPath } from './mobility'
 
 /**
@@ -73,6 +73,13 @@ const nordic = (d: number, down: number, up: number): Move => ({
 const ghd = { t: 'box', x: -70, w: 66, h: 70 } as const
 const ext = (t: number, c: number, head: number): Pose => [t, c - 172, c - 20, c - 172, c - 20, -90, -90, -90, -90, c, head]
 
+// Stall bars at x 0, facing them. Hip pinned; hands and feet reached to world points.
+const STALL_HIP: [number, number] = [-70, 80.5]
+const stallPin = (hip: [number, number], wall: 1 | -1 = 1): Partial<Move> => ({ x: 'hip', y: 'hip', at: [hip[0], -hip[1]], props: [{ t: 'stall', x: 0, wall }] })
+const back = (deg: number): [number, number] => [STALL_HIP[0] - 76 * Math.sin((deg * Math.PI) / 180), STALL_HIP[1] - 76 * Math.cos((deg * Math.PI) / 180)]
+const revHyper = (near: number, far: number): Pose => put([150, 0, 0, 0, 0, 0, 0, 0, 0, 152, 160, -2], STALL_HIP,
+  { hand: [0, -RUNG(9)], farHand: [0, -RUNG(9)], foot: near ? back(near) : [-75, H.ankle], farFoot: far ? back(far) : [-75, H.ankle] })
+
 export const MOVES: Record<string, Move> = {
   // Drive up fast, squeeze at the top, lower slowly.
   glute_bridge: { ...repPath((s) => supine(H.lie + (29 - H.lie) * s, FEET), 0.8, 1.5, 0.3, 0.6), ...supPin },
@@ -101,5 +108,10 @@ export const MOVES: Record<string, Move> = {
   // Lower at a steady 3-5 s under control, curl back up with the hamstrings.
   nordic: nordic(66, 3.6, 1.8),
   nordic_strict: nordic(80, 4.5, 2.2),
+  // Hands on rung 9, leaning in: one straight leg lifts back from the hip, then the other.
+  stall_hip_ext: {
+    keys: [revHyper(0, 0), revHyper(32, 0), revHyper(0, 0), revHyper(0, 32)], mode: 'cycle', ...stallPin(STALL_HIP), ms: 1000,
+    beats: [{ hold: 0.2, dur: 1 }, { hold: 0.4, dur: 1.5 }, { hold: 0.2, dur: 1 }, { hold: 0.4, dur: 1.5 }],
+  },
   back_ext: { ...repPath((s) => ext(8 + 82 * s, -2 + 92 * s, -8 + 100 * s), 1, 1.6, 0.3, 0.6), x: 'hip', y: 'hip', at: [0, -80], props: [ghd] },
 }

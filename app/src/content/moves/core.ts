@@ -1,4 +1,4 @@
-import { place, type Move, type Pose } from '../../core/figure'
+import { place, RUNG, type Move, type Pose } from '../../core/figure'
 import { solve } from './frontlever'
 import { pos, reach, rot } from './legs'
 import { body, grip, grip3, hold, type K3, onBar, pinned, rep } from './pull'
@@ -87,6 +87,15 @@ const cutFwd = swingTo(body(176, 168, 172, [40, 20, 40, 20], 184, -2), -22)
 const cutBack = swingTo(body(184, 196, 190, [-14, -8, -14, -8], 178, 1), 14)
 const cutBrake = swingTo(body(180, 178, 180, [16, 6, 16, 6], 180, -4), -4)
 
+// Stall bars, back to the rungs: hands on the top rung just behind the head, the back against the bars.
+// Arms angle back up 14 to the rung, so shoulders, pelvis and the rungs line up.
+const stallPin = { x: 'hand' as const, y: 'hand' as const, at: [0, RUNG(17)] as [number, number], props: [{ t: 'stall', x: 0, wall: -1 } as const] }
+const sHang = body(180, 182, 182, [2, 0, 2, 0], 194, -3)
+const sLegs = (legs: number, t = 196): Pose => body(t, 182, 180, [legs, legs, legs, legs], 194, -4)
+// Leg circles, solid, 50 off the side: straight legs up at 80, sweeping out to one side, up, across and down.
+const circle = (legs: number, side: number): K3 => grip3(body(190, 182, 180, [legs, legs, legs, legs], 194, -4), { legOut: side, farLegOut: -side, roll: side * 0.15 }, [-10, -45, 26], [-10, -45, -26])
+const stallSolid = (m: { keys: K3[]; beats?: Move['beats']; mode?: Move['mode'] }): Move => ({ ...onBar(m, { view: 50, y: RUNG(17) }), props: [{ t: 'stall', x: 0, wall: -1, z: -40 }] })
+
 const hb = (hold: number, ...durs: number[]): Move['beats'] => durs.map((d, i) => ({ hold: i === 0 || i === durs.length - 1 ? hold : 0, dur: d }))
 
 export const MOVES: Record<string, Move> = {
@@ -97,7 +106,10 @@ export const MOVES: Record<string, Move> = {
   knee_raise: { ...rep(hang, null, [kneeUp], { rise: 1, lower: 1.6 }), ...hangPin, ms: 1000 },
   rollout_knee: { ...rep(kneel(-5, 115), null, [kneel(-62, 100)], { rise: 2, lower: 1.3, top: 0.3 }), x: 'knee', ms: 1000 },
   tuck_lsit: { ...hold(feetDown, tuck, support([142, 18, 142, 18], 177)), ...supportPin, ms: 1000 },
-  leg_raise: { ...rep(hang, null, [legsUp], { rise: 1.2, lower: 1.9 }), ...hangPin, ms: 1000 },
+  leg_raise: { ...rep(sHang, null, [sLegs(92)], { rise: 1.2, lower: 1.9 }), ...stallPin, ms: 1000 },
+  stall_lhang: { ...hold(sLegs(60, 190), sLegs(90), sLegs(93)), ...stallPin, ms: 1000 },
+  stall_vhang: { ...hold(sLegs(92), sLegs(140, 206), sLegs(144, 207)), ...stallPin, ms: 1000 },
+  stall_leg_circles: stallSolid({ keys: [circle(70, 40), circle(110, 0), circle(70, -40), circle(40, 0)], mode: 'cycle', beats: [{ dur: 1 }, { dur: 1 }, { dur: 1 }, { dur: 1 }] }),
   tuck_dragon: { keys: [dragon(10, true), dragon(-72, true)], mode: 'cycle', ...dragonPin, ms: 1000, beats: [{ hold: 0.3, dur: 2 }, { hold: 0.3, dur: 1.3 }] },
   lsit: { ...hold(tuck, ell, support([92, 92, 92, 92], 177)), ...supportPin, ms: 1000 },
   ttb: { ...rep(hang, null, [legsUp, ttbTop], { rise: 1.3, lower: 2 }), ...hangPin, ms: 1000 },
