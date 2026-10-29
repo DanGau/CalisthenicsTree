@@ -3,3 +3,5 @@ dist/
 screenshots/
 .DS_Store
 .mocap-cache/
+.video-cache/
+.venv-video/

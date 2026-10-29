@@ -124,7 +124,7 @@ Licenses read from the Commons file metadata API. US Army videos are US federal 
 | [B-boy Steve …](https://commons.wikimedia.org/wiki/File:B-boy_Steve_from_Knucklehead_Zoo.webm), [B-boy Cristyle …](https://commons.wikimedia.org/wiki/File:B-boy_Chris_%27Cristyle%27_Gatdula_R16_freestyle.webm) | CC BY-SA 3.0, Gbern3 | 21 s each, 1080p | toprock, footwork, powermoves (inspect) |
 | [Tutorial breakdance - Six Step.webm](https://commons.wikimedia.org/wiki/File:Tutorial_breakdance_-_Six_Step.webm) | CC BY 3.0, Neil Sweeney | 107 s | six step / footwork |
 | [Kick-up.webm](https://commons.wikimedia.org/wiki/File:Kick-up.webm) | CC BY 3.0, VincaniTV | 3 s, 1080p | kip_up (check) |
-| Army: "Hand-Release Push-Up (HRP)", "Conditioning Drill- Eight Count T Push-Up", "Interval Push-ups" | Public domain (US Army) | short | push-up variants; other ACFT/PRT drill videos likely cover leg tuck, plank, squat |
+| Army: "Hand-Release Push-Up (HRP)", "Conditioning Drill- Eight Count T Push-Up" | Public domain (US Army) | short | push-up variants; other ACFT/PRT drill videos likely cover leg tuck, plank, squat |
 | [Video of a free open outdoor gym … Mumbai.webm](https://commons.wikimedia.org/wiki/File:Video_of_a_free_open_outdoor_gym_-_Wadala_Five_Garden_nearby_Mumbai.webm) | CC BY 3.0, Jay Palav | 220 s, 360p | bar work (inspect; low res) |
 | [Pexels](https://www.pexels.com/license/) videos | "free to use", "can modify", no attribution; bans resale of unaltered copies and stock redistribution | — | Likely has pull-up, muscle-up, handstand, front lever, flag; search per skill |
 

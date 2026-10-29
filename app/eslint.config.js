@@ -10,7 +10,7 @@ const layer = (dir, allowed, message) => ({
 })
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'screenshots'] },
+  { ignores: ['dist', 'node_modules', 'screenshots', '.venv-video', '.video-cache'] },
   ...tseslint.configs.recommended,
   layer('core', '\./', 'core/ imports only core/. Pass data in instead.'),
   layer('content', '\./|\.\./(core|mocap)/|\.\./\.\./core/','content/ imports only content/ and core/.'),

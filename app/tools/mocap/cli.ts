@@ -1,5 +1,6 @@
 // Offline: CMU mocap clip → solid Move. See docs/figure.md (Mocap).
 //   npm run mocap -- sheet <clip> [from] [to] [step] [--yaw d] [--tilt d]      contact sheet + stats, to find frame ranges
+//   npm run mocap -- video <landmarks.json> <from> <to> <id> [--ground low|foot|hand] [--jump f] [--vis v] [--cutoff hz] [--beta b] [--step n] --title t --author a --license l --url u, plus build's flags
 //   npm run mocap -- build <clip> <from> <to> <id> [--mode cycle|bounce] [--pin hip|foot] [--yaw d] [--view d] [--tilt d] [--mirror] [--tol d] [--tail s]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -11,6 +12,7 @@ import { still } from '../../src/ui/figure'
 import { parse, type Bvh } from './bvh'
 import { retarget, skeleton, type Opts, type Skel } from './fit'
 import { build, reduce } from './reduce'
+import { loadLandmarks, videoSkeleton, type VideoOpts } from './video'
 import { png, stick } from './render'
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -74,24 +76,51 @@ async function sheet(clip: string) {
 
 const camel = (id: string) => id.replace(/_(\w)/g, (_, c: string) => c.toUpperCase())
 
-/** Retarget frames from..to, reduce to keys, write src/content/mocap/<id>.ts and a filmstrip. */
+type Source = { skel: Skel[]; low: number[]; chest: number; dt: number; frames: number[]; o: Opts; label: (i: number) => string; credit: string; title: string }
+
+/** Retarget frames from..to of a CMU clip. */
 async function make(clip: string) {
   const b = await load(clip)
-  const [from, to, id] = [+pos[2], +pos[3], pos[4]]
+  const [from, to] = [+pos[2], +pos[3]]
   const o: Opts = { ref: from, yaw: num('yaw', 0), mirror: flags.mirror === 'true', pin: (flags.pin ?? 'hip') as Opts['pin'] }
   const { skel, low, chest } = skeleton(b, o)
   const frames: number[] = []
   for (let f = from; f <= to; f += 4) frames.push(f)
-  const S = retarget(skel, low, chest, frames, b.dt, o)
+  const [s, t] = clip.split('_')
+  await emit(pos[4], { skel, low, chest, dt: b.dt, frames, o, label: String, title: `CMU ${clip} ${from}–${to}`,
+    credit: `// From the CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu): subject ${+s}, trial ${+t}, frames ${from}-${to} at 120 fps.` })
+}
+
+/** Video landmarks JSON (tools/video/landmarks.py) frames from..to. Credit flags: --title --author --license --url. */
+async function video(json: string) {
+  const L = loadLandmarks(json)
+  const [from, to] = [+pos[2], +pos[3]]
+  const o: VideoOpts = { yaw: num('yaw', 0), mirror: flags.mirror === 'true', pin: (flags.pin ?? 'hip') as Opts['pin'], ground: (flags.ground ?? 'low') as VideoOpts['ground'],
+    jump: num('jump', 0.15), minVis: num('vis', 0.5), cutoff: num('cutoff', 2), beta: num('beta', 0.3) }
+  const v = videoSkeleton(L, from, to, o)
+  const step = num('step', Math.max(1, Math.round(1 / 30 / v.dt)))
+  const frames: number[] = []
+  for (let i = 0; i < v.skel.length; i += step) frames.push(i)
+  const f0 = L.frames.find((x) => x.f >= from)!.f
+  const every = L.frames.length > 1 ? L.frames[1].f - L.frames[0].f : 1
+  const lic = flags.license ?? '?'
+  if (!flags.title || !flags.author || !flags.url || !flags.license) console.warn('credit missing: pass --title --author --license --url')
+  await emit(pos[4], { ...v, frames, o: { ...o, ref: 0 }, label: (i) => String(f0 + i * every), title: `video ${L.video} ${from}–${to}`,
+    credit: `// Pose-estimated (MediaPipe Pose Landmarker) from video "${flags.title ?? L.video}" by ${flags.author ?? '?'}, ${lic}, ${flags.url ?? '?'}, frames ${from}-${to} at ${+L.fps.toFixed(2)} fps.${/SA/.test(lic) ? `\n// These keys are an adaptation: ${lic}.` : ''}` })
+}
+
+/** Reduce a source to keys, write src/content/mocap/<id>.ts and a filmstrip. */
+async function emit(id: string, src: Source) {
+  const { skel, low, chest, dt, frames, o } = src
+  const S = retarget(skel, low, chest, frames, dt, o)
   const mode = (flags.mode ?? 'cycle') as Move['mode']
   const base: Parameters<typeof build>[0] = { mode, x: o.pin === 'hip' ? undefined : o.pin, view: flags.view ? +flags.view : undefined, tilt: flags.tilt ? +flags.tilt : undefined }
-  const tail = num('tail', 4 * b.dt)
+  const tail = num('tail', 4 * dt)
   const r = reduce(base, S, num('tol', 6), tail)
   const m = build(base, r.keys, r.dur, r.hold)
-  const [s, t] = clip.split('_')
   const opts = Object.entries(base).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}: ${JSON.stringify(v).replace(/"/g, "'")}`).join(', ')
-  const src = `// From the CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu): subject ${+s}, trial ${+t}, frames ${from}-${to} at 120 fps.
-// Generated: npm run mocap -- build ${argv.join(' ').replace(/^build /, '')}
+  const src_ = `${src.credit}
+// Generated: npm run mocap -- ${argv.join(' ')}
 import { clip } from './clip'
 
 // torso nearUpper nearFore farUpper farFore nearThigh nearShin farThigh farShin chest head scap | lift shift turn roll twist
@@ -100,11 +129,11 @@ export const ${camel(id)} = clip({ ${opts} }, [
 ${r.keys.map((k, i) => `  [${[...k, r.dur[i], r.hold[i]].join(', ')}],`).join('\n')}
 ])
 `
-  writeFileSync(resolve(APP, 'src/content/mocap', `${id}.ts`), src)
+  writeFileSync(resolve(APP, 'src/content/mocap', `${id}.ts`), src_)
   // Filmstrip: raw skeleton, per-frame fit, keyed move, at the same instants.
   const N = num('cols', 12)
   const pick = Array.from({ length: N }, (_, i) => S[Math.round((i * (S.length - 1)) / (N - 1))])
-  const raw = pick.map((p) => stick(skel[p.frame], base, [skel[p.frame].hip[0], 0, skel[p.frame].hip[2]], String(p.frame)))
+  const raw = pick.map((p) => stick(skel[p.frame], base, [skel[p.frame].hip[0], 0, skel[p.frame].hip[2]], src.label(p.frame)))
   const row = (cells: string[]) => `<div class="grid" style="grid-template-columns:repeat(${N},1fr)">${cells.map((c) => `<div class="cell">${c}</div>`).join('')}</div>`
   const fit = (p: (typeof S)[number]) => still({ ...base, solid: true, keys: [p.v.slice(0, 12) as Move['keys'][0]] }, p.v.slice(0, 12) as Move['keys'][0], ({ ...Object.fromEntries(COLS.map((c, j) => [c, p.v[12 + j]])), shift: 0 }))
   const keyed = (p: (typeof S)[number]) => {
@@ -117,7 +146,7 @@ ${r.keys.map((k, i) => `  [${[...k, r.dur[i], r.hold[i]].join(', ')}],`).join('\
     return still(old, st.pose, st)
   })) : ''
   const out = resolve(SHOTS, `mocap-${id}.png`)
-  await png(`<h3>${id}: CMU ${clip} ${from}–${to}. Rows: raw mocap, per-frame fit, ${r.keys.length} keys (max err ${r.err.toFixed(1)})${old ? ', current hand-made loop' : ''}</h3>`
+  await png(`<h3>${id}: ${src.title}. Rows: raw mocap, per-frame fit, ${r.keys.length} keys (max err ${r.err.toFixed(1)})${old ? ', current hand-made loop' : ''}</h3>`
     + row(raw.map((q) => `<svg viewBox="-110 -215 220 245">${q.svg}<line x1="-110" x2="110" y1="0" y2="0" stroke="#444"/></svg>`)) + row(pick.map(fit)) + row(pick.map(keyed)) + hand, out)
   console.log(JSON.stringify({ out, keys: r.keys.length, err: +r.err.toFixed(1), seconds: +(S[S.length - 1].t).toFixed(2) }))
 }
@@ -125,4 +154,5 @@ ${r.keys.map((k, i) => `  [${[...k, r.dur[i], r.hold[i]].join(', ')}],`).join('\
 const cmd = pos[0]
 if (cmd === 'sheet') await sheet(pos[1])
 else if (cmd === 'build') await make(pos[1])
+else if (cmd === 'video') await video(pos[1])
 else console.log('usage: npm run mocap -- sheet <clip> [from] [to] [step] | build <clip> <from> <to> <id> [flags]')

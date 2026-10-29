@@ -25,10 +25,15 @@ export type Skel = Record<'hip' | 'waist' | 'shoulder' | 'head' | 'nS' | 'nE' | 
 
 /** Every frame mapped into our world. `low` is the lowest point's height above the clip's floor. */
 export function skeleton(b: Bvh, o: Opts = {}): { skel: Skel[]; low: number[]; scale: number; chest: number } {
-  const P = positions(b)
-  const [N, F] = o.mirror ? ['Right', 'Left'] : ['Left', 'Right']
+  const N = o.mirror ? 'Right' : 'Left'
   const rest = positions({ ...b, frames: [b.frames[0].map(() => 0)] })[0]
   const legLen = norm(sub(rest[`${N}UpLeg`], rest[`${N}Leg`])) + norm(sub(rest[`${N}Leg`], rest[`${N}Foot`]))
+  return world(positions(b), legLen, norm(sub(rest.Spine, mid(rest.LeftArm, rest.RightArm))), o)
+}
+
+/** Frames of BVH-named joint positions (Y up) mapped into our world; `legLen` and `chestLen` in the same units. */
+export function world(P: Record<string, V>[], legLen: number, chestLen: number, o: Opts = {}): { skel: Skel[]; low: number[]; scale: number; chest: number } {
+  const [N, F] = o.mirror ? ['Right', 'Left'] : ['Left', 'Right']
   const scale = (LEN.thigh + LEN.shin) / legLen
   // World frame from the reference frame's facing (horizontal), turned by `yaw`.
   const p0 = P[o.ref ?? Math.min(1, P.length - 1)]
@@ -52,8 +57,7 @@ export function skeleton(b: Bvh, o: Opts = {}): { skel: Skel[]; low: number[]; s
     }
   })
   const low = P.map((p) => (Math.min(...Object.values(p).map((q) => q[1])) - floor) * scale)
-  const chest = norm(sub(rest.Spine, mid(rest.LeftArm, rest.RightArm))) * scale
-  return { skel, low, scale, chest }
+  return { skel, low, scale, chest: chestLen * scale }
 }
 
 const PIN = { hip: 'hip', foot: 'nA', farFoot: 'fA', hand: 'nW', farHand: 'fW' } as const
