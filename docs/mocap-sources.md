@@ -148,3 +148,20 @@ Quality: monocular estimates jitter and misjudge depth; side-view clips of sagit
 4. Email LAAS-CNRS asking for CC BY on the parkour set (pull-up, muscle-up, kong); the mocap would beat any video estimate.
 
 Credits to add when used: CC video authors as listed (BY-SA keys flagged in the move comment).
+
+## Game assets
+
+Checked 2026-10. Only CC0/CC BY/CC BY-SA/MIT allow committing derived keys. Importer: `mocap -- gltf` ([figure.md](figure.md#mocap)).
+
+| Source | License | Verdict | Clips → skills |
+|---|---|---|---|
+| [Quaternius Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html) (free Standard, [OGA zip](https://opengameart.org/content/universal-animation-library)) | CC0 | Usable; 45 game clips, little calisthenics | `Roll` → `dive_roll`: module `mocap/dive_roll.ts`, crouch-start dive onto the back, stylised; not wired (hand move keeps the run-up dive). Jump split in start/loop/land; crouch, crawl absent from free set |
+| [Quaternius UAL 2](https://quaternius.com/packs/universalanimationlibrary2.html) ([OGA zip](https://opengameart.org/content/universal-animation-library-2)) | CC0 | Usable; parkour clips mostly in paid Source tier | `ClimbUp_1m_RM`: a 0.7 s step-vault onto a waist ledge, not our climb-up; dropped |
+| [KayKit Animations](https://kaylousberg.itch.io/kaykit-animations) | CC0 | Legless legacy rig; nothing to fit | none |
+| [Ready Player Me library](https://github.com/readyplayerme/animation-library) | Own license: RPM avatars only, no redistribution | No | Locomotion, dance |
+| Mixamo | Adobe: no raw-file distribution | Reference only | Push-up, pull-up, breakdance, flips |
+| Unity Asset Store / Fab free packs | Standard EULAs: use inside a product, no source-form redistribution | Reference only | Fab "calisthenics" pack (paid) |
+| Sketchfab CC BY | Per model; download needs login | Not automated; nothing calisthenics found (one jittery CC BY breakdance chibi) | none |
+| [GreyFrogGames Skeleton](https://greyfroggames.itch.io/skeleton) | CC BY 4.0 | Idle/walk/jump only | none |
+
+Game clips are hand-keyed and stylised; none beat the current moves.

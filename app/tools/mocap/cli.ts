@@ -1,7 +1,8 @@
 // Offline: CMU mocap clip → solid Move. See docs/figure.md (Mocap).
 //   npm run mocap -- sheet <clip> [from] [to] [step] [--yaw d] [--tilt d]      contact sheet + stats, to find frame ranges
 //   npm run mocap -- video <landmarks.json> <from> <to> <id> [--ground low|foot|hand] [--jump f] [--vis v] [--cutoff hz] [--beta b] [--step n] --title t --author a --license l --url u, plus build's flags
-//   npm run mocap -- build <clip> <from> <to> <id> [--mode cycle|bounce] [--pin hip|foot] [--yaw d] [--view d] [--tilt d] [--mirror] [--tol d] [--tail s]
+//   npm run mocap -- gltf <file.glb> [anim] [from] [to] [id] [--fps n] --title t --author a --license l --url u, plus build's flags; no anim lists them, no id gives a contact sheet
+//   npm run mocap -- build <clip> <from> <to> <id> [--mode cycle|bounce] [--pin hip|foot] [--yaw d] [--view d] [--tilt d] [--mirror] [--tol d] [--tail s] [--seam s|off] [--match n] [--plant auto|joints]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,10 +11,12 @@ import { MOVES } from '../../src/content/moves'
 import { COLS } from '../../src/content/mocap/clip'
 import { still } from '../../src/ui/figure'
 import { parse, type Bvh } from './bvh'
-import { retarget, skeleton, type Opts, type Skel } from './fit'
+import { retarget, skeleton, world, type Opts, type Skel } from './fit'
 import { build, reduce } from './reduce'
 import { loadLandmarks, videoSkeleton, type VideoOpts } from './video'
 import { png, stick } from './render'
+import { contacts, poseGap, seam, slip } from './plant'
+import { load as loadGlb, names, sample } from './gltf'
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const CACHE = resolve(APP, '.mocap-cache')
@@ -109,15 +112,69 @@ async function video(json: string) {
     credit: `// Pose-estimated (MediaPipe Pose Landmarker) from video "${flags.title ?? L.video}" by ${flags.author ?? '?'}, ${lic}, ${flags.url ?? '?'}, frames ${from}-${to} at ${+L.fps.toFixed(2)} fps.${/SA/.test(lic) ? `\n// These keys are an adaptation: ${lic}.` : ''}` })
 }
 
+const dist = (a: number[], b: number[]) => Math.hypot(...sub(a, b))
+const mid3 = (a: number[], b: number[]) => a.map((v, i) => (v + b[i]) / 2)
+const medianOf = (xs: number[]) => [...xs].sort((a, b) => a - b)[xs.length >> 1]
+
+/** A skinned glTF/GLB animation (game asset) sampled at --fps, frames from..to. Credit flags as for video. */
+async function gltf(file: string) {
+  const g = loadGlb(file)
+  if (!pos[2]) return console.log(names(g).join('\n'))
+  const { P, dt, name } = sample(g, pos[2], num('fps', 30))
+  const [from, to] = [+(pos[3] ?? 0), Math.min(P.length - 1, +(pos[4] ?? Infinity))]
+  const side = flags.mirror === 'true' ? 'Right' : 'Left'
+  const leg = medianOf(P.map((p) => dist(p[`${side}UpLeg`], p[`${side}Leg`]) + dist(p[`${side}Leg`], p[`${side}Foot`])))
+  const chest = medianOf(P.map((p) => dist(p.Spine, mid3(p.LeftArm, p.RightArm))))
+  const o: Opts = { ref: from, yaw: num('yaw', 0), mirror: flags.mirror === 'true', pin: (flags.pin ?? 'hip') as Opts['pin'] }
+  const w = world(P, leg, chest, o)
+  const { skel, low } = w
+  if (!pos[5]) {
+    const cells = []
+    for (let f = from; f <= to; f += num('step', 3)) {
+      const { svg } = stick(skel[f], { view: num('view', 0), tilt: num('tilt', 15) }, [skel[f].hip[0], 0, skel[f].hip[2]])
+      cells.push(`<div class="cell"><b>${f}</b><svg viewBox="-110 -215 220 245">${svg}<line x1="-110" x2="110" y1="0" y2="0" stroke="#444"/></svg></div>`)
+    }
+    const out = resolve(SHOTS, `mocap-gltf-${name}-sheet.png`)
+    await png(`<h3>${name}, frames ${from}–${to} (${P.length} at ${num('fps', 30)} fps)</h3><div class="grid" style="grid-template-columns:repeat(10,1fr)">${cells.join('')}</div>`, out)
+    return console.log(out)
+  }
+  const frames: number[] = []
+  for (let f = from; f <= to; f++) frames.push(f)
+  if (!flags.title || !flags.author || !flags.url || !flags.license) console.warn('credit missing: pass --title --author --license --url')
+  await emit(pos[5], { skel, low, chest: w.chest, dt, frames, o, label: String, title: `${flags.title ?? file} "${name}" ${from}–${to}`,
+    credit: `// From game animation "${name}" in "${flags.title ?? file}" by ${flags.author ?? '?'}, ${flags.license ?? '?'}, ${flags.url ?? '?'}, frames ${from}-${to} sampled at ${num('fps', 30)} fps.` })
+}
+
 /** Reduce a source to keys, write src/content/mocap/<id>.ts and a filmstrip. */
 async function emit(id: string, src: Source) {
   const { skel, low, chest, dt, frames, o } = src
-  const S = retarget(skel, low, chest, frames, dt, o)
+  let S = retarget(skel, low, chest, frames, dt, o)
   const mode = (flags.mode ?? 'cycle') as Move['mode']
+  // Cycles: cut where the pose best matches the start (--match n samples back from the end), then ease into the start (--seam s | off).
+  const cycle = mode === 'cycle' && flags.seam !== 'off'
+  if (cycle && flags.match) {
+    const back = S.slice(-1 - num('match', 0)).map((x) => poseGap(x.v, S[0].v))
+    S = S.slice(0, Math.max(2, S.length - back.length + back.indexOf(Math.min(...back))))
+  }
   const base: Parameters<typeof build>[0] = { mode, x: o.pin === 'hip' ? undefined : o.pin, view: flags.view ? +flags.view : undefined, tilt: flags.tilt ? +flags.tilt : undefined }
   const tail = num('tail', 4 * dt)
+  // Contacts (cycles): --plant auto, or joints foot,farFoot,hand,farHand; --plant-height and --plant-speed tune detection.
+  const total = S[S.length - 1].t + (cycle ? S[1].t : tail)
+  const want = flags.plant && flags.plant !== 'auto' ? flags.plant.split(',') : undefined
+  const plants = flags.plant && mode === 'cycle'
+    ? contacts(skel, frames.slice(0, S.length), dt, total, { height: num('plant-height', 7), speed: num('plant-speed', 45) }).filter((p) => !want || want.includes(p.joint))
+    : []
+  // Down means on the floor: no lift while planted (data floors drift).
+  for (const s of S) if (plants.some((p) => (p.from > p.to ? s.t >= p.from || s.t <= p.to : s.t >= p.from && s.t <= p.to))) s.v[12] = 0
+  if (cycle) S = seam(S, num('seam', 0.15))
   const r = reduce(base, S, num('tol', 6), tail)
-  const m = build(base, r.keys, r.dur, r.hold)
+  if (cycle) {
+    // The appended start is the wrap, not a key.
+    base.travel = Math.round(r.keys[r.keys.length - 1][13] - r.keys[0][13]) || undefined
+    for (const a of [r.keys, r.dur, r.hold]) a.pop()
+  }
+  const m: Move = { ...build(base, r.keys, r.dur, r.hold), ...(plants.length ? { plants } : {}) }
+  if (plants.length) console.log(JSON.stringify({ plants, slip: +slip(m).toFixed(2) }))
   const opts = Object.entries(base).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}: ${JSON.stringify(v).replace(/"/g, "'")}`).join(', ')
   const src_ = `${src.credit}
 // Generated: npm run mocap -- ${argv.join(' ')}
@@ -127,7 +184,7 @@ import { clip } from './clip'
 // armOut farArmOut foreOut farForeOut legOut farLegOut shinOut farShinOut | dur hold
 export const ${camel(id)} = clip({ ${opts} }, [
 ${r.keys.map((k, i) => `  [${[...k, r.dur[i], r.hold[i]].join(', ')}],`).join('\n')}
-])
+]${plants.length ? `, [\n${plants.map((p) => `  { joint: '${p.joint}', from: ${p.from}, to: ${p.to} },`).join('\n')}\n]` : ''})
 `
   writeFileSync(resolve(APP, 'src/content/mocap', `${id}.ts`), src_)
   // Filmstrip: raw skeleton, per-frame fit, keyed move, at the same instants.
@@ -155,4 +212,5 @@ const cmd = pos[0]
 if (cmd === 'sheet') await sheet(pos[1])
 else if (cmd === 'build') await make(pos[1])
 else if (cmd === 'video') await video(pos[1])
+else if (cmd === 'gltf') await gltf(pos[1])
 else console.log('usage: npm run mocap -- sheet <clip> [from] [to] [step] | build <clip> <from> <to> <id> [flags]')

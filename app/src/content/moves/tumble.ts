@@ -1,5 +1,6 @@
 import { full, joints, LEN, place, type Beat, type Body, type Joint, type Move, type Pose, type Stage } from '../../core/figure'
 import { plant, pos, reach, rot, tween } from './legs'
+import { aerial } from '../mocap/aerial'
 import { backTuck } from '../mocap/back_tuck'
 
 // Rotations: forward rolls turn the figure by -360, backward ones by +360; the last key is the first turned once.
@@ -256,11 +257,7 @@ export const MOVES: Record<string, Move> = {
     ['foot', 'hand', 'hand', 'hand', 35, 30, 30, 'foot', 0], [[1, ['hand', 'farHand']], [2, ['hand', 'farHand']]]),
   front_walkover: planted({ keys: unwrap([reachUp, lungeDown, splitFwd, bridgeFwd, rot(reachUp, -360)]), mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 0.6 }, { dur: 0.8 }, { dur: 0.9 }, { hold: 0.2, dur: 0.9 }, { hold: 0.4, dur: 0.01 }] }, ['foot', 'hand', 'hand', 'foot', 0], [[1, ['hand', 'farHand']], [2, ['hand', 'farHand']], [3, ['foot']]]),
   back_walkover: planted({ keys: unwrap([reachUp, leanBack, bridgeBack, splitBack, rot(reachUp, 360)]), mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 1 }, { dur: 0.7 }, { hold: 0.2, dur: 0.8 }, { dur: 0.8 }, { hold: 0.4, dur: 0.01 }] }, ['foot', 'foot', 'hand', 'foot', 0], [0, 1, [2, ['hand', 'farHand']]]),
-  aerial: (() => {
-    const ks = [star(0, 160, 4), star(10, 170, 14), star(90, 150, 50), star(180, 150, 50), star(270, 150, 45), star(360, 160, 8), star(360, 160, 4)]
-    const fly = air(([1, 2, 3, 4, 5] as const).map((i, j): [Pose, number, Beat] => [ks[i][0], [0.12, 0.3, 0.52, 0.74, 0.95][j], ks[i][1]]), 0.5)
-    return travelled({ keys: ks.map((k) => k[0]), mode: 'cycle', solid: true, view: FACE, ms: 1000, flow: 0.05, beats: [{ ...ks[0][1], hold: 0.5, dur: 0.35 }, ...fly.slice(0, -1), { ...fly[4], dur: 0.35 }, { ...ks[6][1], hold: 0.4, dur: 0.01 }] }, ['foot', 30, 40, 40, 30, 'farFoot', 0])
-  })(),
+  aerial,
   front_handspring: (() => {
     const keys = unwrap([reachUp, lunge, reachDown, hurdle, hs, flyFwd, landArch, archAbsorb, rot(reachUp, -360)])
     const fly = air([[keys[4], 0.12], [keys[5], 0.5], [keys[6], 0.95]], 0.45)

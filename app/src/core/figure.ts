@@ -73,7 +73,12 @@ export type Move = {
   climb?: number
   /** Overlap: forearms, shins and head trail the body by this fraction of a transition (0.1-0.25 for swings, throws, flight). */
   flow?: number
+  /** Solid moves: limb ends held still while down (mocap contacts), by shift and limb IK. */
+  plants?: Plant[]
 }
+
+/** `joint` stays at its mean place from `from` to `to` (loop time, in `dur` units; `from > to` wraps the seam). */
+export type Plant = { joint: 'hand' | 'farHand' | 'foot' | 'farFoot'; from: number; to: number }
 
 /**
  * - `in`: accelerates (falling, dropping into a catch); `out`: decelerates (rising to an apex, settling).
@@ -332,6 +337,11 @@ const ENDS: Record<Ease, [number | null, number | null]> = {
  * `climb` accumulate across loops.
  */
 export function at(m: Move, ms: number): Stage & { pose: Pose } {
+  const s = spline(m, ms)
+  return m.plants?.length && m.solid ? planted(m, ms, s) : s
+}
+
+function spline(m: Move, ms: number): Stage & { pose: Pose } {
   const seq = sequence(m)
   if (seq.length === 1) return seq[0]
   const step = m.ms ?? 900
@@ -389,4 +399,110 @@ export const sink = (m: Move, p: Pose, st: Partial<Stage> = {}) => {
   // True heights: camera tilt only changes how the floor is drawn.
   const b = place({ ...m, tilt: 0 }, p, st)
   return Math.max(...POINTS.map((k) => b[k].y), b.head.y + LEN.head)
+}
+
+/** Solid joints pinned but not yet seen through the camera. */
+const ground = (m: Move, p: Pose, st: Stage) => pin(m, solid(p, st, m.point), st.lift, st.shift)
+/** Limb channels a plant's IK moves: two pose angles and the swing out. */
+const LIMB: Record<Plant['joint'], [number, number, keyof Stage]> = { hand: [1, 2, 'armOut'], farHand: [3, 4, 'farArmOut'], foot: [5, 6, 'legOut'], farFoot: [7, 8, 'farLegOut'] }
+/** Loop time a plant eases in and out over, in `dur` units. */
+const RAMP = 0.08
+const targets = new WeakMap<Move, V3[]>()
+
+/** Where each plant holds: its joint's mean place over the window on the uncorrected path. */
+function plantTargets(m: Move): V3[] {
+  const hit = targets.get(m)
+  if (hit) return hit
+  const step = m.ms ?? 900
+  const total = loopMs(m) / step
+  const out = m.plants!.map((p) => {
+    const end = p.from > p.to ? p.to + total : p.to
+    const sum: V3 = [0, 0, 0]
+    let n = 0
+    for (let u = p.from; u <= end + 1e-9; u += Math.min(0.02, (end - p.from) / 4 || 1)) {
+      const s = spline(m, u * step)
+      const b = ground(m, s.pose, s)[p.joint]
+      sum[0] += b.x; sum[1] += b.y; sum[2] += b.z ?? 0
+      n++
+    }
+    return sum.map((v) => v / n) as V3
+  })
+  targets.set(m, out)
+  return out
+}
+
+/** A plant's weight at `g` (dur units since start): 1 in a window, easing to 0 over RAMP outside; and the loop that window began in. */
+function plantWeight(p: Plant, g: number, total: number): [number, number] {
+  const len = (p.to - p.from + total) % total
+  let best: [number, number] = [0, 0]
+  for (let k = Math.floor(g / total) - 1; k <= Math.floor(g / total) + 1; k++) {
+    const a = p.from + k * total
+    const d = g < a ? a - g : g > a + len ? g - a - len : 0
+    const w = d >= RAMP ? 0 : 1 - d / RAMP
+    if (w * w * (3 - 2 * w) > best[0]) best = [w * w * (3 - 2 * w), k]
+  }
+  return best
+}
+
+/** Move shift and limb angles so each planted joint sits on its target. */
+function planted(m: Move, ms: number, s: Stage & { pose: Pose }): Stage & { pose: Pose } {
+  const step = m.ms ?? 900
+  const total = loopMs(m) / step
+  const g = Math.max(0, ms) / step
+  const T = plantTargets(m)
+  const live = m.plants!.map((p, i) => {
+    const [w, k] = plantWeight(p, g, total)
+    return { p, w, t: [T[i][0] + k * (m.travel ?? 0), T[i][1], T[i][2]] as V3 }
+  }).filter((x) => x.w > 0)
+  if (!live.length) return s
+  const pose = [...full(s.pose)] as number[]
+  // Planted on the floor: no flight.
+  const st: Stage = { ...s, lift: (m.y ?? 'floor') === 'floor' ? 0 : s.lift }
+  const where = (j: Plant['joint']): V3 => {
+    const b = ground(m, pose as Pose, st)[j]
+    return [b.x, b.y, b.z ?? 0]
+  }
+  // The strongest contact moves the body along; then each limb reaches for its own target.
+  const lead = live.reduce((a, b) => (b.w > a.w ? b : a))
+  for (let round = 0; round < 3; round++) {
+    st.shift += lead.t[0] - where(lead.p.joint)[0]
+    for (const { p, t } of live) {
+      const [a, b, out] = LIMB[p.joint]
+      const get = () => [pose[a], pose[b], st[out]]
+      const set = (v: number[]) => { [pose[a], pose[b]] = [v[0], v[1]]; (st[out] as number) = v[2] }
+      for (let it = 0; it < 4; it++) {
+        const x0 = get()
+        const e = where(p.joint).map((v, k) => t[k] - v)
+        if (Math.hypot(...e) < 0.05) break
+        // Damped Gauss-Newton on a finite-difference Jacobian.
+        const J = [0, 1, 2].map((c) => {
+          const x = [...x0]
+          x[c] += 0.5
+          set(x)
+          const q = where(p.joint)
+          set(x0)
+          return q.map((v, k) => (v - (t[k] - e[k])) / 0.5)
+        })
+        const A = [0, 1, 2].map((r) => [0, 1, 2].map((c) => J[r].reduce((sum, _, k) => sum + J[r][k] * J[c][k], 0) + (r === c ? 0.01 : 0)))
+        const rhs = [0, 1, 2].map((r) => J[r].reduce((sum, v, k) => sum + v * e[k], 0))
+        set(x0.map((v, k) => v + solve3(A, rhs)[k]))
+      }
+    }
+  }
+  // Ease each correction in by its plant's weight; shift by the lead's.
+  const pz = [...full(s.pose)] as number[]
+  const out: Stage = { ...s, shift: s.shift + (st.shift - s.shift) * lead.w, lift: s.lift + (st.lift - s.lift) * lead.w }
+  for (const { p, w } of live) {
+    const [a, b, o] = LIMB[p.joint]
+    for (const i of [a, b]) pz[i] += (pose[i] - pz[i]) * w
+    ;(out[o] as number) = s[o] + (st[o] - s[o]) * w
+  }
+  return { ...out, pose: pz as Pose }
+}
+
+/** Solve a 3x3 linear system (Cramer). */
+function solve3(A: number[][], b: number[]): number[] {
+  const det = (M: number[][]) => M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0])
+  const d = det(A) || 1
+  return [0, 1, 2].map((c) => det(A.map((row, r) => row.map((v, k) => (k === c ? b[r] : v)))) / d)
 }

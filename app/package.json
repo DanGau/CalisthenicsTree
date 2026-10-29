@@ -10,6 +10,7 @@
     "test": "vitest run",
     "eye": "tsx eye/eye.ts",
     "mocap": "tsx tools/mocap/cli.ts",
+    "mocap:all": "tsx tools/mocap/batch.ts",
     "check": "npm run lint && npm run typecheck && npm run test",
     "prepare": "git config core.hooksPath .githooks"
   },

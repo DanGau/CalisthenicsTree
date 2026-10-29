@@ -1,0 +1,4 @@
+{
+  "back_tuck": { "clip": "88_01", "from": 16, "to": 190, "flags": "--tol 8 --plant auto --plant-speed 70" },
+  "aerial": { "clip": "90_08", "from": 150, "to": 300, "flags": "--plant auto --view 90" }
+}
