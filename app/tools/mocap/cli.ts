@@ -158,9 +158,11 @@ async function emit(id: string, src: Source) {
   }
   const base: Parameters<typeof build>[0] = { mode, x: o.pin === 'hip' ? undefined : o.pin, view: flags.view ? +flags.view : undefined, tilt: flags.tilt ? +flags.tilt : undefined }
   // Hanging or supported on a prop (--grip bar:-210, rings:-210, bars:-130): the near hand is pinned on it, the body hangs from there.
+  // `auto` height: the hand's median height above the lowest foot, so the feet can also plant on the floor (rows).
   if (flags.grip) {
-    const [t, y] = flags.grip.split(':')
-    Object.assign(base, { x: 'hand', y: 'hand', at: [0, +y], props: [{ t, x: 0, y: +y }] })
+    const [t, h] = flags.grip.split(':')
+    const y = h === 'auto' ? -Math.round(medianOf(frames.map((f) => Math.max(skel[f].nA[1], skel[f].fA[1], skel[f].nT[1], skel[f].fT[1]) - skel[f].nW[1]))) : +h
+    Object.assign(base, { x: 'hand', y: 'hand', at: [0, y], props: [{ t, x: 0, y }] })
     for (const s of S) s.v[12] = s.v[13] = 0
   }
   const tail = num('tail', 4 * dt)

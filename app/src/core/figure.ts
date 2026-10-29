@@ -464,10 +464,11 @@ function planted(m: Move, ms: number, s: Stage & { pose: Pose }): Stage & { pose
     const b = ground(m, pose as Pose, st)[j]
     return [b.x, b.y, b.z ?? 0]
   }
-  // The strongest contact moves the body along; then each limb reaches for its own target.
+  // The strongest contact moves the body along (unless a hand is pinned on a prop); then each limb reaches for its own target.
   const lead = live.reduce((a, b) => (b.w > a.w ? b : a))
+  const free = (m.x ?? 'hip') === 'hip'
   for (let round = 0; round < 3; round++) {
-    st.shift += lead.t[0] - where(lead.p.joint)[0]
+    if (free) st.shift += lead.t[0] - where(lead.p.joint)[0]
     for (const { p, t } of live) {
       const [a, b, out] = LIMB[p.joint]
       const get = () => [pose[a], pose[b], st[out]]
