@@ -92,3 +92,59 @@ Offline in Node, under `app/tools/mocap/` (not shipped). Commit only derived key
 9. **Check** with `npm run eye` and adjust by hand; mocap is a reference, not a final pose.
 
 Attribution text: "Some motion derived from the CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu), created with funding from NSF EIA-0196217."
+
+## Second hunt (2026-10)
+
+Wider search: more libraries, CC video, and video-to-3D estimators. Verdict: **no new mocap library unlocks pull/push/lever/flag.** The only new legal route to those skills is pose estimation from public-domain or CC video.
+
+### Libraries re-checked
+
+| Source | License (key clause) | Public derived data? | Coverage | Notes |
+|---|---|---|---|---|
+| Mixamo | Adobe FAQ (via [Adobe community FAQ](https://community.adobe.com/t5/mixamo-discussions/mixamo-faq-licensing-royalties-ownership-eula-and-tos/td-p/13234775)): use "in any creative project"; prohibited: "distributing the raw character or animation files"; no ML training. helpx FAQ returns 403, not re-read | **Grey.** Keys rendered into our figure are arguably "use in a project", but committed keyframes are an editable re-encoding; Adobe community answers call that redistribution | Push-up, pull-up, breakdance, flips, burpee | Keep as eye reference only |
+| [Truebones](https://truebones.gumroad.com/l/vlvPq) | "royalty free … any and all purposes"; "Re-Distribution or ReSale … in .FBX, .BVH or i-Motion formats is strictly prohibited" | Probably yes (derived keys are not FBX/BVH); credit requested | Free packs are mostly creatures, dance, locomotion | Low value; no calisthenics content found |
+| Rokoko Motion Library | Free set "licensed for use in commercial projects" ([CG Channel 2020](https://www.cgchannel.com/2020/03/get-150-free-mocap-moves-from-rokokos-motion-library)); current terms not found | Unverified | Generic actions | Skip until terms are readable |
+| [SFU Mocap](https://mocap.cs.sfu.ca/) | "free for research purposes"; "cannot be used for commercial products or resale" | Unclear (non-commercial, but "research purposes") | Cartwheel (`0007_Cartwheel001`), rolls, parkour vaults, jumps, yoga | Ask the maintainers; would add cartwheel, rolls, vaults, yoga |
+| [LAAS Parkour MoCap](https://gepettoweb.laas.fr/parkour/) | No license; only "© 2020", cite Maldonado 2017 | **No** (all rights reserved by default) | Safety vault, kong, **pull-up, muscle-up** (C3D, 400 Hz, + video) | Best content match for pull/muscle_up; email LAAS-CNRS for CC BY permission |
+| [KIT Motion DB](https://motion-database.humanoids.kit.edu/faq/) | No data license; "freely available to the whole scientific community"; account required | No (unstated) | Everyday, some sport | Skip |
+| HDM05 | Site 403; known research-use terms | No | Cartwheel, push-ups, sit-ups, squats, jumping jacks, rope skipping | Would be ideal; ask MPI |
+| Bandai Namco | CC BY-NC 4.0 | Yes (NC) | Re-checked: no acrobatics or exercise | Still irrelevant |
+| MoCapAct | CDLA-Permissive (not re-verified) | Yes | CMU clips retargeted for RL | Nothing beyond CMU |
+| [Sketchfab](https://sketchfab.com/3d-models/push-up-0db5cd5e3018483e8da071b1205b758e) CC BY models | CC BY 4.0 per model | **Yes**, with attribution | "Push Up" by Gimme1 (animation/rig unconfirmed); "Cyberpunk: Break-dance Girl" (CC BY, author calls it "glitchy") | Hand-keyed by hobbyists; quality varies; check each page for rig and animation before use |
+| Zenodo/SimTK biomechanics | Many CC BY, but none found with pull-up/push-up/levers | — | Gait, run, jump, hop (e.g. BioCV) | Jumps already covered by CMU |
+
+### CC / public-domain video (video-to-mocap route)
+
+Licenses read from the Commons file metadata API. US Army videos are US federal works (public domain).
+
+| File | License | Length | Covers |
+|---|---|---|---|
+| [Airflare.webm](https://commons.wikimedia.org/wiki/File:Airflare.webm) | CC BY-SA 4.0, B2frison | 9 s, 720p | airflare / flare |
+| [Break dance 240fps.ogv](https://commons.wikimedia.org/wiki/File:Break_dance_240fps.ogv) | CC BY-SA 4.0, HendrixHammer | 58 s, 720p slow-mo | powermoves, freezes (inspect) |
+| [B-boy Steve …](https://commons.wikimedia.org/wiki/File:B-boy_Steve_from_Knucklehead_Zoo.webm), [B-boy Cristyle …](https://commons.wikimedia.org/wiki/File:B-boy_Chris_%27Cristyle%27_Gatdula_R16_freestyle.webm) | CC BY-SA 3.0, Gbern3 | 21 s each, 1080p | toprock, footwork, powermoves (inspect) |
+| [Tutorial breakdance - Six Step.webm](https://commons.wikimedia.org/wiki/File:Tutorial_breakdance_-_Six_Step.webm) | CC BY 3.0, Neil Sweeney | 107 s | six step / footwork |
+| [Kick-up.webm](https://commons.wikimedia.org/wiki/File:Kick-up.webm) | CC BY 3.0, VincaniTV | 3 s, 1080p | kip_up (check) |
+| Army: "Hand-Release Push-Up (HRP)", "Conditioning Drill- Eight Count T Push-Up", "Interval Push-ups" | Public domain (US Army) | short | push-up variants; other ACFT/PRT drill videos likely cover leg tuck, plank, squat |
+| [Video of a free open outdoor gym … Mumbai.webm](https://commons.wikimedia.org/wiki/File:Video_of_a_free_open_outdoor_gym_-_Wadala_Five_Garden_nearby_Mumbai.webm) | CC BY 3.0, Jay Palav | 220 s, 360p | bar work (inspect; low res) |
+| [Pexels](https://www.pexels.com/license/) videos | "free to use", "can modify", no attribution; bans resale of unaltered copies and stock redistribution | — | Likely has pull-up, muscle-up, handstand, front lever, flag; search per skill |
+
+Commons searches for handstand, planche, lever, flag video returned nothing usable. Pexels/Pixabay and YouTube's CC filter are the next places to look per skill. Deriving keyframes from a CC BY-SA video makes the keys arguably an adaptation: credit the author and treat those keys as CC BY-SA.
+
+### Estimators
+
+| Tool | License | Runs on CPU (Windows) | Output | Fit |
+|---|---|---|---|---|
+| [MediaPipe Pose Landmarker](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker) (BlazePose GHUM 3D) | Code Apache 2.0; model card (BlazePose GHUM 3D) states Apache 2.0 | Yes, `pip install mediapipe`, real time | 33 world landmarks (m, hip-centred) per frame | **Best start.** Weak on inverted and spinning poses (flare, windmill, handstand) and self-occlusion |
+| [MotionBERT](https://github.com/Walter0807/MotionBERT) | Apache 2.0 | Yes (slow), needs 2D keypoints first (H36M 17) | 3D joints | Smoother lifting than MediaPipe; 3D pose path needs no SMPL |
+| [WHAM](https://github.com/yohanshin/WHAM) | MIT code, but needs SMPL (registration, non-commercial) | GPU in practice | SMPL + world trajectory | Best quality; SMPL terms make derived data murky; skip |
+
+Quality: monocular estimates jitter and misjudge depth; side-view clips of sagittal skills (pull-up, muscle-up, push-up, lever, planche) work best and map straight onto our sagittal angles. Powermoves will need heavy hand correction.
+
+### Recommended next step
+
+1. Add `app/tools/mocap/video.py` (git-ignored input folder): MediaPipe Pose on one clip → per-frame world landmarks JSON.
+2. Feed that JSON into pipeline steps 4–9 above (same joint set as the BVH path).
+3. Pilot on `Hand-Release Push-Up` (public domain, side view) for push-up, then a Pexels pull-up. Judge with `npm run eye` against the hand-keyed move.
+4. Email LAAS-CNRS asking for CC BY on the parkour set (pull-up, muscle-up, kong); the mocap would beat any video estimate.
+
+Credits to add when used: CC video authors as listed (BY-SA keys flagged in the move comment).
