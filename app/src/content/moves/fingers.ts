@@ -72,7 +72,8 @@ const R1 = -200
 const rung = (n: number) => R1 - (n - 1) * RUNG
 type St = { hip: [number, number]; hand: number | null; far: number | null; legs: Legs; t?: number; dur: number; ease?: 'io' | 'in' | 'out' }
 const ease = { io: (u: number) => u * u * (3 - 2 * u), in: (u: number) => u * u, out: (u: number) => 1 - (1 - u) * (1 - u) }
-const campus = (states: St[]): Move => {
+/** `feet`: both feet on a foothold at this point (foot-on campus), solved every sample too. */
+const campus = (states: St[], feet?: [number, number]): Move => {
   const ms = 20
   const keys: Pose[] = []
   const beats: Beat[] = []
@@ -108,13 +109,14 @@ const campus = (states: St[]): Move => {
       }
       const p = body(t, t + 2, t, legs, 180, -2)
       const [h, fh] = [hy('hand'), hy('far')]
-      keys.push(reach(p, { hand: [h[0] - hip[0], h[1] - hip[1]], farHand: [fh[0] - hip[0], fh[1] - hip[1]] }))
+      const f: [number, number] | undefined = feet && [feet[0] - hip[0], feet[1] - 6 - hip[1]]
+      keys.push(reach(p, { hand: [h[0] - hip[0], h[1] - hip[1]], farHand: [fh[0] - hip[0], fh[1] - hip[1]], ...(f ? { foot: [f[0] - 3, f[1]], farFoot: [f[0] - 3, f[1]] } : {}) }))
       beats.push({ lift: -hip[1], shift: hip[0], dur: ms / 1000 })
     }
   })
   return {
     keys, beats, mode: 'cycle', x: 'hip', y: 'hip', at: [0, 0], ms: 1000, floor: false,
-    props: [1, 2, 3, 4, 5].map((n) => ({ t: 'board' as const, x: 0, y: rung(n) })),
+    props: [...[1, 2, 3, 4, 5].map((n) => ({ t: 'board' as const, x: 0, y: rung(n) })), ...(feet ? [{ t: 'board' as const, x: feet[0], y: feet[1] }] : [])],
   }
 }
 // Hip below the hands: 100 straight-armed, 64 pulled in, about 4 behind the rungs.
@@ -152,6 +154,18 @@ const double = campus([
   { hip: [-4, rung(1) + 84], hand: 1, far: 1, legs: L, dur: 0.45, ease: 'out' },
 ])
 
+// Foot-on ladder 1-2-3 and back, smooth and steady: hips back from the board, feet on a low rung, torso leaning in.
+const FT: [number, number] = [0, -96]
+const F: Legs = [60, -20, 60, -20]
+const fo = (y: number, hand: number | null, far: number | null, dur: number): St => ({ hip: [-34, y + 88], hand, far, legs: F, t: 160, dur, ease: 'io' })
+const footOn = campus([
+  fo(rung(1), 1, 1, 0.5), fo(rung(1) - 4, null, 1, 0.3), fo(rung(1) - 11, 2, 1, 0.35), fo(rung(1) - 15, 2, null, 0.3), fo(rung(2) - 11, 2, 3, 0.35),
+  fo(rung(2) - 15, null, 3, 0.3), fo(rung(3), 3, 3, 0.6), fo(rung(3) + 4, null, 3, 0.3), fo(rung(2) - 11, 2, 3, 0.35), fo(rung(2) - 7, 2, null, 0.3),
+  fo(rung(1) - 11, 2, 1, 0.35), fo(rung(1) - 7, null, 1, 0.3),
+], FT)
+// One foot down, the other knee lifted: long light hangs.
+const abOne = (sit: number): Pose => { const p = abBody(sit); p[7] = 50; p[8] = -40; return p }
+
 const breathe: Beat[] = [{ hold: 0.3, dur: 1.2 }, { hold: 0.3 }]
 
 export const MOVES: Record<string, Move> = {
@@ -178,4 +192,12 @@ export const MOVES: Record<string, Move> = {
   max_hang_50: reps(on(-47), on(-46), 5, 3),
   campus_power: double,
   oa_hang_15: board(onBar(hold(oneArm([6, 0, 8, 0], 3, 45), oneArm([4, 0, 9, -2], -3, 50), oneArm([5, -1, 10, -3], -4, 52)), { free: true })),
+  density_hang: pinned({
+    ...AB, mode: 'cycle', keys: [abBody(0), abOne(8), abOne(10), abOne(8), abBody(0)].map(toEdge),
+    beats: [{ hold: 0.6, dur: 1 }, { hold: 1.5, dur: 2 }, { hold: 1.5, dur: 2 }, { dur: 1 }, { hold: 0.4, dur: 0.6 }],
+    props: [{ t: 'board', x: AB_EDGE.x, y: AB_EDGE.y }],
+  }, toEdge, 20),
+  max_test: reps(on(-48), on(-47), 7, 4),
+  repeater_test: reps(on(-50), on(-47.5), 7, 3),
+  campus_curve: footOn,
 }

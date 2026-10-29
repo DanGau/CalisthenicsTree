@@ -100,11 +100,11 @@ export const QUESTIONS: Question[] = [
     { label: '1–2 years', grants: ['hang_20'] },
     { label: '2+ years', grants: ['repeaters'] },
   ] },
-  { id: 'hangboard', ask: 'Best 10s hang on a 20 mm edge?', options: [
+  { id: 'hangboard', ask: 'Best 7s hang on a 20 mm edge?', options: [
     { label: 'Never tried' },
     { label: 'Bodyweight', grants: ['hang_20'] },
-    { label: '+25% BW', grants: ['max_hang'] },
-    { label: '+50% BW', grants: ['max_hang_50'] },
+    { label: '+25% BW (≈V4)', grants: ['max_hang'] },
+    { label: '+50% BW (≈V8)', grants: ['max_hang_50'] },
     { label: 'One arm', grants: ['oa_hang_20'] },
   ] },
   { id: 'frog', ask: 'Frog stretch, hips at knee line?', options: [

@@ -1,4 +1,6 @@
 import { type Move, type Pose, type Prop } from '../../core/figure'
+import { fig, type Key, sampled } from './hips'
+import { H } from './mobility'
 import { balance, bent, com3, world, fit, fit3, handOf, holdBeats, type Key3, line, reachTo, rep, set, solidMove, straight, tween } from './push'
 
 const ARM = 54
@@ -65,6 +67,20 @@ const m = (keys: Pose[]): Move => ({ keys, x: 'hand', ms: 1000 })
 const floatRep = (body: Pose, top: Pose, u: number, down: number, up: number) =>
   rep(top, press(body, u), (f) => press(body, top[1] + (u - top[1]) * f), down, up, [0.3, 0.3])
 
+// Spider-Man hold: straight-arm plank, hips level; one knee draws up outside its arm to the elbow and holds.
+// `u` 0 plank, ±1 near or far knee up, past ±1 a breath.
+const SPIDER = (u: number, prev?: Key): Key => {
+  const [s, e] = [Math.sign(u), Math.min(Math.abs(u), 1)]
+  const b = Math.max(0, Math.abs(u) - 1) / 0.04
+  const toe = (z: number): [number, number, number] => [-66, 13, z]
+  const up: [number, number, number] = [2 - 68 * (1 - e), 13 + 14 * e + 14 * Math.sin(Math.PI * e), 10 + 22 * e]
+  const leg = (side: number) => (side === s && e > 0 ? { end: [up[0], up[1], side * up[2]] as [number, number, number], pole: [1, 0.2, side] as [number, number, number] } : { end: toe(side * 10), pole: [0, 1, 0] as [number, number, number] })
+  return fig([100, 0, 0, 0, 0, 0, 0, 0, 0, 100 - b, 110], [0, 49], {
+    hand: { end: [45, H.hand, 18], pole: [-1, 0, 0.3] }, farHand: { end: [45, H.hand, -18], pole: [-1, 0, -0.3] },
+    foot: leg(1), farFoot: leg(-1),
+  }, {}, prev)
+}
+
 export const MOVES: Record<string, Move> = {
   plank: { ...m([sag, hollow, reachTo((t) => line(t, -5), ARM - 0.5, D_HANDS, 0, -1, 100, 150)]), beats: holdBeats(1.6, 2) },
   scap_pu: { ...m([retract, protract]), beats: [{ hold: 0.3, dur: 1 }, { hold: 0.4, dur: 0.8 }], mode: 'cycle' },
@@ -78,4 +94,8 @@ export const MOVES: Record<string, Move> = {
   full_planche: { ...m([advTuck, planche, float(fullBody(4))]), beats: holdBeats(2.5, 1.5) },
   planche_pu: { x: 'hand', ...floatRep(fullBody(), planche, -82, 2.5, 1.8) },
   maltese,
+  spiderman_hold: {
+    ...sampled([{ u: 0, sec: 0.6 }, { u: 1, sec: 1 }, { u: 1.04, sec: 2 }, { u: 1, sec: 2 }, { u: 0, sec: 0.9 }, { u: 0, sec: 0.6 }, { u: -1, sec: 1 }, { u: -1.04, sec: 2 }, { u: -1, sec: 2 }, { u: 0, sec: 0.9 }], SPIDER),
+    x: 'hip', y: 'hip', at: [0, 0], solid: true, view: 25, tilt: 8,
+  },
 }

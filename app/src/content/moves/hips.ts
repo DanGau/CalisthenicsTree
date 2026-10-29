@@ -8,7 +8,7 @@ type V3 = [number, number, number]
 type Limb = 'hand' | 'farHand' | 'foot' | 'farFoot'
 /** Limb end (and optionally its elbow or knee) as world points; `pole` is the world direction the joint bends toward. */
 type Tgt = { end: V3; mid?: V3; pole?: V3 }
-type Key = [Pose, Partial<Stage>]
+export type Key = [Pose, Partial<Stage>]
 
 const D = 180 / Math.PI
 const S0: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0, foreOut: 0, farForeOut: 0, shinOut: 0, farShinOut: 0, twist: 0 }
@@ -39,7 +39,7 @@ const aim = (d: V3, s: number, [pa, po]: [number, number]): [number, number] => 
  * Hip at world [x, height] (z 0), body turned `st.turn`; each limb in `to` reaches its world target.
  * Arms solve without `twist` or `roll`. `prev` keeps angles continuous between keys.
  */
-function fig(p: Pose, hip: [number, number], to: Partial<Record<Limb, Tgt>>, st: Partial<Stage> = {}, prev?: Key): Key {
+export function fig(p: Pose, hip: [number, number], to: Partial<Record<Limb, Tgt>>, st: Partial<Stage> = {}, prev?: Key): Key {
   const yaw = (st.turn ?? 0) / D
   const [c, s] = [Math.cos(yaw), Math.sin(yaw)]
   const body = (w: V3, dir = false): V3 => {
@@ -78,7 +78,7 @@ function fig(p: Pose, hip: [number, number], to: Partial<Record<Limb, Tgt>>, st:
 }
 
 /** Keys of `f` at each parameter, each continuous with the one before. */
-const chain = <T>(xs: T[], f: (x: T, prev?: Key) => Key) => xs.reduce<Key[]>((ks, x) => [...ks, f(x, ks.at(-1))], [])
+export const chain = <T>(xs: T[], f: (x: T, prev?: Key) => Key) => xs.reduce<Key[]>((ks, x) => [...ks, f(x, ks.at(-1))], [])
 const move = (ks: Key[], tm: Beat[], ms = 1000): Pick<Move, 'keys' | 'beats' | 'ms' | 'mode'> =>
   ({ keys: ks.map(([p]) => p), beats: ks.map(([, st], i) => ({ ...st, ...tm[i] })), ms, mode: 'cycle' })
 /**
@@ -100,6 +100,21 @@ const repHold = (ks: Key[], top: Key, up = 1, topS = 2, down = 1.8, ms = 1000) =
   const tm: Beat[] = [...ks.slice(0, -1).map((_, i): Beat => ({ hold: i ? 0 : s(0.5), dur: s(up) / (n - 1) })), { hold: s(0.2), dur: s(topS) / 2 },
     { dur: s(topS) / 2 }, { hold: s(0.2), dur: s(down) / (n - 1) }, ...ks.slice(1, -1).map(() => ({ dur: s(down) / (n - 1) }))]
   return move([...ks, top, ks[n - 1], ...ks.slice(1, -1).reverse()], tm, ms)
+}
+/**
+ * Keys solved every 20 ms (ms 1000) as `u` runs through each segment's target in `sec` s (minimum-jerk), starting
+ * from the last target, so planted hands and feet hold exactly all loop.
+ */
+export const sampled = (segs: { u: number; sec: number }[], f: (u: number, prev?: Key) => Key): Pick<Move, 'keys' | 'beats' | 'ms' | 'mode'> => {
+  const us: number[] = []
+  let a = segs.at(-1)!.u
+  for (const g of segs) {
+    const n = Math.max(1, Math.round(g.sec / 0.02))
+    for (let k = 0; k < n; k++) { const t = k / n; us.push(a + (g.u - a) * t * t * t * (10 - 15 * t + 6 * t * t)) }
+    a = g.u
+  }
+  const ks = chain(us, f)
+  return { keys: ks.map(([p]) => p), beats: ks.map(([, st]) => ({ ...st, dur: 0.02 })), ms: 1000, mode: 'cycle' }
 }
 const steps01 = (n: number) => Array.from({ length: n }, (_, i) => i / (n - 1))
 const breathK = (path: Key[], rel: (p: Key) => Key) => breath(path, rel(path.at(-1)!))
@@ -242,6 +257,35 @@ const steps = chain([0, 1, 2, 3, 4], (i, prev) => [
   stepKey([40, 131], 180, ON_BOX, null, [-4, -12], prev),
 ][i])
 
+// Foot raise facing a wall at arm's length, hands on it: the near foot lifts and is placed as high on the wall as it
+// goes, hips square, standing leg straight. `u` 0 (down) to 1 (placed at shoulder height), above 1 a breath.
+const FR_WALL = 52
+const footRaise = (u: number, prev?: Key): Key => {
+  const e = Math.min(u, 1)
+  const b = Math.max(0, u - 1) / 0.04
+  const t = 180 - 5 * e - b
+  const lift = Math.min(1, e / 0.6)
+  const foot: V3 = [8 + (FR_WALL - 12) * e - 22 * Math.sin(Math.PI * e), H.ankle + 118 * e * e + 30 * Math.sin(Math.PI * e) * (1 - e), 10]
+  return fig([t, 0, 0, 0, 0, 0, 0, 0, 0, t, t + 2], [-6 * e, 81 - 6 * lift], {
+    foot: { end: foot, pole: [1, 0.6, 0.1] }, farFoot: { end: [0, H.ankle, -10] },
+    hand: { end: [FR_WALL - 4, 132, 24], pole: [-0.3, -1, 1] }, farHand: { end: [FR_WALL - 4, 132, -24], pole: [-0.3, -1, -1] },
+  }, {}, prev)
+}
+
+// Lateral foot reach facing the wall, hips to it: the far foot stays, the near foot steps out sideways on its toe,
+// knee turned out; the hips sink as the feet spread. `u` 0 to 1 (reach 88 between feet), above 1 a breath.
+const LR_WALL = 24
+const lateralReach = (u: number, prev?: Key): Key => {
+  const e = Math.min(u, 1)
+  const b = Math.max(0, u - 1) / 0.04
+  const z = 14 + 56 * e
+  const hh = Math.min(80, H.ankle + 2 + Math.sqrt(73 ** 2 - (z - 9) ** 2 - 8 ** 2)) - b
+  return fig([178, 0, 0, 0, 0, 0, 0, 0, 0, 184, 184], [8, hh], {
+    foot: { end: [0, H.ankle + 2 + 5 * Math.sin(Math.PI * e), z], pole: [0.4, 0, 1] }, farFoot: { end: [0, H.ankle, -18], pole: [0.4, 0, -1] },
+    hand: { end: [LR_WALL - 4, hh + 40, 26], pole: [-1, -1, 1] }, farHand: { end: [LR_WALL - 4, hh + 40, -26], pole: [-1, -1, -1] },
+  }, {}, prev)
+}
+
 export const MOVES: Record<string, Move> = {
   // Knees sink toward the floor on the exhale; the spine stays long, hands on the feet.
   butterfly: { ...breathK(chain(steps01(8), bfly), (p) => bfly(0.8, p)), ...PIN, solid: true, view: 60, tilt: 15 },
@@ -282,5 +326,15 @@ export const MOVES: Record<string, Move> = {
   flagging: {
     ...move([flagKey(0), flagKey(0.5), flagKey(1), flagKey(1, 1.5), flagKey(1, -1)], [{ hold: 0.6, dur: 0.8 }, { dur: 0.8 }, { hold: 0.2, dur: 1.5 }, { dur: 1.5 }, { hold: 0.3, dur: 1.6 }]),
     ...PIN, solid: true, view: -130, tilt: 10, props: [{ t: 'wall', x: 40 }],
+  },
+  // Lift, place the toe high on the wall, hold 2 s breathing, lower.
+  foot_raise: {
+    ...sampled([{ u: 0, sec: 0.6 }, { u: 1, sec: 1.4 }, { u: 1.04, sec: 1.2 }, { u: 1, sec: 1.2 }, { u: 0, sec: 1.2 }], footRaise),
+    ...PIN, solid: true, view: -125, tilt: 10, props: [{ t: 'wall', x: FR_WALL }],
+  },
+  // Near foot steps out along the wall, hold 2 s, steps back.
+  lateral_reach: {
+    ...sampled([{ u: 0, sec: 0.6 }, { u: 1, sec: 1.6 }, { u: 1.04, sec: 1.2 }, { u: 1, sec: 1.2 }, { u: 0, sec: 1.2 }], lateralReach),
+    ...PIN, solid: true, view: -140, tilt: 25, props: [{ t: 'wall', x: LR_WALL }],
   },
 }

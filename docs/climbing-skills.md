@@ -1,13 +1,13 @@
 # Climbing skills (proposal)
 
-Off-wall training for climbers: hips, fingers, locking, tension. Not yet in `tree.ts`.
+Off-wall training for climbers: hips, fingers, locking, tension. Now in `tree.ts`, with numbers adjusted to Lattice's data (no-hang, repeaters, assisted one-arm hang, weighted pull-up, 7s check-in) and the skills it recommends added: see [climbing-lattice-crossref.md](climbing-lattice-crossref.md). Where the two differ, the crossref and `tree.ts` win.
 
 ## Research summary
 
 **Elite benchmarks** (treat as ceilings, not targets):
 
 - **Alex Megos.** His staple is 7s on / 3s off repeaters plus one-arm pull-ups ([Lacrux](https://www.lacrux.com/en/training/aufwaermen-am-fels-alexander-megos/)). He calls a one-arm hang on a 20–23 mm edge "pretty much world class". He films one-arm pull-ups and one-arm lock-offs ([Lacrux video](https://www.lacrux.com/it/dei-video/con-alex-megos-nel-video-del-pull-up-con-un-braccio-solo/)). One forum post credits him with a one-arm hang at 130% bodyweight on 20 mm. It is unverified, so we don't use it.
-- **Lattice Training.** 20 mm is their standard test edge. The figure commonly quoted for V7–8 is a 10s two-arm half-crimp hang at about +50% BW. Climbers around V5 typically hang +20–30%. Lattice's own data is skewed toward heavy hangboarders ([MP thread](https://www.mountainproject.com/forum/message/123908403)).
+- **Lattice Training.** 20 mm is their standard test edge. The figure commonly quoted is a two-arm half-crimp hang at about +50% BW for V8. Climbers around V5 typically hang +20–30%. Lattice's own data is skewed toward heavy hangboarders ([MP thread](https://www.mountainproject.com/forum/message/123908403)).
 - **Eric Hörst.** Max hangs are 10s at 85–95% effort. Campus only after about 2 years of steady climbing, at age 18 or older, and only once you have a solid base on 20 mm.
 - **Tyler Nelson (Camp4).** Low-load, long-duration "density hangs" and feet-on, no-hang pulls for tendon health. Train extensors and wrists as antagonists.
 - **Emil Abrahamsson.** "Abrahangs": daily feet-assisted hangs at about 30–60% effort for 10s, repeated. Safe for beginners and on rest days.

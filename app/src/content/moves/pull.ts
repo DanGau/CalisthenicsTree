@@ -171,10 +171,10 @@ export const grip3 = (p: Pose, s: Partial<Stage>, near: V3, far: V3): K3 => {
  * A solid hang seen from camera yaw `view` (default CAM): the near hand pinned, the far hand held to its offset in the
  * first key (unless `free`), the bar (along z) or a ring under each hand.
  */
-export const onBar = (m: { keys: K3[]; beats?: Beat[]; mode?: Move['mode'] }, o: { view?: number; tilt?: number; y?: number; rings?: boolean; free?: boolean; extra?: Move['props'] } = {}): Move => {
+export const onBar = (m: { keys: K3[]; beats?: Beat[]; mode?: Move['mode'] }, o: { view?: number; tilt?: number; y?: number; rings?: boolean; free?: boolean; extra?: Move['props']; step?: number } = {}): Move => {
   const y = o.y ?? BAR
   const base: Move = { ...solid3(m, o.view ?? CAM), x: 'hand', y: 'hand', at: [0, y], ms: 1000, tilt: o.tilt }
-  const mv = o.free ? base : pinned3(base, twoHands3(m.keys[0]))
+  const mv = o.free ? base : pinned3(base, twoHands3(m.keys[0]), o.step)
   // The pin puts the near hand at depth 0.
   const props: Move['props'] = o.rings ? (['hand', 'farHand'] as const).map((h) => ({ t: 'rings', x: 0, y, z: p3(m.keys[0], h)[2] - p3(m.keys[0], 'hand')[2] })) : [{ t: 'bar', x: 0, y }]
   return { ...mv, props: [...props, ...(o.extra ?? [])] }
@@ -294,6 +294,16 @@ const offset = (k: K3): K3 => reach3({ p: k.p, s: { ...k.s, turn: 0, farArmOut: 
 /** Board edge (fingers.ts) in place of the bar. */
 const onEdge = (m: Move): Move => ({ ...m, props: [{ t: 'board', x: 0, y: BAR }] })
 
+/**
+ * Explosive pull (seconds): set, drive fast to the chest, the hands leave the bar on momentum (≈14 cm, 0.17 s up),
+ * catch on bent arms, absorb, lower 1.8 s.
+ */
+const fFly = fpose(-4, -2, [12, -5, 10, -5])
+const explosive = onBar({
+  mode: 'cycle', keys: [fHang, fSet, fMid, fTop, fFly, fMid, fSet],
+  beats: [{ hold: 0.4, dur: 0.2 }, { dur: 0.25, ease: 'snap' }, { dur: 0.2 }, { dur: 0.17, ease: 'out' }, { lift: 14, dur: 0.2, ease: 'in' }, { dur: 1.4 }, { dur: 0.3 }],
+}, { step: 20 })
+
 export const MOVES: Record<string, Move> = {
   dead_hang: onBar({ keys: [fHang, fSettle], beats: [{ hold: 0.3, dur: 1 }, { hold: 0.3 }] }),
   scap_pull: side({ mode: 'cycle', keys: [passive, active], beats: [{ hold: 0.6, dur: 0.45 }, { hold: 0.8, dur: 0.8 }] }, 1000),
@@ -320,4 +330,6 @@ export const MOVES: Record<string, Move> = {
   offset_pull: towelRing(onBar(rep(offset(oaHang), offset(oaSet), [offset(oaMid), offset(oaTop)], { rise: 1.3, lower: 2 })), offset(oaHang)),
   oa_lockoff: onBar(lockLadder(oaTop, oa90, oa120, 1.2), { free: true }),
   oapu_edge: onEdge(onBar(rep(oaHang, oaSet, [oaMid, oaTop], { rise: 1.5, lower: 2.3 }), { free: true })),
+  oa_scap: onBar({ mode: 'cycle', keys: [oaHang, oaSet], beats: [{ hold: 0.6, dur: 0.5 }, { hold: 1, dur: 0.9 }] }, { free: true }),
+  explosive_pull: explosive,
 }
