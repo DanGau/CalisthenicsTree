@@ -1,4 +1,4 @@
-import { at, loopMs, solid, type Beat, type Body, type Move, type Pose, type Stage } from '../../core/figure'
+import { at, com, joints, loopMs, solid, type Beat, type Body, type Move, type Pose, type Stage } from '../../core/figure'
 import { pos, reach } from './legs'
 
 const R = Math.PI / 180
@@ -15,6 +15,13 @@ export const chestPt = (p: Pose, f: number, out: number): [number, number] => {
   const [sx, sy] = v(c, 24 * f)
   const [nx, ny] = v(c - 90, out)
   return [wx + sx + nx, wy + sy + ny]
+}
+
+/** Both hands at height y (hip coordinates) straight above or below the centre of mass. */
+export const gripUnder = (p: Pose, y: number, k = -1): Pose => {
+  let q = p
+  for (let i = 0; i < 4; i++) q = grip(p, [com(joints(q)).x, y], k, true)
+  return q
 }
 
 /** Side view: both hands to one point, given relative to the shoulder or absolute in hip coordinates. */
@@ -227,7 +234,7 @@ const highPull = grip(highBody, chestPt(highBody, 0.15, 17), -1, true)
 const overBody = body(150, 128, 120, [14, 0, 14, 0], 180, 2)
 const turnover = grip(overBody, chestPt(overBody, 0.3, 17), -1, true)
 const supportBody = body(168, 172, 178, [10, 2, 10, 2], 180, -4)
-const support = grip(supportBody, [14, 8], 1, true)
+const support = gripUnder(supportBody, 8, 1)
 // Descent: chest stays at the bar, body tall under it, elbows bending past the ribs.
 const closeBody = body(182, 188, 184, [8, 2, 8, 2], 180, -3)
 const closeDown = grip(closeBody, chestPt(closeBody, 0.85, 14), -1, true)
@@ -310,7 +317,7 @@ export const MOVES: Record<string, Move> = {
   neg_pullup: onBar(negative(fTop, fMid, fSet, fHang)),
   chinup: side(rep(passive, active, [sMid, sTop]), 1000),
   pullup: onBar(rep(fHang, fSet, [fMid, fTop])),
-  lsit_pullup: side(rep(lHang, lSet, [lMid, lTop], { rise: 1.4, lower: 2 }), 1000),
+  lsit_pullup: { ...side(rep(lHang, lSet, [lMid, lTop], { rise: 1.4, lower: 2 }), 1000), balance: true },
   pullup_12: onBar(rep(fHang, fSet, [fMid, fTop], { rise: 0.8, lower: 1.2, top: 0.1, bottom: 0.1 })),
   ctb: side(rep(passive, active, [ctbMid, ctbTop], { rise: 1.2 }), 1000),
   archer_pullup: onBar({

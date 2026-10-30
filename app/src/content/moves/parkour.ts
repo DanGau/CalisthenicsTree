@@ -38,7 +38,7 @@ const rebound: Pose = [172, 165, 170, 165, 170, 20, 20, 20, 20, 175, 178]
 const BOX = 60
 const jumpBox: Prop = { t: 'box', x: 18, w: 60, h: BOX }
 const boxLand: Pose = land(34, 34)
-const boxStand: Pose = plant([162, 40, 60, 40, 60, 0, 0, 0, 0, 166, 172], { foot: 34, farFoot: 34 }, 70)
+const boxStand: Pose = plant([162, 40, 60, 40, 60, 0, 0, 0, 0, 166, 172], { foot: 12, farFoot: 12 }, 70)
 const stepDown: Pose = plant(plant([168, 20, 40, -10, 0, 0, 0, 0, 0, 170, 175], { farFoot: 34 }, 44), { foot: -14 }, 44 + BOX)
 
 /** Feet touching down out of a vertical jump: legs long under the hips, knees just soft. */
@@ -122,13 +122,13 @@ const safety = overAndBack([
 // Kong: hands reach first and block ≈0.2 s, knees tuck through, ≈0.3 s of flight after.
 const kongKeys: Key[] = [
   [vault(72, 70, [62, 18], [-108, -108, -108, -108], {}, {}, true), EDGE, { dur: 0.2 }],
-  [vault(120, 128, [30, 36], [100, 10, 100, 10], {}, {}, true), EDGE, { dur: 0.15 }],
-  [[150, 60, 60, 60, 60, 95, 20, 95, 20, 152, 165], { j: 'foot', at: [62, -H - 14] }, { dur: 0.25 }],
+  [vault(120, 128, [30, 36], [100, 10, 100, 10], {}, {}, true), EDGE, { dur: 0.15, air: true }],
+  [[150, 60, 60, 60, 60, 95, 20, 95, 20, 152, 165], { j: 'foot', at: [62, -H - 14] }, { dur: 0.25, air: true }],
 ]
 const kong = overAndBack([...kongKeys, [vaultLand(14), 96, { hold: 0.3, dur: 0.75 }]])
 const kongPre = overAndBack([
-  ...kongKeys.slice(0, 2), [kongKeys[2][0], { j: 'foot', at: [84, -H - 20] }, { dur: 0.25 }],
-  [reachLand, { j: 'foot', at: [118, -8] }, { dur: 0.12 }], [land(10, 50), 120, { hold: 0.5, dur: 0.8 }],
+  ...kongKeys.slice(0, 2), [kongKeys[2][0], { j: 'foot', at: [84, -H - 20] }, { dur: 0.25, air: true }],
+  [reachLand, { j: 'foot', at: [118, -8] }, { dur: 0.12, air: true }], [land(10, 50), 120, { hold: 0.5, dur: 0.9 }],
 ])
 const dash = overAndBack([
   [vault(205, 200, [-24, 26], [80, 80, 80, 80], {}, {}, true), EDGE, { dur: 0.3 }],
@@ -231,7 +231,7 @@ const catLeap = keyed([
 // Tic-tac: one quick wall step ≈0.2 s pushes up and away.
 const ticTac = keyed([
   [stand, -70, { hold: 0.3, dur: 0.35 }], [stride(1), -34, { dur: 0.3 }], [ticPlant, 0, { lift: 15, dur: 0.18 }],
-  [ticPush, -8, { lift: 40, dur: 0.25 }], [ticFly, -40, { lift: 50, dur: 0.3 }], [ticLand, -70, { hold: 0.3, dur: 0.6 }],
+  [ticPush, -8, { lift: 40, dur: 0.25, air: true }], [ticFly, -40, { lift: 50, dur: 0.3, air: true }], [ticLand, -70, { hold: 0.3, dur: 0.6 }],
 ])
 const wallRun = keyed([
   [stand, -90, { hold: 0.3, dur: 0.4 }], [stride(1), -40, { dur: 0.35 }], [runPlant, 0, { lift: 12, dur: 0.2 }],
@@ -254,7 +254,7 @@ const tuckJump = keyed([
 const boxJump = keyed([
   [stand, 0, { hold: 0.4, dur: 0.45 }], [load, 0, { dur: 0.25 }],
   ...leap([[takeoff, 0.12], [tuck, 0.6], [touchDown, 0.95]], 0.6, 10, 20, { dur: 0.3 }, { to: BOX }),
-  [boxLand, 0, { lift: BOX, hold: 0.1, dur: 0.6 }], [boxStand, 0, { lift: BOX, hold: 0.4, dur: 0.6 }], [stepDown, 0, { dur: 0.6 }],
+  [boxLand, 0, { lift: BOX, hold: 0.1, dur: 0.6 }], [boxStand, 22, { lift: BOX, hold: 0.4, dur: 0.6 }], [stepDown, 0, { dur: 0.6 }],
 ])
 
 // All solid, so turning round to walk back is a real turn.

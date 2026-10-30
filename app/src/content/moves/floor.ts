@@ -52,22 +52,24 @@ const baby = (b: number): Pose => {
 const qdr = (legs: [number, number, number, number]): Pose => {
   const p: Pose = [70, 0, 0, 0, 0, ...legs, 82, 100]
   const s = pos(p, 'shoulder')
-  const f = pos(p, 'hip')[1] + 18
-  return reach(p, { hand: [s[0] - 6, f], farHand: [s[0] + 24, f] }, { k: { hand: 1, farHand: 1 } })
+  const w = joints(p).waist
+  // The near forearm posts from the floor up into the waist, under the centre of mass.
+  const f = w.y + 30
+  return reach(p, { hand: [w.x + 6, f], farHand: [s[0] + 24, f] }, { k: { hand: 1, farHand: 1 } })
 }
 
 // Chair freeze: head and near hand down, elbow in the small of the back, legs in a figure four, looking up.
 const chair = (t: number): Pose => {
   const p: Pose = [t, 0, 0, 150, 200, 150, 40, 95, 175, t + 20, t + 50]
   const s = pos(p, 'shoulder')
-  return reach(p, { hand: [s[0] + 10, base(p)] }, { k: { hand: -1 } })
+  return reach(p, { hand: [s[0] + 23, base(p)] }, { k: { hand: -1 } })
 }
 
 // Turtle: both elbows in the hips, body flat and level, head up.
 const turtle = (tilt: number): Pose => {
   const p: Pose = [90 + tilt, 0, 0, 0, 0, 112 + tilt, 20, 112 + tilt, 20, 90 + tilt, 130]
   const [hx, hy] = pos(p, 'hip')
-  return reach(p, { hand: [hx + 14, hy + 34], farHand: [hx + 14, hy + 34] }, { k: { hand: 1, farHand: 1 } })
+  return reach(p, { hand: [hx + 26, hy + 34], farHand: [hx + 26, hy + 34] }, { k: { hand: 1, farHand: 1 } })
 }
 
 // Airchair: body near flat on one bent arm, the forearm a post from the floor to the elbow in the small of the back,
@@ -75,7 +77,7 @@ const turtle = (tilt: number): Pose => {
 const airchair = (legs: number): Pose => {
   const p: Pose = [-72, 0, 0, 120, 140, legs, legs - 95, legs + 15, legs - 70, -80, -110]
   const w = joints(p).waist
-  return reach(p, { hand: [w.x + 4, w.y + 30] }, { k: { hand: 1 } })
+  return reach(p, { hand: [w.x + 10, w.y + 30] }, { k: { hand: 1 } })
 }
 const airIn: Pose = plant([115, 0, 0, 120, 140, 0, 0, 0, 0, 105, 95], { hand: 36, foot: 4, farFoot: 4 }, 40)
 
@@ -158,6 +160,8 @@ const freeze = (entry: Pose, f: Pose, breath: Pose): Pick<Move, 'keys' | 'beats'
   const over = F.map((v, i) => v + Math.sign(v - E[i]) * Math.min(2, Math.abs(v - E[i]) * 0.05)) as Pose
   return { keys: [entry, over, f, breath], mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 0.4 }, { dur: 0.25 }, { dur: 1.2 }, { hold: 0.3, dur: 0.7 }] }
 }
+/** The near arm swung in under the body, so the hand posts below the centre of mass. */
+const inward = <M extends Move>(m: M): M => ({ ...m, beats: m.beats?.map((b) => ({ ...b, armOut: -18 })) })
 /** Drawn solid, the camera `view` degrees round. */
 const seen = <M extends Move>(m: M, view: number): M => ({ ...m, solid: true, view })
 /** A balance held between two keys, swaying at the real ≈0.3 Hz rhythm (1.5 s each way). */
@@ -167,7 +171,7 @@ export const MOVES: Record<string, Move> = {
   ginga: { keys: [ginga('far'), gingaBase, ginga('near'), gingaBase], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.1, dur: 0.5 }, { dur: 0.5 }, { hold: 0.1, dur: 0.5 }, { dur: 0.5 }] },
   cocorinha: { keys: [ginga('far'), squatGuard], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.45 }, { hold: 0.5, dur: 0.7 }] },
   negativa: { keys: [ginga('far'), negativa], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.6 }, { hold: 0.8, dur: 0.9 }] },
-  baby_freeze: seen(freeze(babyIn, baby(0), baby(3)), 25),
+  baby_freeze: seen(freeze(babyIn, baby(12), baby(15)), 25),
   qdr: { keys: [qdr([150, 20, 155, 30]), qdr([-80, -80, -70, -70])], ...sway(1.2) },
   au: wheel({ spread: [[30, 25], [57, 45], [25, 60], [57, 45], [30, 25]], time: 1.8 }),
   chair_freeze: { keys: [chair(-50), chair(-53)], ...sway() },
@@ -178,8 +182,8 @@ export const MOVES: Record<string, Move> = {
   macaco: { keys: [macSit, macReach, macOver, macLand], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.6 }, { dur: 0.3, ease: 'snap' }, { dur: 0.4 }, { hold: 0.3, dur: 0.8 }] },
   turtle_freeze: { keys: [turtle(-6), turtle(6)], ms: 1000, beats: [{ hold: 0.2, dur: 1 }, { hold: 0.2, dur: 1 }] },
   windmill: { keys: unwrap(MILL.map((k) => k[0])), beats: MILL.map((k) => k[1]), mode: 'cycle', solid: true, tilt: TILT, view: 30, x: 'shoulder', ms: 1000 },
-  swipe: { keys: [swipeDown, swipeUp, swipeDown], mode: 'cycle', solid: true, tilt: TILT, ms: 1000, flow: 0.15, beats: [{ hold: 0.5, dur: 0.3, ease: 'snap' }, { turn: 180, lift: 22, dur: 0.35 }, { turn: 360, hold: 0.3, dur: 0.01 }] },
-  airchair: seen(freeze(airIn, airchair(140), airchair(144)), 30),
+  swipe: { keys: [swipeDown, swipeUp, swipeDown], mode: 'cycle', solid: true, tilt: TILT, ms: 1000, flow: 0.15, beats: [{ hold: 0.5, dur: 0.3, ease: 'snap', air: true }, { turn: 180, lift: 22, dur: 0.35, air: true }, { turn: 360, hold: 0.3, dur: 0.01 }] },
+  airchair: inward(seen(freeze(airIn, airchair(140), airchair(144)), 30)),
   flare: { ...flare(), mode: 'cycle', solid: true, tilt: TILT, ms: 1000 },
   hollowback: { keys: [hollow(0), hollow(12)], ...sway() },
 }

@@ -91,9 +91,9 @@ export const MOVES: Record<string, Move> = {
   false_grip: { ...sideRings([fgLoose, fgHang], 1000), beats: [{ hold: 0.6, dur: 1, ease: 'out' }, { hold: 1.2 }] },
   fingertip_pu: pinned({ ...pushup, x: 'hand', ms: 900 }, (p) => pu(p[1], p[2])),
   rope_legless: rope([legless(-52, -22, 22), legless(-22, 8, 30), legless(-22, -52, 22), legless(8, -22, 30)], [{ dur: 1 }, { dur: 0.5, ease: 'snap' }, { dur: 1 }, { dur: 0.5, ease: 'snap' }], ['hand', 'hand', 'farHand', 'farHand']),
-  false_grip_pullup: { ...sideRings([], 1000), ...rep(fgLoose, fgHang, [sMid, fgTop], { rise: 1.2 }) },
+  false_grip_pullup: { ...sideRings([], 1000), balance: true, ...rep(fgLoose, fgHang, [sMid, fgTop], { rise: 1.2 }) },
   oa_hang: onBar({ keys: [oneArm([6, 0, 8, 0], 3, 45), oneArm([4, 0, 9, -2], -3, 50)], beats: breathe }, { free: true }),
-  ring_lsit: { ...sideRings([], 1000, -120), ...hold(lsit(4, 78), lsit(5, 90), lsit(6, 93)) },
+  ring_lsit: { ...sideRings([], 1000, -120), balance: true, ...hold(lsit(4, 78), lsit(5, 90), lsit(6, 93)) },
   cross_assist: onBar({ keys: [crossK(7, 1), crossK(3, -3)], beats: [{ hold: 0.6, dur: 2 }, { hold: 1.2 }] }, { rings: true, view: XCAM }),
   iron_cross: onBar(hold(crossK(7, 2), cross, crossK(-6, -4)), { rings: true, view: XCAM }),
 }

@@ -43,7 +43,7 @@ const perched = (f: (u: number) => number, lo: number, hi: number, o: Perch) => 
 // Frog: elbows bent, knees on them, feet float. Crow: arms nearly straight, knees high by the armpits, back rounded.
 const frogIn = perch(18, -60, { along: 4, bend: -18, head: 55, shin: 0, legs: toesDown })
 const frog = perched(() => 18, -100, -20, { along: 4, bend: -18, head: 55, shin: -105 })
-const crowIn = perch(6, -20, { along: 20, bend: -24, head: 70, shin: 0, legs: toesDown })
+const crowIn = perch(12, -40, { along: 4, bend: -24, head: 70, shin: 0, legs: toesDown })
 const crow = perched((u) => u + 12, -50, 10, { along: 20, bend: -24, head: 70, shin: -120 })
 const crane = perched((u) => u, -45, 15, { along: 24, bend: -30, head: 75, shin: -130 })
 // Pigeon: shin across the arms, back leg reaching back; it enters with the back toes on the floor.

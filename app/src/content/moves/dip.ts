@@ -5,7 +5,7 @@ const Y = -130
 const bars = { t: 'bars', x: 0, y: Y } as const
 const rings = { t: 'rings', x: 0, y: Y } as const
 const bar = { t: 'bar', x: 0, y: Y } as const
-const on = (keys: Pose[], props: Move['props'], ms?: number): Move => ({ keys, x: 'hand', y: 'hand', at: [0, Y], props, ms })
+const on = (keys: Pose[], props: Move['props'], ms?: number): Move => ({ keys, x: 'hand', y: 'hand', at: [0, Y], props, ms, balance: true })
 
 /** Body with arms bent so the hands sit at `hand` from the shoulder; `pick` chooses the elbow (lowest x = back). */
 function grip(p: Pose, hand: Pt, pick: (e: Pt) => number = (e) => e.x): Pose {

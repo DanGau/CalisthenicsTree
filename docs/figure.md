@@ -43,6 +43,20 @@ Motion must read as a person moving mass, not a puppet between poses. `beats` (o
 - `flow`: 0.1-0.25 on swings, jumps, throws, kicks and rolls so forearms, shins and head trail the body. Leave it 0 when hands or feet are planted (contacts would slide).
 - Add anticipation and follow-through as keys: dip before a jump, absorb after a landing, swing back before a kip.
 
+## Physics
+
+`src/content/physics.test.ts` samples every move every 20 ms (`core/physics.ts`: contacts, centre of mass from Winter segment masses in `core` `com`, g from `LEN` as a 1.75 m man):
+
+- Still (joints < 8 units/s for 200 ms): COM within 6 of the weight-bearing contacts in x (and z, solid). Wall, pole, stall or box-face contact skips it (flags, wall holds); `ANCHORED` lists feet-hooked or gripped torque holds (nordics, back extension, dragon flags).
+- Airborne ≥ 160 ms: COM vertical acceleration 0.6-1.5 g, within 3 of its fitted parabola, horizontal acceleration < 0.4 g; flips (trunk turns ≥ 90°, no turn about the vertical) keep sagittal angular momentum within 30 % (sd/mean).
+- Flights ≤ 0.9 s; `holdBeats`-style sways ≥ 1.2 s one way.
+
+Engine help:
+
+- `air: true` on a beat: that transition is airborne. Core solves `lift`/`shift` so the COM rides gravity's parabola between the run's first and last keys, and in flips turns the whole body so angular momentum stays constant (faster tucked). `air()` in `tumble.ts` sets it; takeoff and landing keys sit on the floor.
+- `ballistic(m, from, to)`: retimes a captured flight (ms window) to the time gravity needs for its rise and fall, and marks it `air` (`back_tuck`, `aerial`).
+- `balance: true` with `x: 'hand'`: the arms turn about the pinned hand so the COM stays over or under it (levers, dips, supports, L-sits, hanging leg raises).
+
 ## Mocap
 
 Some moves come from real capture (`src/content/mocap/<id>.ts`, rows built by `clip()`), generated offline by `app/tools/mocap/` (not shipped; clips cached in git-ignored `app/.mocap-cache/`). Sources and licenses: [mocap-sources.md](mocap-sources.md).

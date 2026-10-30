@@ -1,6 +1,6 @@
 import { place, type Body, type Move, type Pose } from '../../core/figure'
 import { pos, reach } from './legs'
-import { body, chestPt, grip, hold, type K3, onBar, pinned, reach3, rep } from './pull'
+import { body, chestPt, grip, gripUnder, hold, type K3, onBar, pinned, reach3, rep } from './pull'
 
 /** Root of f in [lo, hi] by bisection (f must change sign). */
 export const solve = (lo: number, hi: number, f: (x: number) => number) => {
@@ -73,7 +73,7 @@ const heel = { x: fb.heel.x, y: Math.max(fb.heel.y, fb.foot.y) + 3 }
 
 // Levers: arms straight, hands over the upper chest, face up, head to the left. Shoulders depressed, ribs down.
 const bar = { t: 'bar', x: 0, y: -210 } as const
-const pin: Move = { keys: [], x: 'hand', y: 'hand', at: [0, -210], props: [bar] }
+const pin: Move = { keys: [], x: 'hand', y: 'hand', at: [0, -210], props: [bar], balance: true }
 const lever = (keys: Pose[], ms = 1200): Move => ({ ...pin, keys, ms })
 const L = (legs: [number, number, number, number], t = 270, a = 166, s = -3): Pose => body(t, t - 4, t - 6, legs, a, s)
 const fl = L([90, 90, 90, 90])
@@ -90,9 +90,9 @@ export const straddle3 = (p: Pose): K3 => {
   const [x, y] = pos(p, 'hand')
   return reach3({ p, s: { legOut: 28, farLegOut: 28, armOut: 8, farArmOut: 8 } }, { hand: [x, y, 26], farHand: [x, y, -26] })
 }
-export const straddleHold = (p: Pose, rings = false): Move => onBar(hold(...[sag(p), p, tense(p)].map(straddle3) as [K3, K3, K3]), { view: 30, tilt: 30, rings })
+export const straddleHold = (p: Pose, rings = false): Move => ({ ...onBar(hold(...[sag(p), p, tense(p)].map(straddle3) as [K3, K3, K3]), { view: 30, tilt: 30, rings }), balance: true })
 // Bar to the hips with the body level: arms row in to the belly.
-const leverRow = (p: Pose) => grip(p, chestPt(p, 0.05, 16), 1, true)
+const leverRow = (p: Pose) => gripUnder(p, chestPt(p, 0.05, 16)[1], 1)
 // Pull-up to the bar, chest over, then the straight-arm lean back to a lever.
 const chinBody = body(186, 196, 186, [12, 4, 12, 4])
 const chinOver = grip(chinBody, chestPt(chinBody, 1, 15), -1, true)

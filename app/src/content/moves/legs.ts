@@ -106,7 +106,7 @@ const coss = (side: 1 | -1): [Pose, Beat] => {
   const knee = Math.acos(h / (L * Math.cos(bentOut))) * D
   const [bent, long]: [number, number][] = [[knee, -knee], [0, 0]]
   const [near, far] = side === 1 ? [bent, long] : [long, bent]
-  return [[150, 80, 95, 80, 95, ...near, ...far, 145, 160], { legOut: (side === 1 ? bentOut : straight) * D, farLegOut: (side === 1 ? straight : bentOut) * D, armOut: 10, farArmOut: 10 }]
+  return [[166, 60, 80, 60, 80, ...near, ...far, 160, 168], { legOut: (side === 1 ? bentOut : straight) * D, farLegOut: (side === 1 ? straight : bentOut) * D, armOut: 10, farArmOut: 10 }]
 }
 const [cossL, cossR] = [coss(1), coss(-1)]
 
@@ -119,8 +119,8 @@ const stepLow = plant(plant([160, 30, 40, -30, -20, 0, 0, 0, 0, 165, 172], { foo
 const stepTop: Pose = [180, -10, 20, 10, 60, 0, 0, 90, 0, 180, 180]
 
 // Shrimp: back knee lands under the hip; the near hand holds the back foot.
-const shrimpPose = (t: number, f: number, back: [number, number], both: boolean, pole: boolean): Pose => {
-  let p = plant([t, 0, 0, 90, 90, 0, 0, ...back, t + 6, 172], { foot: 12 }, f)
+const shrimpPose = (t: number, f: number, back: [number, number], both: boolean, pole: boolean, fx = 12): Pose => {
+  let p = plant([t, 0, 0, 90, 90, 0, 0, ...back, t + 6, 172], { foot: fx }, f)
   const foot = pos(p, 'farFoot')
   p = reach(p, { hand: foot, ...(both ? { farHand: foot } : {}) }, { k: { hand: 1, farHand: 1 } })
   if (pole) {
@@ -129,7 +129,8 @@ const shrimpPose = (t: number, f: number, back: [number, number], both: boolean,
   }
   return p
 }
-const shrimpTop = (both = false, pole = false) => shrimpPose(172, 79, [-12, -150], both, pole)
+// Both hands behind on the foot: the hips sit further over the standing foot.
+const shrimpTop = (both = false, pole = false) => shrimpPose(172, 79, [-12, -150], both, pole, both ? 0 : 12)
 const shrimpLow = (both = false, pole = false, f = 42) => shrimpPose(142, f, [-Math.acos(Math.min(1, (f - 4) / 38)) * 180 / Math.PI - 4, -150], both, pole)
 
 // Sissy: shin leans forward, thigh and torso one straight line leaning back from the knee.

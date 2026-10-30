@@ -63,9 +63,9 @@ const pressMid = balance((L) => set([32, -26, -26, -26, -26, 0, 0, 0, 0, 22, 10]
 
 // Kick-up: lunge with arms overhead, hands plant, the back leg swings up over the back, the push leg follows.
 const lunge = (() => {
-  const p: Pose = [168, 160, 162, 160, 162, 0, 0, -22, -22, 172, 170]
+  const p: Pose = [168, 160, 162, 160, 162, 0, 0, -35, -35, 172, 170]
   const b = joints(p)
-  const q = reach(p, { foot: [b.farFoot.x + 98, b.farToe.y - 5] })
+  const q = reach(p, { foot: [b.farFoot.x + 85, b.farToe.y - 5] })
   return q
 })()
 const kick = (() => {

@@ -92,7 +92,7 @@ export const MOVES: Record<string, Move> = {
   copen_short: copenMove(false),
   copen_long: copenMove(true),
   vertical_flag: pole(hold(vertical(174), vertical(), vertical(182)), vertical(), -120),
-  oblique_raise: onBar({ keys: [hang, oblique(1), hang, oblique(-1)], mode: 'cycle', beats: [{ hold: 0.3, dur: 1 }, { hold: 0.3, dur: 1.5 }, { hold: 0.3, dur: 1 }, { hold: 0.3, dur: 1.5 }] }, { view: 70 }),
+  oblique_raise: { ...onBar({ keys: [hang, oblique(1), hang, oblique(-1)], mode: 'cycle', beats: [{ hold: 0.3, dur: 1 }, { hold: 0.3, dur: 1.5 }, { hold: 0.3, dur: 1 }, { hold: 0.3, dur: 1.5 }] }, { view: 70 }), balance: true },
   tuck_flag: flagHold(TUCK),
   clutch_flag: pole(hold(clutch(TUCK, 80), clutch(LINE), clutch(LINE, 93)), clutch(LINE)),
   straddle_flag: flagHold(LINE, 32),

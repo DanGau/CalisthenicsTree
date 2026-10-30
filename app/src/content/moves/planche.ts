@@ -40,8 +40,9 @@ const planche = float(fullBody())
  */
 function solidPlanche(t: number, o: { armOut: number; legOut: number; pike?: number; head?: number }): Key3 {
   const legs = t - 180 - (o.pike ?? 0)
-  const build = ([u]: number[]): Key3 => ({ p: [t, u, u, u, u, legs, legs, legs, legs, t - 6, t + (o.head ?? 16), D], st: { armOut: o.armOut, farArmOut: o.armOut, legOut: o.legOut, farLegOut: o.legOut } })
-  return fit3(build, [-60], (b) => [com3(b).x - b.hand.x])
+  const build = ([u, a]: number[]): Key3 => ({ p: [t, u, u, u, u, legs, legs, legs, legs, t - 6, t + (o.head ?? 16), D], st: { armOut: a, farArmOut: a, legOut: o.legOut, farLegOut: o.legOut } })
+  // Arms as wide as asked, narrower only when the hands can't otherwise reach back under the centre of mass.
+  return fit3(build, [-60, o.armOut], (b, [, a]) => [com3(b).x - b.hand.x, 0.05 * (a - o.armOut)])
 }
 // Straddle: hands a touch wider, legs wide; it lifts from straddled toes on the floor.
 const STR = { armOut: 8, legOut: 45 }
@@ -58,7 +59,7 @@ const parallettes = (m: Move): Prop[] => {
 }
 const maltese = (() => {
   const mv = solidMove([solidPlanche(95, { ...MAL, pike: 8, head: 10 }), solidPlanche(91, MAL), solidPlanche(90, { ...MAL, pike: -2 })], holdBeats(1.5, 1.5), 40, { x: 'hand', y: 'hand', at: [0, MAL.y], point: true, tilt: 25 })
-  return { ...mv, props: parallettes(mv) }
+  return { ...mv, props: parallettes(mv), balance: true }
 })()
 
 /** Seconds per beat unit. */

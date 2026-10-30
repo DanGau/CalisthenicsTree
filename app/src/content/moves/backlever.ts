@@ -4,7 +4,7 @@ import { hold } from './pull'
 
 // Rings side view. Back lever: face down, torso 90, legs -90, arms just behind vertical.
 const rings = { t: 'rings', x: 0, y: -210 } as const
-const hangOn = (keys: Pose[], ms = 1200): Move => ({ keys, x: 'hand', y: 'hand', at: [0, -210], props: [rings], ms })
+const hangOn = (keys: Pose[], ms = 1200): Move => ({ keys, x: 'hand', y: 'hand', at: [0, -210], props: [rings], ms, balance: true })
 
 const hang: Pose = [180, 180, 180, 180, 180, 0, 0, 0, 0]
 const tuckHang: Pose = [180, 180, 180, 180, 180, 150, 0, 150, 0]

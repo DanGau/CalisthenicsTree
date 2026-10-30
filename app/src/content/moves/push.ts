@@ -1,4 +1,4 @@
-import { blend, full, joints, LEN, place, solid, type Beat, type Body, type Move, type Pose, type Prop, type Pt, type Stage } from '../../core/figure'
+import { blend, com as comOf, full, G, joints, LEN, place, solid, type Beat, type Body, type Move, type Pose, type Prop, type Pt, type Stage } from '../../core/figure'
 import { ik } from './legs'
 
 // Geometry helpers shared by the pushing branches. Coordinates are relative to the hip, y down.
@@ -134,22 +134,8 @@ export function reachTo(shape: (t: number) => Pose, d: number, dx: number, h = 0
 export const legsTo = (p: Pose, h = 0, lo = -175, hi = -5): Pose =>
   fit((L) => set(p, [5, 6, 7, 8], L), (b) => b.hand.y - b.toe.y - h, lo, hi)
 
-const MASS: [keyof Body, keyof Body, number][] = [
-  ['hip', 'waist', 0.24], ['waist', 'shoulder', 0.26], ['head', 'head', 0.08],
-  ['nearShoulder', 'elbow', 0.03], ['elbow', 'hand', 0.022], ['farShoulder', 'farElbow', 0.03], ['farElbow', 'farHand', 0.022],
-  ['nearHip', 'knee', 0.1], ['knee', 'foot', 0.06], ['farHip', 'farKnee', 0.1], ['farKnee', 'farFoot', 0.06],
-]
-/** Centre of mass. */
-export function com(p: Pose, front = false): Pt {
-  const b = joints(p, front)
-  let x = 0, y = 0, w = 0
-  for (const [a, c, m] of MASS) {
-    x += ((b[a].x + b[c].x) / 2) * m
-    y += ((b[a].y + b[c].y) / 2) * m
-    w += m
-  }
-  return { x: x / w, y: y / w }
-}
+/** Centre of mass of a 2D pose. */
+export const com = (p: Pose, front = false): Pt => comOf(joints(p, front))
 
 /** shape(v) with v solved so the centre of mass sits over `over` (default: the hands). */
 export const balance = (shape: (v: number) => Pose, lo: number, hi: number, over: (b: Body) => number = (b) => b.hand.x, front = false): Pose =>
@@ -236,16 +222,7 @@ export const frame = (k: Key3) => solid(k.p, { ...ST, ...k.st })
 type P3 = Required<Pt>
 export const z = (p: Pt) => p.z ?? 0
 /** Centre of mass in the body frame. */
-export function com3(b: Body): P3 {
-  const o = { x: 0, y: 0, z: 0 }
-  let w = 0
-  for (const [a, c, m] of MASS) {
-    for (const k of ['x', 'y'] as const) o[k] += ((b[a][k] + b[c][k]) / 2) * m
-    o.z += ((z(b[a]) + z(b[c])) / 2) * m
-    w += m
-  }
-  return { x: o.x / w, y: o.y / w, z: o.z / w }
-}
+export const com3 = (b: Body): P3 => comOf(b) as P3
 /** a - b - v as three residuals. */
 export const off = (a: Pt, b: Pt, v: [number, number, number] = [0, 0, 0]) => [a.x - b.x - v[0], a.y - b.y - v[1], z(a) - z(b) - v[2]]
 
@@ -385,10 +362,10 @@ const plyo = (air: Pose, t = 0.4): Move => ({
 
 /** Aztec: lift h above the floor; flight time 2·√(2h/g). */
 const AZ = 50
-const azT = 2 * Math.sqrt((2 * AZ) / 981)
+const azT = 2 * Math.sqrt((2 * AZ) / (G * 1e6))
 const aztec: Move = {
   keys: [top, tween(top, bottom, 0.5), top, aztecAir, top, tween(top, bottom, 0.4)], mode: 'cycle', ms: 1000,
-  beats: [{ hold: 0.4, dur: 0.45 }, { hold: 0.04, dur: 0.22 }, { dur: azT / 2, ease: 'out' }, { lift: AZ, dur: azT / 2, ease: 'in' }, { dur: 0.25 }, { hold: 0.1, dur: 0.8 }],
+  beats: [{ hold: 0.4, dur: 0.45 }, { hold: 0.04, dur: 0.22 }, { dur: azT / 2, ease: 'out', air: true }, { lift: AZ, dur: azT / 2, ease: 'in', air: true }, { dur: 0.25 }, { hold: 0.1, dur: 0.8 }],
 }
 
 const wallMid = (f: number) => tween(wallTop, wallBottom, f)

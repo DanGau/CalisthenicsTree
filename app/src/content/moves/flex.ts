@@ -91,7 +91,7 @@ export const MOVES: Record<string, Move> = {
   // Chin, upper back, lower back, then the hips fold; arms hang. Rolls up in reverse.
   jefferson: {
     keys: [curl(180, 180, 180), curl(180, 180, 120), curl(178, 120, 60), curl(130, 50, 10), curl(58, 4, -12, 3)],
-    x: 'foot', y: 'foot', at: [0, -65], props: [{ t: 'box', x: -42, w: 52, h: 60 }], ms: 1100,
+    x: 'foot', y: 'foot', at: [0, -65], props: [{ t: 'box', x: -42, w: 62, h: 60 }], ms: 1100,
     beats: [{ hold: 0.6, dur: 1.4, ease: 'in' }, { dur: 1.4, ease: 'lin' }, { dur: 1.4, ease: 'lin' }, { dur: 1.6, ease: 'out' }, { hold: 1.2 }],
   },
   front_split_half: { ...breathe([blockSplit(34), blockSplit(30), blockSplit(27)], 900, blockSplit(28)), x: 'hip', point: true, props: [{ t: 'box', x: -10, w: 20, h: 19 }] },
@@ -106,10 +106,10 @@ export const MOVES: Record<string, Move> = {
   front_split: { ...breathe([split(22, [3, H.hand]), split(15, [3, H.hand]), split(9.5, [3, H.hand])], 900, split(11.5, [3, H.hand])), x: 'hip', point: true },
   // Hips slide down as the feet slide out, hands taking the weight.
   middle_split: {
-    ...breathe([midKey(55, 140, 34), midKey(86, 168, 26)], 900, midKey(82, 165, 27), [wide(55, { lift: midH(55) }), wide(86, { lift: midH(86) })]),
+    ...breathe([midKey(55, 165, 34), midKey(86, 168, 26)], 900, midKey(82, 165, 27), [wide(55, { lift: midH(55) }), wide(86, { lift: midH(86) })]),
     solid: true, view: CAM, y: 'hip',
   },
   // Fold first, then lift the heels with the hands beside the hips.
-  compression_max: { ...rep(sit(150, 128, 120, [8, 2], 105), sit(150, 128, 120, [8, 2], 115), 0.6, 1.2, 0.3, 0.8), x: 'hip' },
+  compression_max: { ...rep(sit(150, 128, 120, [18, 2], 105), sit(150, 128, 120, [18, 2], 115), 0.6, 1.2, 0.3, 0.8), x: 'hip' },
   needle: { ...breathe([needle(-120), needle(-172)]), x: 'foot' },
 }

@@ -46,7 +46,7 @@ const AIR_CAM = 30
 const plane = (r: number): [Pose, Partial<Stage>] => {
   const hip: [number, number] = [-14, 75]
   const p: Pose = [93, 25 * r, 110 * r, 0, 0, 0, 0, -87, -87 - 50 * r, 96, 100]
-  const [q, st] = put3(p, { roll: -80 * r }, hip, { foot: [0, H.ankle, 10] })
+  const [q, st] = put3(p, { roll: -80 * r }, hip, { foot: [0, H.ankle, 0] })
   return [q, { ...st, armOut: 80 * r, farArmOut: 85 * r, farLegOut: -15 * r }]
 }
 const [air0, air1] = [plane(0), plane(1)]

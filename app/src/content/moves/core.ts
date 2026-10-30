@@ -14,7 +14,7 @@ const hollow = (lift = 0): Pose => [-93, -104 - lift, -104 - lift, -104 - lift, 
 const arch = (lift: number): Pose => [92, 100 + lift, 100 + lift, 100 + lift, 100 + lift, -92 - lift, -92 - lift, -92 - lift, -92 - lift, 100 + lift, 104 + lift]
 
 // Hanging, side view.
-const hangPin = { x: 'hand' as const, y: 'hand' as const, at: [0, -210] as [number, number], props: [{ t: 'bar', x: 0, y: -210 } as const] }
+const hangPin = { x: 'hand' as const, y: 'hand' as const, at: [0, -210] as [number, number], props: [{ t: 'bar', x: 0, y: -210 } as const], balance: true }
 const hang = body(180, 182, 184, [2, 0, 2, 0], 176, -3)
 // The pelvis curls: hips roll forward under the waist while the chest stays tall.
 const kneeUp = body(200, 178, 182, [140, 20, 140, 20], 172, -3)
@@ -28,7 +28,7 @@ const ttbTop = (() => {
 
 // Support on parallettes 40 up: arms locked beside the hips, shoulders pushed down, slight round of the upper back.
 const BARS = -40
-const supportPin = { x: 'hand' as const, y: 'hand' as const, at: [0, BARS] as [number, number], props: [{ t: 'bars', x: 0, y: BARS } as const] }
+const supportPin = { x: 'hand' as const, y: 'hand' as const, at: [0, BARS] as [number, number], props: [{ t: 'bars', x: 0, y: BARS } as const], balance: true }
 const support = (legs: [number, number, number, number], t = 178): Pose => grip(body(t, t - 8, t - 4, legs), [3, 8], 1, true)
 const feetDown = support([100, 8, 100, 8])
 const tuck = support([138, 16, 138, 16])
@@ -120,7 +120,7 @@ export const MOVES: Record<string, Move> = {
   vsit: { ...hold(vs(196, 92, 8), vs(204, 130, 12), vs(205, 132, 12)), ms: 1000 },
   v120: { ...hold(vs(206, 132, 12), vs(216, 170, 16), vs(217, 172, 16)), ms: 1000 },
   tension_board: pinned({ ...hangPin, ...hold(onBox(tense(226, 36, 0)), onBox(TB), onBox(tense(220, 42, -4))), ms: 1000, props: [hangPin.props[0], tbBox] }, onBox, 20),
-  cut_loose: { ...hangPin, mode: 'cycle', flow: 0.15, ms: 1000, keys: [onBox(TB), cutFwd, cutBack, cutBrake, hang, legsUp, ttbTop, legsUp, hang],
+  cut_loose: { ...hangPin, balance: false, mode: 'cycle', flow: 0.15, ms: 1000, keys: [onBox(TB), cutFwd, cutBack, cutBrake, hang, legsUp, ttbTop, legsUp, hang],
     beats: [{ hold: 0.6, dur: 0.6, ease: 'in' }, { dur: 0.9 }, { dur: 0.7 }, { hold: 0.3, dur: 0.5 }, { dur: 0.6 }, { dur: 0.4 }, { hold: 0.3, dur: 0.6 }, { dur: 0.7 }, { hold: 0.3, dur: 0.6 }],
     props: [hangPin.props[0], tbBox] },
   manna: { ...hold(vs(216, 170, 16), vs(240, 200, 20), vs(241, 202, 20)), ms: 1000 },

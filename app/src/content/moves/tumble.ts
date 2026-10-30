@@ -1,4 +1,4 @@
-import { full, joints, LEN, place, type Beat, type Body, type Joint, type Move, type Pose, type Stage } from '../../core/figure'
+import { ballistic, full, G, joints, LEN, place, type Beat, type Body, type Joint, type Move, type Pose, type Stage } from '../../core/figure'
 import { plant, pos, reach, rot, tween } from './legs'
 import { aerial } from '../mocap/aerial'
 import { backTuck } from '../mocap/back_tuck'
@@ -121,14 +121,17 @@ const up = (p: Pose, front = false, st?: Partial<Stage>) => {
 /**
  * Beats for a flight of T seconds through poses at fractions τ of it: lifts keep the centre of mass on the parabola
  * of apex gT²/8 above the line from lift `from` (at τ 0, CoM as in the first pose) to `to` (at τ 1). Key takeoff at
- * τ ≈ 0.12 and landing at ≈ 0.95, just off the floor, and leave eases to the spline: a key at lift 0 with speed
- * would make the spline dip into the floor.
+ * τ ≈ 0.12 and landing at ≈ 0.95, where the feet leave and meet the floor (lift `from` and `to`). Beats are `air`
+ * (core solves the arc between keys) up to the last, which touches down, unless `open`: the flight goes on to the
+ * caller's next key.
  */
-export const air = (ks: [Pose, number, Partial<Stage>?][], T: number, o: { front?: boolean; from?: number; to?: number } = {}): Beat[] => {
-  const { front = false, from = 0, to = from } = o
-  const h = (981 * T * T) / 8
+export const air = (ks: [Pose, number, Partial<Stage>?][], T: number, o: { front?: boolean; from?: number; to?: number; open?: boolean } = {}): Beat[] => {
+  const { front = false, from = 0, to = from, open = false } = o
+  const h = (G * 1e6 * T * T) / 8
   const h0 = up(ks[0][0], front, ks[0][2])
-  return ks.map(([p, f, st], i) => ({ ...st, lift: Math.max(0, from + (to - from) * f + h0 + 4 * h * f * (1 - f) - up(p, front, st)), dur: ((ks[i + 1]?.[1] ?? 1) - f) * T }))
+  const last = ks.length - 1
+  const lift = (p: Pose, f: number, st?: Partial<Stage>) => Math.max(0, from + (to - from) * f + h0 + 4 * h * f * (1 - f) - up(p, front, st))
+  return ks.map(([p, f, st], i) => ({ ...st, air: open || i < last, lift: i === 0 ? from : i === last && !open ? to : lift(p, f, st), dur: ((ks[i + 1]?.[1] ?? 1) - f) * T }))
 }
 
 const SPREAD: [number, number][] = [[20, 12], [57, 40], [18, 48], [57, 40], [20, 12]]
@@ -242,7 +245,7 @@ export const MOVES: Record<string, Move> = {
   roundoff: (() => {
     // Enters side-on running right, turns to face the viewer on the hands, snaps down facing back the way it came.
     const ks = [star(0, 20, 12, false, 0), star(90, 57, 40, false, 90), star(135, 38, 25, false, 90), star(180, 18, 10, false, 90), star(210, 22, 5, false, 92), star(240, 25, 0, false, 95), star(300, 22, 0, false, 165), star(360, 20, 0, false, 180)]
-    const fly = air([[ks[5][0], 0.12, ks[5][1]], [ks[6][0], 0.5, ks[6][1]]], 0.3)
+    const fly = air([[ks[5][0], 0.12, ks[5][1]], [ks[6][0], 0.5, ks[6][1]]], 0.3, { open: true })
     return travelled({
       keys: ks.map((k) => k[0]), mode: 'cycle', solid: true, ms: 1000,
       beats: [{ ...ks[0][1], hold: 0.5, dur: 0.4 }, { ...ks[1][1], dur: 0.1 }, { ...ks[2][1], dur: 0.1 }, { ...ks[3][1], dur: 0.08 }, { ...ks[4][1], dur: 0.07, ease: 'in' }, ...fly, { ...ks[7][1], hold: 0.4, dur: 0.5 }],
@@ -257,7 +260,7 @@ export const MOVES: Record<string, Move> = {
     ['foot', 'hand', 'hand', 'hand', 35, 30, 30, 'foot', 0], [[1, ['hand', 'farHand']], [2, ['hand', 'farHand']]]),
   front_walkover: planted({ keys: unwrap([reachUp, lungeDown, splitFwd, bridgeFwd, rot(reachUp, -360)]), mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 0.6 }, { dur: 0.8 }, { dur: 0.9 }, { hold: 0.2, dur: 0.9 }, { hold: 0.4, dur: 0.01 }] }, ['foot', 'hand', 'hand', 'foot', 0], [[1, ['hand', 'farHand']], [2, ['hand', 'farHand']], [3, ['foot']]]),
   back_walkover: planted({ keys: unwrap([reachUp, leanBack, bridgeBack, splitBack, rot(reachUp, 360)]), mode: 'cycle', ms: 1000, beats: [{ hold: 0.5, dur: 1 }, { dur: 0.7 }, { hold: 0.2, dur: 0.8 }, { dur: 0.8 }, { hold: 0.4, dur: 0.01 }] }, ['foot', 'foot', 'hand', 'foot', 0], [0, 1, [2, ['hand', 'farHand']]]),
-  aerial,
+  aerial: ballistic(aerial, 440, 680),
   front_handspring: (() => {
     const keys = unwrap([reachUp, lunge, reachDown, hurdle, hs, flyFwd, landArch, archAbsorb, rot(reachUp, -360)])
     const fly = air([[keys[4], 0.12], [keys[5], 0.5], [keys[6], 0.95]], 0.45)
@@ -268,7 +271,7 @@ export const MOVES: Record<string, Move> = {
   })(),
   back_handspring: (() => {
     const keys = unwrap([reachUp, sit, throwBack, flyBack, handsBack, snap, contact(360), absorb(360), rot(reachUp, 360)])
-    const fly = air([[keys[2], 0.12], [keys[3], 0.5]], 0.3)
+    const fly = air([[keys[2], 0.12], [keys[3], 0.5]], 0.3, { open: true })
     const fly2 = air([[keys[5], 0.12], [keys[6], 0.95]], 0.25)
     return planted({
       keys, mode: 'cycle', ms: 1000, flow: 0.05,
@@ -279,6 +282,6 @@ export const MOVES: Record<string, Move> = {
     keys: [bfRise, bfWind, bfTake, bfAir1, bfAir2, bfLand], mode: 'cycle', ms: 1000, flow: 0.05,
     beats: [{ hold: 0.4, dur: 0.5 }, { dur: 0.3 }, ...bfAir.slice(0, 3), { ...bfAir[3], dur: 0.6, ease: 'out' }],
   },
-  back_tuck: backTuck,
+  back_tuck: ballistic(backTuck, 240, 490),
   front_tuck: salto(-1, [[ball(120), 0.35], [ball(10), 0.55], [ball(-90), 0.75], [opening(-330), 0.88]], 0.65, 20),
 }

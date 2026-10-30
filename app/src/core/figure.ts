@@ -75,6 +75,8 @@ export type Move = {
   flow?: number
   /** Solid moves: limb ends held still while down (mocap contacts), by shift and limb IK. */
   plants?: Plant[]
+  /** Arms turn about the pinned hand (`x: 'hand'`) so the centre of mass stays over or under it: holds and slow reps on the hands. */
+  balance?: boolean
 }
 
 /** `joint` stays at its mean place from `from` to `to` (loop time, in `dur` units; `from > to` wraps the seam). */
@@ -104,7 +106,8 @@ export type Stage = {
   roll: number; armOut: number; farArmOut: number; legOut: number; farLegOut: number
   foreOut: number; farForeOut: number; shinOut: number; farShinOut: number; twist: number
 }
-export type Beat = Partial<Stage> & { hold?: number; dur?: number; ease?: Ease }
+/** `air`: the transition to the next key is airborne (see `aloft`). */
+export type Beat = Partial<Stage> & { hold?: number; dur?: number; ease?: Ease; air?: boolean }
 const STAGE: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0, foreOut: 0, farForeOut: 0, shinOut: 0, farShinOut: 0, twist: 0 }
 const KEYS = Object.keys(STAGE) as (keyof Stage)[]
 const stage = (b: Beat): Stage => ({ ...STAGE, ...Object.fromEntries(KEYS.filter((k) => b[k] !== undefined).map((k) => [k, b[k]])) })
@@ -280,6 +283,27 @@ function pin(m: Move, b: Body, lift: number, shift: number): Body {
   return out
 }
 
+/** Segment mass fractions (Winter 2009: head 8 %, trunk 50 %, upper arm 2.8 %, forearm and hand 2.2 %, thigh 10 %, shank and foot 6.1 %), each at its segment's midpoint. */
+const MASS: [keyof Body, keyof Body, number][] = [
+  ['hip', 'waist', 0.24], ['waist', 'shoulder', 0.26], ['head', 'head', 0.08],
+  ['nearShoulder', 'elbow', 0.028], ['elbow', 'hand', 0.022], ['farShoulder', 'farElbow', 0.028], ['farElbow', 'farHand', 0.022],
+  ['nearHip', 'knee', 0.1], ['knee', 'foot', 0.061], ['farHip', 'farKnee', 0.1], ['farKnee', 'farFoot', 0.061],
+]
+export const SEGMENTS = MASS
+
+/** Centre of mass of a body (z kept when the body has depth). */
+export function com(b: Body): Required<Pt> {
+  const o = { x: 0, y: 0, z: 0 }
+  let w = 0
+  for (const [a, c, m] of MASS) {
+    o.x += ((b[a].x + b[c].x) / 2) * m
+    o.y += ((b[a].y + b[c].y) / 2) * m
+    o.z += (((b[a].z ?? 0) + (b[c].z ?? 0)) / 2) * m
+    w += m
+  }
+  return { x: o.x / w, y: o.y / w, z: o.z / w }
+}
+
 /** Distal segments (forearms, shins, head) trail the rest by `flow`; limbs trail the trunk by half that. */
 const LAG = [0, 0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1, 0, 1, 0]
 
@@ -293,7 +317,7 @@ export function blend(a: Pose, b: Pose, t: number, ease: Ease = 'io', flow = 0):
   }) as Pose
 }
 
-export type Frame = Stage & { pose: Pose; hold: number; dur: number; ease: Ease }
+export type Frame = Stage & { pose: Pose; hold: number; dur: number; ease: Ease; air: boolean }
 
 /** The frames one loop plays: bounce runs the keys back in reverse with mirrored timing. */
 export function sequence(m: Move): Frame[] {
@@ -302,16 +326,16 @@ export function sequence(m: Move): Frame[] {
   const beat = (i: number): Beat => m.beats?.[i] ?? {}
   const end = (i: number) => bounce && (i === 0 || i === n - 1)
   const out = m.keys.map((pose, i): Frame => ({
-    pose, ...stage(beat(i)), hold: beat(i).hold ?? (end(i) ? 0.3 : 0), dur: beat(i).dur ?? 1, ease: beat(i).ease ?? 'io',
+    pose, ...stage(beat(i)), hold: beat(i).hold ?? (end(i) ? 0.3 : 0), dur: beat(i).dur ?? 1, ease: beat(i).ease ?? 'io', air: beat(i).air ?? false,
   }))
   if (!bounce) return out
   // Going back from key i to i - 1 replays the forward transition i - 1 → i in reverse.
   const back = m.keys.slice(1, -1).map((_, j) => {
     const i = n - 2 - j
     const prev = out[i - 1]
-    return { ...out[i], dur: prev.dur, ease: REVERSE[prev.ease] }
+    return { ...out[i], dur: prev.dur, ease: REVERSE[prev.ease], air: prev.air }
   })
-  const last = { ...out[n - 1], dur: out[n - 2].dur, ease: REVERSE[out[n - 2].ease] }
+  const last = { ...out[n - 1], dur: out[n - 2].dur, ease: REVERSE[out[n - 2].ease], air: out[n - 2].air }
   return [...out.slice(0, -1), last, ...back]
 }
 
@@ -338,7 +362,162 @@ const ENDS: Record<Ease, [number | null, number | null]> = {
  */
 export function at(m: Move, ms: number): Stage & { pose: Pose } {
   const s = spline(m, ms)
-  return m.plants?.length && m.solid ? planted(m, ms, s) : s
+  const p = grounded(m, ms, s)
+  const q = m.keys.length > 1 && m.beats?.some((b) => b.air) ? aloft(m, ms, p) : p
+  return m.balance ? balanced(m, q) : q
+}
+
+/** Spline pose with plants held. */
+const grounded = (m: Move, ms: number, s = spline(m, ms)) => (m.plants?.length && m.solid ? planted(m, ms, s) : s)
+
+/** Gravity in scene units per ms²: the figure, sole to crown, is a 1.75 m man. */
+export const G = (9.81 * (LEN.sole + LEN.shin + LEN.thigh + LEN.waist + LEN.chest + LEN.neck + LEN.head)) / 1.75 / 1e6
+
+/** An airborne stretch of the loop: start and end (ms), the centre of mass there, and the spin correction table. */
+type Flight = { t0: number; t1: number; c0: Pt; c1: Pt; spin: number[] | null }
+const flightCache = new WeakMap<Move, Flight[]>()
+const SPIN_STEPS = 32
+
+/** Sagittal angular momentum (per unit mass) about the centre of mass, each segment a rod, between bodies dt apart. */
+function momentum(a: Body, b: Body, dt: number): number {
+  const [ca, cb] = [com(a), com(b)]
+  let L = 0
+  for (const [p, q, mass] of MASS) {
+    const r0 = { x: (a[p].x + a[q].x) / 2 - ca.x, y: (a[p].y + a[q].y) / 2 - ca.y }
+    const r1 = { x: (b[p].x + b[q].x) / 2 - cb.x, y: (b[p].y + b[q].y) / 2 - cb.y }
+    const d0 = { x: a[q].x - a[p].x, y: a[q].y - a[p].y }
+    const d1 = { x: b[q].x - b[p].x, y: b[q].y - b[p].y }
+    const cross = (u: Pt, v: Pt) => u.x * v.y - u.y * v.x
+    L += mass * (cross({ x: (r0.x + r1.x) / 2, y: (r0.y + r1.y) / 2 }, { x: (r1.x - r0.x) / dt, y: (r1.y - r0.y) / dt }) +
+      cross({ x: (d0.x + d1.x) / 2, y: (d0.y + d1.y) / 2 }, { x: (d1.x - d0.x) / dt, y: (d1.y - d0.y) / dt }) / 12)
+  }
+  return L
+}
+/** Sagittal moment of inertia (per unit mass) about the centre of mass. */
+function inertia(b: Body): number {
+  const c = com(b)
+  return MASS.reduce((s, [p, q, mass]) => {
+    const r = { x: (b[p].x + b[q].x) / 2 - c.x, y: (b[p].y + b[q].y) / 2 - c.y }
+    return s + mass * (r.x * r.x + r.y * r.y + ((b[q].x - b[p].x) ** 2 + (b[q].y - b[p].y) ** 2) / 12)
+  }, 0)
+}
+
+const turned = (p: Pose, d: number) => full(p).map((v, i) => (i <= 10 ? v + d : v)) as Pose
+
+/** The move's flights: each run of `air` frames. */
+function flightsOf(m: Move): Flight[] {
+  const hit = flightCache.get(m)
+  if (hit) return hit
+  const seq = sequence(m)
+  const step = m.ms ?? 900
+  const n = seq.length
+  const starts: number[] = []
+  let t = 0
+  for (const f of seq) { starts.push(t + f.hold * step); t += (f.hold + f.dur) * step }
+  const flat = { ...m, view: 0, tilt: 0 }
+  const body = (ms: number) => { const s = grounded(m, ms); return place(flat, s.pose, s) }
+  const out: Flight[] = []
+  for (let i = 0; i < n; i++) {
+    if (!seq[i].air || seq[(i - 1 + n) % n].air) continue
+    let j = i
+    while (seq[(j + 1) % n].air && (j + 1) % n !== i) j++
+    const t0 = starts[i]
+    const t1 = starts[j % n] + seq[j % n].dur * step + (j >= n ? t : 0)
+    const [b0, b1] = [body(t0), body(t1)]
+    // Spin: only flips (not twists or front views), where the trunk turns a quarter or more.
+    const raw = Array.from({ length: SPIN_STEPS + 1 }, (_, k) => grounded(m, t0 + ((t1 - t0) * k) / SPIN_STEPS))
+    const flip = !m.front && Math.abs(full(raw[SPIN_STEPS].pose)[0] - full(raw[0].pose)[0]) >= 90 &&
+      raw.every((s) => Math.abs(s.turn - raw[0].turn) < 20 && Math.abs(s.roll) < 20)
+    let spin: number[] | null = null
+    if (flip) {
+      const dt = (t1 - t0) / SPIN_STEPS
+      const bs = raw.map((s) => place(flat, s.pose, s))
+      const mid = bs.slice(1).map((b, k) => ({ L: momentum(bs[k], b, dt), I: (inertia(bs[k]) + inertia(b)) / 2 }))
+      // Constant momentum L*: added turn rate (L* - L)/I, its integral zero so the end pose is kept. Angles grow
+      // clockwise on screen (y down), the opposite sense to L.
+      const Ls = mid.reduce((s, x) => s + x.L / x.I, 0) / mid.reduce((s, x) => s + 1 / x.I, 0)
+      spin = [0]
+      for (const x of mid) spin.push(spin[spin.length - 1] - (((Ls - x.L) / x.I) * dt * 180) / Math.PI)
+    }
+    out.push({ t0, t1, c0: com(b0), c1: com(b1), spin })
+  }
+  flightCache.set(m, out)
+  return out
+}
+
+/**
+ * A cycle with the transitions inside [from, to] (loop ms) made one flight: `air`, and retimed to the time gravity
+ * takes for the centre of mass to rise and fall as the keys have it (captured flights are often too quick). Plants
+ * after the flight move later with it.
+ */
+export function ballistic(m: Move, from: number, to: number): Move {
+  const step = m.ms ?? 900
+  const seq = sequence(m)
+  const idx: number[] = []
+  let [t, t0, t1] = [0, Infinity, 0]
+  seq.forEach((f, i) => {
+    const a = t + f.hold * step
+    t = a + f.dur * step
+    if (a >= from && t <= to) { idx.push(i); t0 = Math.min(t0, a); t1 = Math.max(t1, t) }
+  })
+  const flat = { ...m, view: 0, tilt: 0 }
+  const y = (ms: number) => { const s = grounded(m, ms); return com(place(flat, s.pose, s)).y }
+  let apex = Infinity
+  for (let u = t0; u <= t1; u += 5) apex = Math.min(apex, y(u))
+  const T = Math.sqrt((2 * (y(t0) - apex)) / G) + Math.sqrt((2 * (y(t1) - apex)) / G)
+  const k = T / (t1 - t0)
+  const added = (T - (t1 - t0)) / step
+  const later = (u: number) => (u * step > t1 ? u + added : u)
+  return {
+    ...m,
+    beats: m.keys.map((_, i) => ({ ...m.beats?.[i], ...(idx.includes(i) ? { air: true, dur: seq[i].dur * k } : {}) })),
+    ...(m.plants ? { plants: m.plants.map((p) => ({ ...p, from: later(p.from), to: later(p.to) })) } : {}),
+  }
+}
+
+/**
+ * Air phases follow physics: over each run of `air` beats the centre of mass moves on the parabola of gravity `G`
+ * between where the keys put it at takeoff and landing (`lift` and `shift` are solved), horizontally at constant
+ * speed; in flips the whole body turns so its angular momentum stays constant (faster tucked, slower open).
+ */
+function aloft(m: Move, ms: number, s: Stage & { pose: Pose }): Stage & { pose: Pose } {
+  const total = loopMs(m)
+  const g = Math.max(0, ms)
+  for (const f of flightsOf(m)) {
+    const u = (((g - f.t0) % total) + total) % total
+    if (u > f.t1 - f.t0) continue
+    const T = f.t1 - f.t0
+    const tau = u / T
+    let pose = s.pose
+    if (f.spin) {
+      const k = tau * SPIN_STEPS
+      const i = Math.min(SPIN_STEPS - 1, Math.floor(k))
+      pose = turned(pose, f.spin[i] + (f.spin[i + 1] - f.spin[i]) * (k - i))
+    }
+    const c = com(place({ ...m, view: 0, tilt: 0 }, pose, s))
+    // Loops since the first: travel and climb carry on.
+    const k = Math.round((g - u - f.t0) / total)
+    const x = f.c0.x + (f.c1.x - f.c0.x) * tau + k * (m.travel ?? 0)
+    const y = f.c0.y + (f.c1.y - f.c0.y) * tau - 0.5 * G * T * T * tau * (1 - tau) - k * (m.climb ?? 0)
+    return { ...s, pose, lift: s.lift + (c.y - y), shift: s.shift + (x - c.x) }
+  }
+  return s
+}
+
+/** Arms (both upper and forearms) turned by the angle that puts the centre of mass over the pinned hand. */
+function balanced(m: Move, s: Stage & { pose: Pose }): Stage & { pose: Pose } {
+  const flat = { ...m, view: 0, tilt: 0 }
+  const turn = (d: number) => full(s.pose).map((v, i) => (i >= 1 && i <= 4 ? v + d : v)) as Pose
+  const err = (d: number) => { const b = place(flat, turn(d), s); return com(b).x - b[m.x ?? 'hip'].x }
+  let d = 0
+  for (let it = 0; it < 6; it++) {
+    const e = err(d)
+    if (Math.abs(e) < 0.05) break
+    const k = (err(d + 0.5) - e) / 0.5
+    if (Math.abs(k) < 0.05) break
+    d -= Math.max(-30, Math.min(30, e / k))
+  }
+  return { ...s, pose: turn(d) }
 }
 
 function spline(m: Move, ms: number): Stage & { pose: Pose } {
