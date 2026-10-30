@@ -1,4 +1,4 @@
-import { ancestry, fraction, grant, isMastered, plan, status, streak, toggle, unmaster, type Progress } from '../core/progress'
+import { ancestry, fraction, grant, isMastered, status, streak, toggle, unmaster, workout, type Progress, type Step } from '../core/progress'
 import type { Kind, Skill, Status } from '../core/types'
 import { QUESTIONS } from '../content/questions'
 import { BRANCH_BY_ID, BRANCHES, BY_ID, SKILLS } from '../content/tree'
@@ -106,26 +106,44 @@ function wireSheet(scope: HTMLElement, s: Skill, rerender: () => void) {
   })
 }
 
+/** How to move up a level, by kind of skill. */
+const RULE: Record<Kind, string> = {
+  strength: 'Rest 2–3 min between sets. When the work sets feel solid two sessions running, the try becomes your work sets.',
+  movement: 'Practise fresh, in short attempts. Stop when quality drops. Tick the try once it lands 3 times out of 5.',
+  mobility: 'Ease in on the exhale, 2–3 rounds. Fine to do daily. Tick the try once it feels calm, not forced.',
+}
+const ROLE: Record<Step['role'], string> = { builder: 'Build', work: 'Work sets', test: 'Try' }
+let more = { day: 0, n: 0 }
+
 function today_(root: HTMLElement) {
-  const picks = plan(SKILLS, p, BY_ID, kindOf)
+  const day = today()
+  if (more.day !== day) more = { day, n: 0 }
+  const blocks = workout(SKILLS, p, BY_ID, day, 3 + more.n)
   const screen = el(`<div class="page">
-    <header class="page-head"><h1>Today</h1><p>${streak(p, today())} day streak · ${p.focus.length ? `focus: ${[...new Set(p.focus)].map((f) => esc(BRANCH_BY_ID.get(f)!.name)).join(', ')}` : '<a href="#/check">set a focus in Check-in</a>'}</p></header>
-    <p class="hint">One skill per branch, nearest the next unlock. Tick a challenge when you hit it.</p>
-    <ul class="plan">${picks.map((s) => {
+    <header class="page-head"><h1>Today</h1><p>${streak(p, day)} day streak · ${p.focus.length ? `focus: ${[...new Set(p.focus)].map((f) => esc(BRANCH_BY_ID.get(f)!.name)).join(', ')}` : '<a href="#/check">set a focus in Check-in</a>'}</p></header>
+    <p class="hint">Three areas to push today. Each block builds the base, works the level you have, then tries the next one.</p>
+    <ul class="plan">${blocks.map(({ skill: s, steps }) => {
       const b = BRANCH_BY_ID.get(s.branch)!
-      const next = s.challenges.findIndex((_, i) => !(p.done[s.id] ?? []).includes(i))
-      return `<li class="card ${b.kind}">
-        <a href="#/skill/${s.id}"><p class="eyebrow">${esc(b.name)}</p><h2>${esc(s.name)}</h2>
-        <p class="next">Next: ${esc(s.challenges[next])}</p><p class="cue">${esc(s.cues[0])}</p></a>
-        <button class="tick" data-id="${s.id}" data-i="${next}" aria-label="Done">✓</button>
+      return `<li class="card block ${b.kind}">
+        <a href="#/skill/${s.id}"><p class="eyebrow">${esc(b.name)}</p><h2>${esc(s.name)}</h2><p class="cue">${esc(s.cues[0])}</p></a>
+        <ol class="steps">${steps.map((t) => `<li class="${t.role}"><span class="role">${ROLE[t.role]}</span>
+          <span>${t.skill.id === s.id ? '' : `<a href="#/skill/${t.skill.id}">${esc(t.skill.name)}</a>: `}${t.challenge < 0 ? '2–3 easy sets at about half the try' : esc(t.skill.challenges[t.challenge])}</span>
+          ${t.role === 'test' ? `<button class="tick" data-id="${s.id}" data-i="${t.challenge}" aria-label="Landed it">✓</button>` : ''}</li>`).join('')}</ol>
+        <p class="rule">${RULE[b.kind]}</p>
       </li>`
     }).join('')}</ul>
-    ${picks.length ? '' : '<p class="hint">Everything open is mastered. Go do a check-in, or look for locked skills on the tree.</p>'}
+    ${blocks.length ? `<button class="secondary" data-act="more">Give me more</button>` : '<p class="hint">Everything open is mastered. Go do a check-in, or look for locked skills on the tree.</p>'}
     ${nav('today')}
   </div>`)
   root.replaceChildren(screen)
   screen.querySelectorAll<HTMLButtonElement>('.tick').forEach((b) =>
-    b.addEventListener('click', () => (commit(toggle(p, BY_ID.get(b.dataset.id!)!, Number(b.dataset.i), today())), today_(root))))
+    b.addEventListener('click', () => (commit(toggle(p, BY_ID.get(b.dataset.id!)!, Number(b.dataset.i), day)), today_(root))))
+  screen.querySelector('[data-act="more"]')?.addEventListener('click', () => {
+    more.n++
+    const y = scrollY
+    today_(root)
+    scrollTo(0, y)
+  })
 }
 
 function check(root: HTMLElement) {

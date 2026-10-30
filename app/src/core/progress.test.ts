@@ -1,12 +1,11 @@
 import { expect, test } from 'vitest'
-import { empty, grant, plan, status, streak, toggle } from './progress'
+import { empty, grant, status, streak, toggle, workout } from './progress'
 import type { Skill } from './types'
 
 const sk = (id: string, branch: string, tier: number, requires: string[] = []): Skill =>
   ({ id, name: id, branch, tier, lane: 0, requires, what: '', cues: [], challenges: ['a', 'b'] })
 const skills = [sk('a', 'x', 1), sk('b', 'x', 2, ['a']), sk('m', 'mob', 1), sk('c', 'y', 1)]
 const byId = new Map(skills.map((s) => [s.id, s]))
-const kind = (b: string) => (b === 'mob' ? 'mobility' : 'strength')
 
 test('status moves locked → open → active → mastered', () => {
   let p = empty()
@@ -32,10 +31,17 @@ test('streak counts consecutive days ending today or yesterday', () => {
   expect(streak(p, 7)).toBe(0)
 })
 
-test('plan takes one per branch, focus first, always a mobility slot', () => {
-  const p = { ...empty(), focus: ['y'] }
-  const out = plan(skills, p, byId, kind, 2)
-  expect(out[0].id).toBe('c')
-  expect(out.some((s) => s.branch === 'mob')).toBe(true)
-  expect(new Set(out.map((s) => s.branch)).size).toBe(out.length)
+test('workout leads with focus, one area per branch, stable per day', () => {
+  const p = toggle({ ...empty(), focus: ['y'] }, byId.get('a')!, 0, 1)
+  const out = workout(skills, p, byId, 9, 2)
+  expect(out[0].skill.id).toBe('c')
+  expect(new Set(out.map((b) => b.skill.branch)).size).toBe(2)
+  expect(workout(skills, p, byId, 9, 2)).toEqual(out)
+  expect(workout(skills, p, byId, 9, 3).slice(0, 2)).toEqual(out)
+})
+
+test('block: work sets at the level reached, then a try at the next', () => {
+  const p = toggle(grant(empty(), ['a'], byId), byId.get('b')!, 0, 1)
+  expect(workout(skills, p, byId, 1, 9).find((b) => b.skill.id === 'b')!.steps.map((s) => [s.role, s.skill.id, s.challenge]))
+    .toEqual([['builder', 'a', 1], ['work', 'b', 0], ['test', 'b', 1]])
 })
