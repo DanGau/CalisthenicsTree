@@ -8,6 +8,7 @@ export const QUESTIONS: Question[] = [
     { label: 'Levers and pulling', focus: ['frontlever', 'backlever', 'pull'] },
     { label: 'Legs', focus: ['legs', 'hinge'] },
     { label: 'Flexibility', focus: ['flex', 'backbend'] },
+    { label: 'Yoga', focus: ['yoga', 'flex'] },
     { label: 'Mobility and joint health', focus: ['mobility'] },
     { label: 'Flow and ground movement', focus: ['flow', 'floor'] },
     { label: 'Acrobatics and parkour', focus: ['tumble', 'parkour'] },
