@@ -432,5 +432,7 @@ export const MOVES: Record<string, Move> = {
   },
   stall_semi_hang: pinned({ keys: [semi(SEMI[0], 168, 160, 150), semi(SEMI[1], 140, 128, 118)], x: 'hand', y: 'hand', at: [0, RUNG(12)], props: [{ t: 'stall', x: 0 }], ms: 1000, beats: [{ hold: 0.6, dur: 2.5 }, { hold: 2, dur: 2 }] }, semiFeet, 40),
   stall_side_bend: pinned({ keys: [bend(BEND[0], 170, 155, 150), bend(BEND[1], 164, 128, 120)], front: true, x: 'hand', y: 'hand', at: [0, RUNG(6)], props: [{ t: 'stall', x: 0 }], ms: 1000, beats: [{ hold: 0.6, dur: 2.2 }, { hold: 2, dur: 2 }] }, highHand, 40),
+  // Back to the wall, straight arms rise forward and up to the wall; ribs stay down.
+  wall_reach: { ...rep([180, 2, 4, -2, -4, 0, 0, 0, 0, 180, 180], [180, 182, 183, 182, 183, 0, 0, 0, 0, 180, 180, 5], 1.6, 1.6, 0.4, 1.2), ms: 1000, props: [{ t: 'wall', x: -18 }] },
   overhead_squat: { ...repPath(ohs, 2, 1.2, 0.4, 0.3), x: 'foot', ms: 1000 },
 }

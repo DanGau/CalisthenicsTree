@@ -8,3 +8,4 @@
 - **Today.** Three areas picked at random each day (focus branches first, one per branch). Each block: a builder (the hardest prerequisite's mastery test), work sets at the level reached, one try at the next level, and a progression rule by kind. "Give me more" adds another area.
 - **Progress** lives in localStorage; Progress has copy/restore backup.
 - Progressions loosely follow https://thegravgear.com/blogs/calisthenics/bodyweight-fitness-progression, extended with mobility, flexibility, backbends, yoga, animal flow, capoeira and breaking, tumbling, and parkour.
+- Stiff adults: starting points, dosing and the science in [flexibility-adult.md](flexibility-adult.md).

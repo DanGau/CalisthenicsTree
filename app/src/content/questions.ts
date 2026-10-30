@@ -65,9 +65,14 @@ export const QUESTIONS: Question[] = [
     { label: 'L-sit 10s+', grants: ['lsit'] },
     { label: 'V-sit', grants: ['vsit'] },
   ] },
+  { id: 'stiff', ask: 'How flexible are you overall?', options: [
+    { label: 'Very stiff: can’t touch my knees, sit cross-legged or squat', focus: ['flex', 'mobility', 'hips'] },
+    { label: 'Average' },
+    { label: 'Bendy' },
+  ] },
   { id: 'fold', ask: 'Standing forward fold, legs straight?', options: [
     { label: 'Hands to knees' },
-    { label: 'Hands to shins', },
+    { label: 'Hands to shins', grants: ['strap_ham'] },
     { label: 'Fingers to floor', grants: ['fwd_fold'] },
     { label: 'Palms flat', grants: ['pike_seated'] },
     { label: 'Chest to thighs', grants: ['pike_full'] },

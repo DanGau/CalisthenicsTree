@@ -133,6 +133,16 @@ const bfly = (k: number, prev?: Key): Key => {
   }, {}, prev)
 }
 
+// Cross-legged on a cushion (hip 19 up): each foot under the opposite knee; tall, then a fold onto the hands.
+const crossKey = (k: number, prev?: Key): Key => {
+  const t = 178 - 38 * k
+  const hand = (z: number): Tgt => (k < 0.5 ? { end: [26, 22, z], pole: [0, -1, z] } : { end: [36, H.hand, z], pole: [0, -1, z] })
+  return fig([t, 0, 0, 0, 0, 0, 0, 0, 0, t + 2, t - 4 - 10 * k], [0, 19], {
+    foot: { end: [22, 7, -12], pole: [0.2, 0.6, 1] }, farFoot: { end: [26, 7, 12], pole: [0.2, 0.6, -1] },
+    hand: hand(14), farHand: hand(-14),
+  }, {}, prev)
+}
+
 // Frog: on all fours, knees wide (`k` each side of the midline), shins straight back, hips rocked to `hx`
 // (0 = knee line). The hip height follows from the thighs. `chest` low puts the chest toward the floor.
 const frogKey = (k: number, hx: number, t: number, hand: number, prev?: Key): Key => {
@@ -288,6 +298,7 @@ const lateralReach = (u: number, prev?: Key): Key => {
 
 export const MOVES: Record<string, Move> = {
   // Knees sink toward the floor on the exhale; the spine stays long, hands on the feet.
+  cross_sit: { ...breathK(chain([0, 1], crossKey), (p) => crossKey(0.9, p)), ...PIN, solid: true, view: 60, tilt: 15, props: [{ t: 'box', x: -14, w: 22, h: 8 }] },
   butterfly: { ...breathK(chain(steps01(8), bfly), (p) => bfly(0.8, p)), ...PIN, solid: true, view: 60, tilt: 15 },
   // Seen from above and behind: hips rock forward toward the knee line on the exhale, shins parallel.
   frog: frogMoves(38, [-20, -8, -11], [104, 106, 105], 46),

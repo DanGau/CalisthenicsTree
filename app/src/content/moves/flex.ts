@@ -73,7 +73,25 @@ const pancakePull = (t: number, c: number, head: number): Pose => {
   return put([t, 0, 0, 0, 0, l, l, l, l, c, head], STALL_SEAT, { hand: [0, h(1)], farHand: [0, h(1)] }, { hand: 1, farHand: 1 })
 }
 
+// Strap hamstring: supine, far leg long on the floor, near leg raised to thigh angle `a`; hands hold the strap
+// on the line from the shoulder to the foot.
+const strap = (a: number): Pose => {
+  const hip: [number, number] = [46, H.lie]
+  const r = a / D
+  const foot = [hip[0] + 76 * Math.sin(r), hip[1] - 76 * Math.cos(r)]
+  const n = Math.hypot(foot[0], foot[1] - H.lie)
+  const hand: [number, number] = [(foot[0] * 48) / n, H.lie + ((foot[1] - H.lie) * 48) / n]
+  return put([-90, 0, 0, 0, 0, a, a, 90, 90, -90, -90], hip, { farFoot: [hip[0] + 75.5, H.ankle], hand, farHand: hand }, { hand: 1, farHand: 1 })
+}
+// Elephant walk: the fold with one heel lifted and that knee bent; hips stay put.
+const ele = (near: boolean): Pose =>
+  put([50, 0, 0, 0, 0, 0, 0, 0, 0, 22, 0], [-8, 80.6], { foot: near ? [3, 13] : [0, H.ankle], farFoot: near ? [0, H.ankle] : [3, 13], hand: [27, H.hand], farHand: [27, H.hand] }, { hand: 1, farHand: 1 })
+
 export const MOVES: Record<string, Move> = {
+  // The straight leg rises on the strap; the knee never bends.
+  strap_ham: { ...breathe([strap(120), strap(150)]), x: 'shoulder', at: [0, 0] },
+  // One knee bends as the other presses straight, alternating; hands stay down.
+  elephant_walk: { keys: [fold, ele(true), fold, ele(false)], mode: 'cycle', x: 'foot', ms: 1000, beats: [{ dur: 1 }, { hold: 0.4, dur: 1 }, { dur: 1 }, { hold: 0.4, dur: 1 }] },
   // Flat-back hinge, then the spine lets go; roll up a vertebra at a time.
   fwd_fold: { ...breathe([stand, flatBack, fold], 1000), x: 'foot' },
   // Chest leads toward the toes; the hinge is at the hip.
