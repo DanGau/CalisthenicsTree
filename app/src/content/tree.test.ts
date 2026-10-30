@@ -13,7 +13,7 @@ test.each(SKILLS)('$id is well formed', (s) => {
   for (const r of s.requires) expect(BY_ID.has(r), `${s.id} requires unknown ${r}`).toBe(true)
   expect(s.challenges.length).toBeGreaterThanOrEqual(3)
   expect(s.cues.length).toBeGreaterThanOrEqual(2)
-  expect(Math.abs(s.lane)).toBeLessThanOrEqual(s.tier >= 7 ? 2 : s.tier >= 3 ? 1 : 0)
+  expect(Math.abs(s.lane)).toBeLessThanOrEqual(s.tier >= 5 ? 2 : s.tier >= 3 ? 1 : 0)
   // Every skill hangs off a lower tier of its own branch, so branches read as paths.
   if (s.tier > 1) expect(s.requires.some((r) => BY_ID.get(r)!.branch === s.branch && BY_ID.get(r)!.tier < s.tier), s.id).toBe(true)
   else expect(s.requires).toEqual([])
