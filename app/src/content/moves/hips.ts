@@ -1,4 +1,4 @@
-import { LEN, solid, type Beat, type Move, type Pose, type Stage } from '../../core/figure'
+import { STAGE, LEN, solid, type Beat, type Move, type Pose, type Stage } from '../../core/figure'
 import { ang, H } from './mobility'
 
 // Climbing hips. Every move is solid and built in world space: the hip is placed by `lift` (height) and
@@ -11,7 +11,7 @@ type Tgt = { end: V3; mid?: V3; pole?: V3 }
 export type Key = [Pose, Partial<Stage>]
 
 const D = 180 / Math.PI
-const S0: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0, foreOut: 0, farForeOut: 0, shinOut: 0, farShinOut: 0, twist: 0 }
+const S0: Stage = STAGE
 const SLOT: Record<Limb, number> = { hand: 1, farHand: 3, foot: 5, farFoot: 7 }
 const OUT = { hand: 'armOut', farHand: 'farArmOut', foot: 'legOut', farFoot: 'farLegOut' } as const
 const SUB = { hand: 'foreOut', farHand: 'farForeOut', foot: 'shinOut', farFoot: 'farShinOut' } as const

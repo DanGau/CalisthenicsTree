@@ -1,4 +1,4 @@
-import { at, com, joints, loopMs, solid, type Beat, type Body, type Move, type Pose, type Stage } from '../../core/figure'
+import { STAGE, at, com, joints, loopMs, solid, type Beat, type Body, type Move, type Pose, type Stage } from '../../core/figure'
 import { pos, reach } from './legs'
 
 const R = Math.PI / 180
@@ -94,7 +94,7 @@ export type K3 = { p: Pose; s: Partial<Stage> }
 export type V3 = [number, number, number]
 type Limb = 'hand' | 'farHand' | 'foot' | 'farFoot'
 const SLOT3 = { hand: [1, 2, 'armOut'], farHand: [3, 4, 'farArmOut'], foot: [5, 6, 'legOut'], farFoot: [7, 8, 'farLegOut'] } as const
-const ZERO: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0, foreOut: 0, farForeOut: 0, shinOut: 0, farShinOut: 0, twist: 0 }
+const ZERO: Stage = STAGE
 /** Joints of a solid key about the hip, camera turn removed: x forward, y down, z the near side (before roll). */
 export const b3 = (k: K3): Body => solid(k.p, { ...ZERO, ...k.s, turn: 0 })
 export const p3 = (k: K3, j: keyof Body): V3 => { const v = b3(k)[j]; return [v.x, v.y, v.z ?? 0] }

@@ -1,4 +1,4 @@
-import { blend, com as comOf, full, G, joints, LEN, place, solid, type Beat, type Body, type Move, type Pose, type Prop, type Pt, type Stage } from '../../core/figure'
+import { STAGE, blend, com as comOf, full, G, joints, LEN, place, solid, type Beat, type Body, type Move, type Pose, type Prop, type Pt, type Stage } from '../../core/figure'
 import { ik } from './legs'
 
 // Geometry helpers shared by the pushing branches. Coordinates are relative to the hip, y down.
@@ -216,7 +216,7 @@ const hCobra = reachTo((t) => [t, 0, 0, 0, 0, -82, -82, -82, -82, t + 28, t + 50
 // Solid (3D) keys. Body frame: hip at the origin, x forward (pose angle 90), y down, z toward the near side.
 /** A solid key: pose plus its 3D stage (limb swing, roll). */
 export type Key3 = { p: Pose; st: Partial<Stage> }
-const ST: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0, foreOut: 0, farForeOut: 0, shinOut: 0, farShinOut: 0, twist: 0 }
+const ST: Stage = STAGE
 /** Joints of a solid key (its own `turn` is a body yaw; the camera is the move's `view`). */
 export const frame = (k: Key3) => solid(k.p, { ...ST, ...k.st })
 type P3 = Required<Pt>

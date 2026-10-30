@@ -105,10 +105,15 @@ export type Stage = {
    */
   roll: number; armOut: number; farArmOut: number; legOut: number; farLegOut: number
   foreOut: number; farForeOut: number; shinOut: number; farShinOut: number; twist: number
+  /**
+   * Shoulders slide round the ribcage toward the chest's front (+, protraction) or back (-, retraction), units, about
+   * -5..6. With hands planted the ribcage moves instead: up between the blades protracted, sinking retracted.
+   */
+  protract: number
 }
 /** `air`: the transition to the next key is airborne (see `aloft`). */
 export type Beat = Partial<Stage> & { hold?: number; dur?: number; ease?: Ease; air?: boolean }
-const STAGE: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0, foreOut: 0, farForeOut: 0, shinOut: 0, farShinOut: 0, twist: 0 }
+export const STAGE: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0, foreOut: 0, farForeOut: 0, shinOut: 0, farShinOut: 0, twist: 0, protract: 0 }
 const KEYS = Object.keys(STAGE) as (keyof Stage)[]
 const stage = (b: Beat): Stage => ({ ...STAGE, ...Object.fromEntries(KEYS.filter((k) => b[k] !== undefined).map((k) => [k, b[k]])) })
 
@@ -148,14 +153,14 @@ export function footAngle(shin: number) {
 }
 
 /** Joint positions with the hip at the origin. */
-export function joints(p: Pose, front = false, point: Move['point'] = false, trunk = 1, legs = 1, arms = 1): Body {
+export function joints(p: Pose, front = false, point: Move['point'] = false, trunk = 1, legs = 1, arms = 1, protract = 0): Body {
   const [t, nu, nf, fu, ff, nt, ns, ft, fs, c, h] = full(p)
   const hip = { x: 0, y: 0 }
   const waist = dir(t, LEN.waist * trunk)
   const shoulder = add(waist, dir(c, LEN.chest * trunk))
   // Front view: limbs hang from shoulders and hips set apart; side view: they share a joint.
   const side = (deg: number, w: number): Pt => (front ? dir(deg + 90, w) : { x: 0, y: 0 })
-  const sh = add(shoulder, dir(c, p[11] ?? 0))
+  const sh = add(add(shoulder, dir(c, p[11] ?? 0)), dir(c - 90, protract))
   const nS = add(sh, side(c, -GIRDLE.shoulder))
   const fS = add(sh, side(c, GIRDLE.shoulder))
   const nH = add(hip, side(t, -GIRDLE.hip))
@@ -197,7 +202,7 @@ export function solid(p: Pose, st: Stage, point: Move['point'] = false): Body {
   const [t, nu, nf, fu, ff, nt, ns, ft, fs, c, h, sc] = full(p)
   const hip: V3 = [0, 0, 0]
   const waist = dir3(t, 0, 0, LEN.waist * st.trunk)
-  const shoulder = add3(add3(waist, dir3(c, 0, 0, LEN.chest * st.trunk)), dir3(c, 0, 0, sc))
+  const shoulder = add3(add3(add3(waist, dir3(c, 0, 0, LEN.chest * st.trunk)), dir3(c, 0, 0, sc)), dir3(c - 90, 0, 0, st.protract))
   const nS = add3(shoulder, [0, 0, GIRDLE.shoulder])
   const fS = add3(shoulder, [0, 0, -GIRDLE.shoulder])
   const nH: V3 = [0, 0, GIRDLE.hip]
@@ -260,7 +265,7 @@ export function place(m: Move, p: Pose, st: Partial<Stage> = {}): Body {
     for (const v of Object.values(b)) Object.assign(v, camera(m, v))
     return b
   }
-  const raw = joints(p, m.front, m.point, trunk, legs, arms)
+  const raw = joints(p, m.front, m.point, trunk, legs, arms, full3.protract)
   // Turning about the vertical axis squeezes x about the hip; past 90 the figure faces the other way.
   // A floor of 0.3 width keeps the body readable mid-turn; it flips sides at 90 like a cartoon turn.
   const c = Math.cos((turn * Math.PI) / 180)

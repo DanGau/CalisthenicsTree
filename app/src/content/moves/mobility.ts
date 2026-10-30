@@ -1,4 +1,4 @@
-import { blend, full, joints, LEN, RUNG, solid, type Beat, type Move, type Pose, type Stage } from '../../core/figure'
+import { STAGE, blend, full, joints, LEN, RUNG, solid, type Beat, type Move, type Pose, type Stage } from '../../core/figure'
 import { pos, reach } from './legs'
 import { pinned } from './pull'
 
@@ -99,7 +99,7 @@ const OUT: Record<Limb, 'armOut' | 'farArmOut' | 'legOut' | 'farLegOut'> = { han
 type Knee = 'knee' | 'farKnee'
 const KNEE: Record<Knee, Limb> = { knee: 'foot', farKnee: 'farFoot' }
 const SHIN: Record<Limb, 'foreOut' | 'farForeOut' | 'shinOut' | 'farShinOut'> = { hand: 'foreOut', farHand: 'farForeOut', foot: 'shinOut', farFoot: 'farShinOut' }
-const STAGE0: Stage = { lift: 0, shift: 0, turn: 0, trunk: 1, legs: 1, arms: 1, roll: 0, armOut: 0, farArmOut: 0, legOut: 0, farLegOut: 0, foreOut: 0, farForeOut: 0, shinOut: 0, farShinOut: 0, twist: 0 }
+const STAGE0: Stage = STAGE
 const ROOT = { hand: 'nearShoulder', farHand: 'farShoulder', foot: 'nearHip', farFoot: 'farHip' } as const
 
 type V3 = [number, number, number]

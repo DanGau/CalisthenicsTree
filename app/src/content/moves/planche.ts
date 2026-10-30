@@ -1,7 +1,7 @@
-import { type Move, type Pose, type Prop } from '../../core/figure'
+import { joints, type Beat, type Body, type Move, type Pose, type Prop } from '../../core/figure'
 import { fig, type Key, sampled } from './hips'
 import { H } from './mobility'
-import { balance, bent, com3, world, fit, fit3, handOf, holdBeats, type Key3, line, reachTo, rep, set, solidMove, straight, tween } from './push'
+import { balance, bent, solve, com3, world, fit, fit3, handOf, holdBeats, type Key3, line, reachTo, rep, set, solidMove, straight, tween } from './push'
 
 const ARM = 54
 
@@ -9,8 +9,19 @@ const ARM = 54
 const hollow = straight((t) => line(t, -8), 0)
 const D_HANDS = handOf(hollow).x
 const sag = reachTo((t) => line(t, 9, -4, 10), ARM - 0.5, D_HANDS, 0, -1, 100, 150)
-const protract = reachTo((t) => line(t, -12), ARM - 0.5, D_HANDS, 0, -1, 100, 150)
-const retract = reachTo((t) => line(t, 5, 0, 5), ARM - 0.5, D_HANDS, 0, -1, 100, 150)
+/**
+ * Scap push-up key: hands and toes fixed, arms locked, body a straight plank; the shoulders slide `q` round the
+ * ribs (`protract`), so the trunk rises between the blades (+) or sinks between them (-) instead of turning.
+ */
+const scap = (q: number, bend: number): [Pose, Beat] => {
+  const hand = (b: Body) => ({ x: b.toe.x + D_HANDS, y: b.toe.y })
+  const at = (t: number) => joints(line(t, bend), false, false, 1, 1, 1, q)
+  const t = solve((t) => { const b = at(t); return Math.hypot(b.shoulder.x - hand(b).x, b.shoulder.y - hand(b).y) - (ARM - 0.5) }, 100, 150)
+  const b = at(t)
+  const u = (Math.atan2(hand(b).x - b.shoulder.x, hand(b).y - b.shoulder.y) * 180) / Math.PI
+  return [set(set(line(t, bend), [1, 3], u), [2, 4], u), { protract: q }]
+}
+const [protract, retract] = [scap(6, -3), scap(-5, 2)]
 
 // Lean: shoulders travel past the hands, the feet roll onto the toes.
 const lean = straight((t) => line(t, -10), -24)
@@ -84,7 +95,7 @@ const SPIDER = (u: number, prev?: Key): Key => {
 
 export const MOVES: Record<string, Move> = {
   plank: { ...m([sag, hollow, reachTo((t) => line(t, -5), ARM - 0.5, D_HANDS, 0, -1, 100, 150)]), beats: holdBeats(1.6, 2) },
-  scap_pu: { ...m([retract, protract]), beats: [{ hold: 0.3, dur: 1 }, { hold: 0.4, dur: 0.8 }], mode: 'cycle' },
+  scap_pu: { ...m([retract[0], protract[0]]), beats: [{ ...retract[1], hold: 0.3, dur: 1 }, { ...protract[1], hold: 0.4, dur: 0.8 }], mode: 'cycle' },
   planche_lean: { ...m([hollow, lean, tween(hollow, lean, 1.04)]), beats: [{ hold: 0.4, dur: 2 }, { dur: 1.5 }, { hold: 0.2 }] },
   pp_pu: { x: 'hand', ...rep(lean, ppLow, (f) => tween(lean, ppLow, f), 2, 1.2) },
   tuck_planche: { ...m([tuckIn, tuck, float(set(tuckBody, [10], 100))]), beats: holdBeats(1.8, 1.5) },
