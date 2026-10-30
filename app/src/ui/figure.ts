@@ -245,6 +245,17 @@ function plane(cam: number, tilt: number) {
   return `<rect class="plane" x="${cam - 600}" y="${f(-120 * sn)}" width="1200" height="${f(240 * sn)}"/>${lines.join('')}`
 }
 
+/** Strap: from the hands out past the ball of the near foot and back, looped over the sole. */
+function strap(b: Body) {
+  const [fx, fy] = [(b.foot.x + 2 * b.toe.x) / 3, (b.foot.y + 2 * b.toe.y) / 3]
+  const [dx, dy] = [b.toe.x - b.foot.x, b.toe.y - b.foot.y]
+  const n = Math.hypot(dx, dy) || 1
+  // The loop sits on the sole: offset away from the shin, perpendicular to the foot.
+  const s = (b.knee.x - b.foot.x) * -dy + (b.knee.y - b.foot.y) * dx > 0 ? -1 : 1
+  const [lx, ly] = [fx + (s * -dy / n) * 3, fy + (s * dx / n) * 3]
+  return `<path class="prop strap" d="M${f(b.hand.x)} ${f(b.hand.y)} L${f(lx - dx / n * 4)} ${f(ly - dy / n * 4)} L${f(lx + dx / n * 4)} ${f(ly + dy / n * 4)} Z"/>`
+}
+
 function scene(m: Move, pose: Pose, st: Partial<Stage> = {}) {
   const cam = m.travel ? (st.shift ?? 0) : 0
   const up = m.climb ? (st.lift ?? 0) : 0
@@ -253,7 +264,7 @@ function scene(m: Move, pose: Pose, st: Partial<Stage> = {}) {
   const fig = m.solid
     ? `<g class="fig">${solidBody(place(m, pose, st), (m.props ?? []).map((p) => prop3(p, m, up)))}</g>`
     : `${(m.props ?? []).map((p) => prop(p, !!m.front, up)).join('')}<g class="fig">${body(place(m, pose, st), !!m.front, Math.cos(((st.turn ?? 0) * Math.PI) / 180) < 0 ? -1 : 1, m.back)}</g>`
-  const world = ground + fig
+  const world = ground + fig + (m.strap ? strap(place(m, pose, st)) : '')
   return cam || up ? `<g transform="translate(${f(-cam)} ${f(up)})">${world}</g>` : world
 }
 

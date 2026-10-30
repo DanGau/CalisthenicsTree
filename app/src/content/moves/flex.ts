@@ -89,7 +89,7 @@ const ele = (near: boolean): Pose =>
 
 export const MOVES: Record<string, Move> = {
   // The straight leg rises on the strap; the knee never bends.
-  strap_ham: { ...breathe([strap(120), strap(150)]), x: 'shoulder', at: [0, 0] },
+  strap_ham: { ...breathe([strap(120), strap(150)]), x: 'shoulder', at: [0, 0], strap: true },
   // One knee bends as the other presses straight, alternating; hands stay down.
   elephant_walk: { keys: [fold, ele(true), fold, ele(false)], mode: 'cycle', x: 'foot', ms: 1000, beats: [{ dur: 1 }, { hold: 0.4, dur: 1 }, { dur: 1 }, { hold: 0.4, dur: 1 }] },
   // Flat-back hinge, then the spine lets go; roll up a vertebra at a time.

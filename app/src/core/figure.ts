@@ -51,6 +51,8 @@ export type Move = {
   y?: Joint | 'floor'
   at?: [number, number]
   props?: Prop[]
+  /** A strap from the hands around the ball of the near foot, drawn each frame. */
+  strap?: boolean
   front?: boolean
   /** True 3D: limbs swing out (`armOut`..), the body rolls and turns, drawn by depth. */
   solid?: boolean
