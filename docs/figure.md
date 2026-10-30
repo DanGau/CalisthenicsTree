@@ -52,6 +52,8 @@ Motion must read as a person moving mass, not a puppet between poses. `beats` (o
 - Airborne ≥ 160 ms: COM vertical acceleration 0.6-1.5 g, within 3 of its fitted parabola, horizontal acceleration < 0.4 g; flips (trunk turns ≥ 90°, no turn about the vertical) keep sagittal angular momentum within 30 % (sd/mean).
 - Flights ≤ 0.9 s; `holdBeats`-style sways ≥ 1.2 s one way.
 
+`src/content/smooth.test.ts` samples every move at 60 fps: no joint's second difference over 4 units/frame² (≈14 g) and 8× the median of the 20 frames around it, except within 3 frames of a change of contacts or lowest joint (impacts). The spline stops at reversals and from or into rest, and shares one speed through other keys; `balance` follows one solution through the loop (continuation, a small-turn penalty); `reach3` pulls faintly toward its start so near-straight arms don't flip.
+
 Engine help:
 
 - `air: true` on a beat: that transition is airborne. Core solves `lift`/`shift` so the COM rides gravity's parabola between the run's first and last keys, and in flips turns the whole body so angular momentum stays constant (faster tucked). `air()` in `tumble.ts` sets it; takeoff and landing keys sit on the floor.

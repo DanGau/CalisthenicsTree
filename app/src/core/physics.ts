@@ -42,11 +42,11 @@ export function contacts(m: Move, b: Body): Touch[] {
 
 export type Sample = { t: number; b: Body; c: Required<Pt>; touch: Touch[]; turn: number }
 
-/** `loops` loops sampled every STEP ms, seen side-on without camera turn or tilt. */
-export function samples(m: Move, loops = 1): Sample[] {
+/** `loops` loops sampled every `step` ms, seen side-on without camera turn or tilt. */
+export function samples(m: Move, loops = 1, step = STEP): Sample[] {
   const out: Sample[] = []
   const flat = { ...m, view: 0, tilt: 0 }
-  for (let t = 0; t < loops * loopMs(m); t += STEP) {
+  for (let t = 0; t < loops * loopMs(m); t += step) {
     const s = at(m, t)
     const b = place(flat, s.pose, s)
     out.push({ t, b, c: com(b), touch: contacts(m, b), turn: s.turn })

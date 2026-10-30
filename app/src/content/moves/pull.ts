@@ -132,12 +132,17 @@ export const fit = (k: K3, vars: Var[], err: (k: K3) => number[], tie: [number, 
   }
   return set(k, vars, x, tie)
 }
+/** Units of reach error worth a degree of change. */
+const REACH_REG = 0.03
 /** Re-aims limbs (both segments and swing out) so each end reaches its goal in `b3` coordinates; `straight` limbs stay locked. */
 export const reach3 = (k: K3, goals: Partial<Record<Limb, V3>>, straight: Limb[] = []): K3 => {
   const ls = Object.keys(goals) as Limb[]
   const vars = ls.flatMap((l): Var[] => straight.includes(l) ? [SLOT3[l][0], SLOT3[l][2]] : [...SLOT3[l]])
   const tie = ls.filter((l) => straight.includes(l)).map((l): [number, number] => [SLOT3[l][0], SLOT3[l][1]])
-  const q = fit(k, vars, (q) => { const b = b3(q); return ls.flatMap((l) => sub3([b[l].x, b[l].y, b[l].z ?? 0], goals[l]!)) }, tie)
+  // A faint pull toward the start: near a straight arm many aims reach the goal, and without it the solver's pick
+  // jumps from one sample to the next.
+  const x0 = vars.map((v) => get(k, v))
+  const q = fit(k, vars, (q) => { const b = b3(q); return [...ls.flatMap((l) => sub3([b[l].x, b[l].y, b[l].z ?? 0], goals[l]!)), ...vars.map((v, i) => REACH_REG * (get(q, v) - x0[i]))] }, tie)
   // Swing out kept within 180 of where it started, so blends between keys take the short way.
   for (const l of ls) { const o = SLOT3[l][2]; q.s[o] = q.s[o]! - Math.round((q.s[o]! - (k.s[o] ?? 0)) / 360) * 360 }
   return q
@@ -222,6 +227,10 @@ const wHang = arc(-44, 3, 46, -46)
 const archR = arc(-7, -2, 25, -67, 5)
 const archL = arc(-7, -2, 67, -25, -5)
 const wTop = arc(-6, -2, 46, -46)
+// The same top solved from the archer's arms, so the typewriter's keys share one arm branch (else the spline swings the
+// arms round between them).
+const wTopR = reach3({ p: wTop.p.map((v, i) => (i >= 1 && i <= 4 ? archR.p[i] : v)) as Pose, s: { ...wTop.s, armOut: archR.s.armOut, farArmOut: archR.s.farArmOut } },
+  { hand: p3(wTop, 'hand'), farHand: p3(wTop, 'farHand') })
 
 // Kipping: swing back to an arch (feet behind, chest through), snap to a hollow (feet ahead), then the bar to the belly.
 // The whole body swings about the hands: ≈35° of arc between the ends.
@@ -325,7 +334,7 @@ export const MOVES: Record<string, Move> = {
     beats: [{ hold: 0.3, dur: 1.2 }, { hold: 0.25, dur: 1.8 }, { hold: 0.3, dur: 1.2 }, { hold: 0.25, dur: 1.8 }],
   }),
   high_pullup: kip,
-  typewriter: onBar({ keys: [archR, wTop, archL], beats: [{ hold: 0.4, dur: 1.3 }, { dur: 1.3 }, { hold: 0.4 }] }),
+  typewriter: onBar({ keys: [archR, wTopR, archL], beats: [{ hold: 0.4, dur: 1.3 }, { dur: 1.3 }, { hold: 0.4 }] }),
   oa_neg: onBar(negative(oaTop, oaMid, oaSet, oaHang), { free: true }),
   bar_mu: mu(true),
   oa_assisted: towelRing(onBar(rep(towel(oaHang), towel(oaSet), [towel(oaMid), towel(oaTop)], { rise: 1.3, lower: 2 })), towel(oaHang)),

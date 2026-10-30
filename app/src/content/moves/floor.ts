@@ -177,7 +177,7 @@ export const MOVES: Record<string, Move> = {
   chair_freeze: { keys: [chair(-50), chair(-53)], ...sway() },
   back_spin: {
     keys: [spinSit, spinWind, spinTuck(0), spinTuck(14), spinTuck(0), spinTuck(14), spinOpen], mode: 'cycle', solid: true, tilt: TILT, x: 'shoulder', ms: 1000, flow: 0.05,
-    beats: [{ hold: 0.3, dur: 0.45 }, { turn: 30, dur: 0.2, ease: 'snap' }, ...[120, 240, 360, 480].map((turn): Beat => ({ turn, dur: 0.22, ease: 'lin' })), { turn: 560, dur: 0.6, ease: 'out' }],
+    beats: [{ hold: 0.3, dur: 0.45 }, { turn: 30, dur: 0.3, ease: 'snap' }, ...[120, 240, 360, 480].map((turn): Beat => ({ turn, dur: 0.22, ease: 'lin' })), { turn: 560, dur: 0.6, ease: 'out' }],
   },
   macaco: { keys: [macSit, macReach, macOver, macLand], mode: 'cycle', ms: 1000, flow: 0.05, beats: [{ hold: 0.3, dur: 0.6 }, { dur: 0.3, ease: 'snap' }, { dur: 0.4 }, { hold: 0.3, dur: 0.8 }] },
   turtle_freeze: { keys: [turtle(-6), turtle(6)], ms: 1000, beats: [{ hold: 0.2, dur: 1 }, { hold: 0.2, dur: 1 }] },

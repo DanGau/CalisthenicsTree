@@ -1,5 +1,6 @@
 import { place, type Beat, type Move, type Pose } from '../../core/figure'
 import { pos, reach } from './legs'
+import { unwrap } from './tumble'
 import { add3, body, grip3, hold, type K3, oa, onBar, p3, pinned, reach3, solid3 } from './pull'
 
 const EDGE = -210
@@ -71,7 +72,8 @@ const RUNG = 22
 const R1 = -200
 const rung = (n: number) => R1 - (n - 1) * RUNG
 type St = { hip: [number, number]; hand: number | null; far: number | null; legs: Legs; t?: number; dur: number; ease?: 'io' | 'in' | 'out' }
-const ease = { io: (u: number) => u * u * (3 - 2 * u), in: (u: number) => u * u, out: (u: number) => 1 - (1 - u) * (1 - u) }
+// Each starts and ends at rest (no speed jump between states); `in` peaks late, `out` early.
+const ease = { io: (u: number) => u * u * (3 - 2 * u), in: (u: number) => u ** 3 * (4 - 3 * u), out: (u: number) => 1 - (1 - u) ** 3 * (1 + 3 * u) }
 /** `feet`: both feet on a foothold at this point (foot-on campus), solved every sample too. */
 const campus = (states: St[], feet?: [number, number]): Move => {
   const ms = 20
@@ -115,7 +117,8 @@ const campus = (states: St[], feet?: [number, number]): Move => {
     }
   })
   return {
-    keys, beats, mode: 'cycle', x: 'hip', y: 'hip', at: [0, 0], ms: 1000, floor: false,
+    // IK wraps arm angles into one turn; a dense key must not swing the long way round.
+    keys: unwrap(keys), beats, mode: 'cycle', x: 'hip', y: 'hip', at: [0, 0], ms: 1000, floor: false,
     props: [...[1, 2, 3, 4, 5].map((n) => ({ t: 'board' as const, x: 0, y: rung(n) })), ...(feet ? [{ t: 'board' as const, x: feet[0], y: feet[1] }] : [])],
   }
 }

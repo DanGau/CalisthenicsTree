@@ -326,6 +326,15 @@ export type Frame = Stage & { pose: Pose; hold: number; dur: number; ease: Ease;
 
 /** The frames one loop plays: bounce runs the keys back in reverse with mirrored timing. */
 export function sequence(m: Move): Frame[] {
+  const hit = seqCache.get(m)
+  if (hit) return hit
+  const out = frames(m)
+  seqCache.set(m, out)
+  return out
+}
+const seqCache = new WeakMap<Move, Frame[]>()
+
+function frames(m: Move): Frame[] {
   const n = m.keys.length
   const bounce = (m.mode ?? 'bounce') === 'bounce' && n > 1
   const beat = (i: number): Beat => m.beats?.[i] ?? {}
@@ -353,7 +362,8 @@ const ANGLES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...(['turn', 'roll', 'armOut',
 
 /**
  * Speed (per ms) a segment's ease asks for at its start and end, as a multiple of its average speed.
- * `null` leaves it to the spline. Holds and reversals always stop.
+ * `null` leaves it to the spline. Holds, reversals and moves from or into rest stop; elsewhere both sides of a key
+ * share one speed (the asks averaged), so velocity never jumps.
  */
 const ENDS: Record<Ease, [number | null, number | null]> = {
   io: [null, null], lin: [null, null], in: [0, 2], out: [2, 0], snap: [3, 0],
@@ -369,7 +379,7 @@ export function at(m: Move, ms: number): Stage & { pose: Pose } {
   const s = spline(m, ms)
   const p = grounded(m, ms, s)
   const q = m.keys.length > 1 && m.beats?.some((b) => b.air) ? aloft(m, ms, p) : p
-  return m.balance ? balanced(m, q) : q
+  return m.balance ? balanced(m, ms, q) : q
 }
 
 /** Spline pose with plants held. */
@@ -509,25 +519,66 @@ function aloft(m: Move, ms: number, s: Stage & { pose: Pose }): Stage & { pose: 
   return s
 }
 
-/** Arms (both upper and forearms) turned by the angle that puts the centre of mass over the pinned hand. */
-function balanced(m: Move, s: Stage & { pose: Pose }): Stage & { pose: Pose } {
+/** Arm turn that puts the centre of mass over the pinned hand, by Newton from `d` with steps of at most `cap`. */
+function balanceTurn(m: Move, s: Stage & { pose: Pose }, d: number, cap: number): number {
   const flat = { ...m, view: 0, tilt: 0 }
-  const turn = (d: number) => full(s.pose).map((v, i) => (i >= 1 && i <= 4 ? v + d : v)) as Pose
-  const err = (d: number) => { const b = place(flat, turn(d), s); return com(b).x - b[m.x ?? 'hip'].x }
-  let d = 0
-  for (let it = 0; it < 6; it++) {
-    const e = err(d)
-    if (Math.abs(e) < 0.05) break
-    const k = (err(d + 0.5) - e) / 0.5
-    if (Math.abs(k) < 0.05) break
-    d -= Math.max(-30, Math.min(30, e / k))
+  const err = (x: number) => {
+    const b = place(flat, full(s.pose).map((v, i) => (i >= 1 && i <= 4 ? v + x : v)) as Pose, s)
+    return com(b).x - b[m.x ?? 'hip'].x
   }
-  return { ...s, pose: turn(d) }
+  // Gauss-Newton on err² + BAL_REG·d²: where turning the arms barely moves the centre of mass (err flat, a hang with
+  // the hands at the shoulders), the small-turn term keeps one smooth solution instead of a drift between roots.
+  for (let it = 0; it < 8; it++) {
+    const e = err(d)
+    const k = (err(d + 0.5) - e) / 0.5
+    const step = (k * e + BAL_REG * d) / (k * k + BAL_REG)
+    d -= Math.max(-cap, Math.min(cap, step))
+    if (Math.abs(step) < 0.01) break
+  }
+  return d
 }
 
-function spline(m: Move, ms: number): Stage & { pose: Pose } {
+const BAL_STEP = 20
+/** Units² of centre-of-mass error worth a degree² of arm turn. */
+const BAL_REG = 0.005
+const balTable = new WeakMap<Move, number[]>()
+
+/**
+ * Balance turn every BAL_STEP ms over a loop, each solved from the last (continuation), so the solution follows one
+ * branch instead of jumping between roots.
+ */
+function balanceTable(m: Move): number[] {
+  const hit = balTable.get(m)
+  if (hit) return hit
+  const total = loopMs(m)
+  const n = Math.max(1, Math.ceil(total / BAL_STEP))
+  const pre = (ms: number) => { const p = grounded(m, ms); return m.keys.length > 1 && m.beats?.some((b) => b.air) ? aloft(m, ms, p) : p }
+  const out: number[] = []
+  let d = balanceTurn(m, pre(0), 0, 30)
+  for (let i = 0; i <= n; i++) out.push((d = balanceTurn(m, pre((i * total) / n), d, 10)))
+  balTable.set(m, out)
+  return out
+}
+
+/** Arms (both upper and forearms) turned by the angle that puts the centre of mass over the pinned hand. */
+function balanced(m: Move, ms: number, s: Stage & { pose: Pose }): Stage & { pose: Pose } {
+  const tab = balanceTable(m)
+  const n = tab.length - 1
+  const total = loopMs(m)
+  const k = ((((Math.max(0, ms) % total) + total) % total) / total) * n
+  const i = Math.min(n - 1, Math.floor(k))
+  const d = tab[i] + (tab[i + 1] - tab[i]) * (k - i)
+  return { ...s, pose: full(s.pose).map((v, j) => (j >= 1 && j <= 4 ? v + d : v)) as Pose }
+}
+
+type Path = { total: number; starts: number[]; W: number[]; pt: (i: number) => number[]; v: number[][][] }
+const paths = new WeakMap<Move, Path>()
+
+/** Per-move spline tables: keys, loop offset, segment starts and key speeds, built once. */
+function path(m: Move): Path {
+  const hit = paths.get(m)
+  if (hit) return hit
   const seq = sequence(m)
-  if (seq.length === 1) return seq[0]
   const step = m.ms ?? 900
   const n = seq.length
   const P = seq.map(vec)
@@ -552,29 +603,54 @@ function spline(m: Move, ms: number): Stage & { pose: Pose } {
   const speed = (i: number, j: number, side: 0 | 1) => {
     const k = (i + n) % n
     if (seq[k].hold > 0) return 0
-    const seg = side === 0 ? k : (k - 1 + n) % n
-    const ask = ENDS[seq[seg].ease][side]
-    const d = side === 0 ? (pt(i + 1)[j] - pt(i)[j]) / T[seg] : (pt(i)[j] - pt(i - 1)[j]) / T[seg]
+    const prev = (k - 1 + n) % n
+    const dIn = (pt(i)[j] - pt(i - 1)[j]) / T[prev]
+    const dOut = (pt(i + 1)[j] - pt(i)[j]) / T[k]
+    const [aIn, aOut] = [ENDS[seq[prev].ease][1], ENDS[seq[k].ease][0]]
+    const d = side === 0 ? dOut : dIn
+    if (d === 0) return 0
     // Clamped to the segment's own direction and at most 3x its mean speed, so it never overshoots.
-    const v = ask === null ? auto(i, j) : ask * d
-    return d === 0 ? 0 : Math.sign(d) * Math.min(Math.max(0, v * Math.sign(d)), 3 * Math.abs(d))
+    const clamp = (v: number, e: number) => Math.sign(e) * Math.min(Math.max(0, v * Math.sign(e)), 3 * Math.abs(e))
+    // A reversal, or into or out of rest, stops on both sides: a one-frame jump to or from speed reads as a pop.
+    if (dIn * dOut <= 0) return 0
+    // Moving on through the key: both sides share one speed, so velocity is continuous.
+    const asks = [aIn === null ? null : aIn * dIn, aOut === null ? null : aOut * dOut].filter((v) => v !== null)
+    const v = asks.length ? asks.reduce((a, b) => a + b, 0) / asks.length : auto(i, j)
+    return clamp(clamp(v, dIn), dOut)
   }
+  const v = Array.from({ length: n + 1 }, (_, i) => P[0].map((_, j) => [speed(i, j, 0), speed(i, j, 1)]))
+  const starts: number[] = [0]
+  for (let i = 0; i < n; i++) starts.push(starts[i] + seq[i].hold * step + T[i])
+  const out = { total, starts, W, pt, v }
+  paths.set(m, out)
+  return out
+}
+
+function spline(m: Move, ms: number): Stage & { pose: Pose } {
+  const seq = sequence(m)
+  if (seq.length === 1) return seq[0]
+  const step = m.ms ?? 900
+  const n = seq.length
+  const { total, starts, W, pt, v: V } = path(m)
   const value = (j: number, g: number) => {
     const loop = Math.floor(g / total)
-    let t = g - loop * total
-    let i = 0
-    for (; t >= (seq[i].hold * step + T[i]) && i < n - 1; i++) t -= seq[i].hold * step + T[i]
+    const r = g - loop * total
+    let [lo, hi] = [0, n - 1]
+    while (lo < hi) { const c = (lo + hi + 1) >> 1; if (starts[c] <= r) lo = c; else hi = c - 1 }
+    const i = lo
+    const t = r - starts[i]
+    const Ti = seq[i].dur * step
     const a = pt(i)[j]
     const b = pt(i + 1)[j]
-    const u = Math.min(1, Math.max(0, (t - seq[i].hold * step) / T[i]))
-    const [m0, m1] = [speed(i, j, 0) * T[i], speed(i + 1, j, 1) * T[i]]
+    const u = Math.min(1, Math.max(0, (t - seq[i].hold * step) / Ti))
+    const [m0, m1] = [V[i][j][0] * Ti, V[i + 1][j][1] * Ti]
     const u2 = u * u
     const u3 = u2 * u
     return loop * W[j] + (2 * u3 - 3 * u2 + 1) * a + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * b + (u3 - u2) * m1
   }
   const g = Math.max(0, ms)
   const lag = (m.flow ?? 0) * step
-  const v = P[0].map((_, j) => value(j, Math.max(0, g - (j < 12 ? LAG[j] * lag : 0))))
+  const v = W.map((_, j) => value(j, Math.max(0, g - (j < 12 ? LAG[j] * lag : 0))))
   return { pose: v.slice(0, 12) as Pose, ...(Object.fromEntries(KEYS.map((k, i) => [k, v[12 + i]])) as Stage) }
 }
 
@@ -620,14 +696,17 @@ function plantTargets(m: Move): V3[] {
 /** A plant's weight at `g` (dur units since start): 1 in a window, easing to 0 over RAMP outside; and the loop that window began in. */
 function plantWeight(p: Plant, g: number, total: number): [number, number] {
   const len = (p.to - p.from + total) % total
-  let best: [number, number] = [0, 0]
+  let [best, sum] = [[0, 0] as [number, number], 0]
   for (let k = Math.floor(g / total) - 1; k <= Math.floor(g / total) + 1; k++) {
     const a = p.from + k * total
     const d = g < a ? a - g : g > a + len ? g - a - len : 0
     const w = d >= RAMP ? 0 : 1 - d / RAMP
-    if (w * w * (3 - 2 * w) > best[0]) best = [w * w * (3 - 2 * w), k]
+    const s = w * w * (3 - 2 * w)
+    sum += s
+    if (s > best[0]) best = [s, k]
   }
-  return best
+  // Summed, so a gap between windows shorter than two ramps holds instead of dipping.
+  return [Math.min(1, sum), best[1]]
 }
 
 /** Move shift and limb angles so each planted joint sits on its target. */
