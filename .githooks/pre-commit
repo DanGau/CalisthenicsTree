@@ -1,2 +1,10 @@
 #!/bin/sh
-cd app && npm run -s check
+# Lint and typecheck always; tests only those that import a staged file (the physics tests are slow).
+set -e
+files=$(git diff --cached --name-only --diff-filter=ACMR -- 'app/*.ts' 'app/*.json' | sed 's#^app/##')
+cd app
+npm run -s lint
+npm run -s typecheck
+if echo "$files" | grep -qE '(package(-lock)?\.json|vite(st)?\.config|tsconfig)'; then npx vitest run
+elif [ -n "$files" ]; then npx vitest related --run --passWithNoTests $files
+fi

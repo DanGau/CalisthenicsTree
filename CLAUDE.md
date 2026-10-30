@@ -17,6 +17,6 @@ Architecture rules: [docs/architecture/CLAUDE.md](docs/architecture/CLAUDE.md). 
 
 Run in `app/`.
 
-- `npm run check` — lint, typecheck, tests (content validation included).
+- `npm run check` — lint, typecheck, tests (content validation included). The pre-commit hook runs only tests that import a staged file; CI runs everything before deploying.
 - `MSYS_NO_PATHCONV=1 npm run -s eye -- <#hash> <name> [selectors to click...]` — screenshot the app at phone size into `app/screenshots/`. The env var stops Git Bash rewriting `#/…`.
 - `npm run dev` — serve for a human (`--host`, so a phone on the same Wi-Fi can open it). Each push to `main` deploys to https://dangau.github.io/CalisthenicsTree/.
